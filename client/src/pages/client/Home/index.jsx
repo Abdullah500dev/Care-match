@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
+import Banner from "../../../components/client/Banner";
 
 export default function Home() {
   const location = useLocation();
@@ -23,18 +24,47 @@ export default function Home() {
   return (
     <Fragment>
       <SEO title="Home" />
-      <div className="content-container bg-gradient-to-br from-gray-50 to-white flex flex-col overflow-hidden">
-        {/* Section_1 Section */}
-        <div id="section-1">
-          <div className="bg-slate-400 w-screen h-screen flex items-center justify-center">
-            Home Section 1
+      <div
+        className="content-container flex flex-col overflow-hidden"
+        // style={{
+        //   background:
+        //     "linear-gradient(180deg, rgba(255, 255, 255, 0) 70%, #FFFFFF 95%)",
+        // }}
+      >
+        <Banner />
+
+        {/* How It Works */}
+        <div id="how-it-works">
+          <div className="flex h-screen w-screen items-center justify-center bg-slate-100">
+            How It Works
           </div>
         </div>
 
-        {/* Section_2 Section */}
-        <div id="section-2">
-          <div className="bg-stone-400 w-screen h-screen flex items-center justify-center">
-            Home Section 2
+        {/* Care Types */}
+        <div id="care-types">
+          <div className="flex h-screen w-screen items-center justify-center bg-slate-200">
+            Care Types
+          </div>
+        </div>
+
+        {/* Why Us */}
+        <div id="why-us">
+          <div className="flex h-screen w-screen items-center justify-center bg-slate-300">
+            Why Us
+          </div>
+        </div>
+
+        {/* Resources */}
+        <div id="resources">
+          <div className="flex h-screen w-screen items-center justify-center bg-slate-400">
+            Resources
+          </div>
+        </div>
+
+        {/* Contact */}
+        <div id="contact">
+          <div className="flex h-screen w-screen items-center justify-center bg-slate-500">
+            Contact
           </div>
         </div>
       </div>
