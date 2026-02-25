@@ -4,7 +4,7 @@ import SearchBar from "../SearchBar";
 export default function Banner() {
   return (
     <section
-      className="relative min-h-[60vh] w-full overflow-hidden bg-cover bg-center bg-no-repeat sm:min-h-[70vh] lg:min-h-[75vh] min-[1280px]:min-h-[72vh] min-[1536px]:min-h-[80vh]"
+      className="relative w-full overflow-hidden bg-cover bg-center bg-no-repeat "
       style={{ backgroundImage: "url(/assets/images/bannerBg.png)" }}
     >
       {/* Gradient overlay on BG image only – text sits above via z-index */}
@@ -17,7 +17,7 @@ export default function Banner() {
         aria-hidden
       />
 
-      <div className="container relative z-10 mx-auto flex min-h-[60vh] flex-col items-center justify-center px-4 py-12 text-center sm:min-h-[70vh] sm:px-6 sm:py-16 md:py-20 lg:min-h-[75vh] lg:px-8 lg:py-24 min-[1280px]:min-h-[72vh] min-[1280px]:max-w-4xl min-[1280px]:px-8 min-[1280px]:py-20 min-[1536px]:min-h-[80vh] min-[1536px]:max-w-[1400px] min-[1536px]:px-12 min-[1536px]:py-28">
+      <div className="container relative z-10 mx-auto flex flex-col items-center justify-center px-4 py-12 text-center sm:px-6 sm:py-16 md:py-20 lg:px-8 lg:py-24 min-[1280px]:max-w-4xl min-[1280px]:px-8 min-[1280px]:py-20 min-[1536px]:max-w-[1400px] min-[1536px]:px-12 min-[1536px]:py-28">
         {/* Orb: scales for 1280 (xl) and 1536 (2xl) explicitly */}
         <img
           src="/assets/images/bolb.svg"

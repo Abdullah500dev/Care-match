@@ -1,7 +1,10 @@
 import React, { Fragment, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
+import AssistedLiving from "../../../components/client/AssistedLiving";
 import Banner from "../../../components/client/Banner";
+import Gallery from "../../../components/client/Gallery";
+import SimpleProcess from "../../../components/client/SimpleProcess";
 
 export default function Home() {
   const location = useLocation();
@@ -24,49 +27,15 @@ export default function Home() {
   return (
     <Fragment>
       <SEO title="Home" />
-      <div
-        className="content-container flex flex-col overflow-hidden"
-        // style={{
-        //   background:
-        //     "linear-gradient(180deg, rgba(255, 255, 255, 0) 70%, #FFFFFF 95%)",
-        // }}
-      >
+      <div className="content-container flex w-full min-h-screen flex-col overflow-hidden bg-white">
         <Banner />
 
-        {/* How It Works */}
-        <div id="how-it-works">
-          <div className="flex h-screen w-screen items-center justify-center bg-slate-100">
-            How It Works
-          </div>
-        </div>
+        <Gallery />
 
-        {/* Care Types */}
-        <div id="care-types">
-          <div className="flex h-screen w-screen items-center justify-center bg-slate-200">
-            Care Types
-          </div>
-        </div>
+        <SimpleProcess />
 
-        {/* Why Us */}
-        <div id="why-us">
-          <div className="flex h-screen w-screen items-center justify-center bg-slate-300">
-            Why Us
-          </div>
-        </div>
+        <AssistedLiving />
 
-        {/* Resources */}
-        <div id="resources">
-          <div className="flex h-screen w-screen items-center justify-center bg-slate-400">
-            Resources
-          </div>
-        </div>
-
-        {/* Contact */}
-        <div id="contact">
-          <div className="flex h-screen w-screen items-center justify-center bg-slate-500">
-            Contact
-          </div>
-        </div>
       </div>
     </Fragment>
   );

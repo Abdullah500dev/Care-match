@@ -3,7 +3,7 @@ import React from "react";
 export default function TopBar() {
   return (
     <div className="w-full bg-[#00BCD4] py-2 sm:py-2.5">
-      <div className="container mx-auto flex flex-col items-center justify-between gap-3 px-4 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4 sm:px-6 lg:px-8 min-[1024px]:max-w-6xl min-[1280px]:max-w-6xl min-[1280px]:px-10 min-[1536px]:max-w-[1400px] min-[1536px]:px-12">
+      <div className="container mx-auto flex flex-col items-center justify-between gap-3 px-4 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
         <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-start sm:gap-6">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-white sm:gap-2 sm:text-sm">
             <img

@@ -34,8 +34,8 @@ export default function Header() {
   };
 
   return (
-    <nav className="z-50 border-b border-gray-100 bg-white/90 backdrop-blur-md">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8  min-[1024px]:max-w-6xl min-[1280px]:max-w-6xl min-[1280px]:px-10 min-[1536px]:max-w-[1400px] min-[1536px]:px-12">
+    <nav className="border-b border-gray-100 bg-white/90 backdrop-blur-md">
+      <div className="container mx-auto px-4 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
         <div className="flex h-16 items-center justify-between sm:h-[72px] md:h-20">
           {/* Logo (left) */}
           <div className="flex items-center gap-6 sm:gap-8 lg:gap-10 min-[1280px]:gap-8 min-[1536px]:gap-10">

@@ -90,5 +90,6 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Rethink Sans', sans-serif;
+    background-color: #ffffff;
   }
 }

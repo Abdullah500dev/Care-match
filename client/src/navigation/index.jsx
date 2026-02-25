@@ -21,8 +21,12 @@ const Layout = ({ children }) => {
 
   return (
     <>
-      {!isDashboardRoute && <TopBar />}
-      {!isDashboardRoute && <Header />}
+      {!isDashboardRoute && (
+        <div className="sticky top-0 z-50 w-full">
+          <TopBar />
+          <Header />
+        </div>
+      )}
       {children}
       {!isDashboardRoute && <Footer />}
     </>
