@@ -22,7 +22,7 @@ export default function Banner() {
         <img
           src="/assets/images/bolb.svg"
           alt=""
-          className="mb-8 h-10 w-10 sm:mb-10 sm:h-12 sm:w-12 md:mb-12 md:h-14 md:w-14 lg:mb-14 lg:h-16 lg:w-16 min-[1280px]:mb-12 min-[1280px]:h-14 min-[1280px]:w-14 min-[1536px]:h-20 min-[1536px]:w-20 min-[1536px]:mb-16"
+          className="mb-8 h-10 w-10 sm:mb-10 sm:h-12 sm:w-12 md:mb-12 md:h-14 md:w-14 lg:mb-14 lg:h-16 lg:w-16 min-[1280px]:mb-12 min-[1280px]:h-14  min-[1280px]:w-14 min-[1536px]:h-20 min-[1536px]:w-20 min-[1536px]:mb-16"
         />
         <h1
           className="font-semibold capitalize tracking-tight text-[#132329] text-3xl leading-tight sm:text-4xl sm:leading-snug md:text-5xl md:leading-[1.15] lg:text-[56px] lg:leading-[1.2]"
@@ -46,7 +46,7 @@ export default function Banner() {
           <span className="block sm:inline">tailored to your loved one's needs. 100% free, personalized service.</span>
         </p>
 
-        <div className="mt-6 w-full max-w-4xl px-2 sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1536px]:mt-12">
+        <div className="mt-6 w-full max-w-4xl px-2 sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1536px]:mt-10">
           <SearchBar />
         </div>
       </div>

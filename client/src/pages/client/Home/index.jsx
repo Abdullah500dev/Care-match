@@ -5,6 +5,9 @@ import AssistedLiving from "../../../components/client/AssistedLiving";
 import Banner from "../../../components/client/Banner";
 import Gallery from "../../../components/client/Gallery";
 import SimpleProcess from "../../../components/client/SimpleProcess";
+import StartYourSearch from "../../../components/client/StartYourSearch";
+import SuccessStories from "../../../components/client/SuccessStories";
+import WhyCareMatch from "../../../components/client/WhyCareMatch";
 
 export default function Home() {
   const location = useLocation();
@@ -34,8 +37,14 @@ export default function Home() {
 
         <SimpleProcess />
 
+
         <AssistedLiving />
 
+        <WhyCareMatch />
+
+        <SuccessStories />
+
+        <StartYourSearch />
       </div>
     </Fragment>
   );
