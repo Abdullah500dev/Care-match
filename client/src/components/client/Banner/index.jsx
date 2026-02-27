@@ -15,6 +15,13 @@ export default function Banner() {
     return () => clearTimeout(t);
   }, [displayedLength]);
 
+  // When typewriter completes, wait briefly then restart so it always animates
+  useEffect(() => {
+    if (displayedLength < BANNER_HEADING.length) return;
+    const t = setTimeout(() => setDisplayedLength(0), 1500);
+    return () => clearTimeout(t);
+  }, [displayedLength]);
+
   useEffect(() => {
     const t = setInterval(() => setShowCursor((c) => !c), CURSOR_BLINK_MS);
     return () => clearInterval(t);

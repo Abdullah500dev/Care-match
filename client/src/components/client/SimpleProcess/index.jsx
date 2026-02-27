@@ -11,7 +11,7 @@ const TYPEWRITER_PAUSE_BEFORE_RESTART_MS = 2500;
 function StepIcon() {
   return (
     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg sm:h-14 sm:w-14 md:h-16 md:w-16 min-[1920px]:h-20 min-[1920px]:w-20">
-      <span className="flex h-full w-full items-center justify-center rounded-full bg-[#00C9F0]/30 [&>img]:h-1/2 [&>img]:w-1/2 [&>img]:object-contain">
+      <span className="flex h-full w-full items-center justify-center rounded-full bg-[#00C9F0]/30  [&>img]:object-contain">
         <img src="/assets/images/simpleprocessicon.svg" alt="" aria-hidden />
       </span>
     </div>

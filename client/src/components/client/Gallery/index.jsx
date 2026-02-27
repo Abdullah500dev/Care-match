@@ -58,7 +58,7 @@ function StatCard({ bg, backgroundStyle, tickIcon, value, title, description }) 
     >
       <div className="flex items-start">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-[52px] lg:w-[52px] min-[1280px]:h-14 min-[1280px]:w-14 min-[1536px]:h-16 min-[1536px]:w-16">
-          <img src={tickIcon} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-6 md:w-6 lg:h-7 lg:w-7 min-[1280px]:h-8 min-[1280px]:w-8 min-[1536px]:h-9 min-[1536px]:w-9" />
+          <img src={tickIcon} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-6 md:w-6 lg:h-10 lg:w-10" />
         </span>
       </div>
       <div>
