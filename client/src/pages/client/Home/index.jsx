@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
+import AnimateOnScroll from "../../../components/common/AnimateOnScroll";
 import AssistedLiving from "../../../components/client/AssistedLiving";
 import Banner from "../../../components/client/Banner";
 import Gallery from "../../../components/client/Gallery";
@@ -33,18 +34,29 @@ export default function Home() {
       <div className="content-container flex w-full min-h-screen flex-col overflow-hidden bg-white">
         <Banner />
 
-        <Gallery />
+        <AnimateOnScroll>
+          <Gallery />
+        </AnimateOnScroll>
 
-        <SimpleProcess />
+        <AnimateOnScroll>
+          <SimpleProcess />
+        </AnimateOnScroll>
 
+        <AnimateOnScroll>
+          <AssistedLiving />
+        </AnimateOnScroll>
 
-        <AssistedLiving />
+        <AnimateOnScroll>
+          <WhyCareMatch />
+        </AnimateOnScroll>
 
-        <WhyCareMatch />
+        <AnimateOnScroll>
+          <SuccessStories />
+        </AnimateOnScroll>
 
-        <SuccessStories />
-
-        <StartYourSearch />
+        <AnimateOnScroll>
+          <StartYourSearch />
+        </AnimateOnScroll>
       </div>
     </Fragment>
   );

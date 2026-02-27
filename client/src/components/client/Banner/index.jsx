@@ -1,7 +1,29 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import SearchBar from "../SearchBar";
 
+const BANNER_HEADING = "Meet carrie – \nYour senior healthcare AI advisor";
+const TYPE_SPEED_MS = 70;
+const CURSOR_BLINK_MS = 530;
+
 export default function Banner() {
+  const [displayedLength, setDisplayedLength] = useState(0);
+  const [showCursor, setShowCursor] = useState(true);
+
+  useEffect(() => {
+    if (displayedLength >= BANNER_HEADING.length) return;
+    const t = setTimeout(() => setDisplayedLength((d) => d + 1), TYPE_SPEED_MS);
+    return () => clearTimeout(t);
+  }, [displayedLength]);
+
+  useEffect(() => {
+    const t = setInterval(() => setShowCursor((c) => !c), CURSOR_BLINK_MS);
+    return () => clearInterval(t);
+  }, []);
+
+  const displayedText = BANNER_HEADING.slice(0, displayedLength);
+  const lines = displayedText.split("\n");
+  const isComplete = displayedLength >= BANNER_HEADING.length;
+
   return (
     <section
       className="relative w-full overflow-hidden bg-cover bg-center bg-no-repeat "
@@ -31,8 +53,22 @@ export default function Banner() {
             lineHeight: "1.2",
           }}
         >
-          Meet carrie – <br className="hidden sm:block" />
-          Your senior healthcare AI advisor
+          {lines.map((line, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <br className="hidden sm:block" />}
+              {line}
+            </React.Fragment>
+          ))}
+          <span
+            aria-hidden
+            className={`inline-block h-[0.9em] w-0.5 align-middle bg-[#132329] sm:h-[0.85em] ${
+              showCursor && !isComplete ? "opacity-100" : "opacity-0"
+            }`}
+            style={{
+              marginLeft: "2px",
+              animation: isComplete ? "none" : undefined,
+            }}
+          />
         </h1>
         <p
           className="mt-3 font-normal text-[#132329] text-base leading-relaxed sm:mt-4 sm:text-lg sm:leading-8 md:mt-5 md:text-xl md:leading-8 lg:text-xl lg:leading-9"
