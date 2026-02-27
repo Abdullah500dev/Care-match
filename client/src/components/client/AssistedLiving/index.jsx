@@ -32,14 +32,16 @@ export default function AssistedLiving() {
           "linear-gradient(117.63deg, rgba(249, 171, 97, 0.22) 2.27%, rgba(0, 207, 244, 0.22) 56.96%, rgba(185, 244, 255, 0.22) 111.64%)",
       }}
     >
-      {/* Subtle circular / wave pattern overlay */}
+      {/* Subtle SVG background pattern overlay */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.12]"
+        className="pointer-events-none absolute inset-0"
         aria-hidden
         style={{
-          backgroundImage: `radial-gradient(circle at 20% 30%, #00CFF4 0%, transparent 50%),
-            radial-gradient(circle at 80% 70%, #00CFF4 0%, transparent 45%),
-            radial-gradient(circle at 50% 50%, #0ea5e9 0%, transparent 60%)`,
+          backgroundImage: "url(/assets/images/ai-care-option-bg.svg)",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "right top",
+          backgroundSize: "auto 100%",
+          opacity: 0.5,
         }}
       />
 

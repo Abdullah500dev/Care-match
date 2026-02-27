@@ -76,7 +76,7 @@ export default function Header() {
               )}
             </div>
             <Link
-              to="/for-providers"
+              to="/dashboard"
               className="rounded-full bg-[#132329] px-4 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 md:px-5 md:py-2.5 min-[1024px]:px-4 min-[1024px]:py-2 min-[1024px]:text-sm min-[1280px]:px-4 min-[1280px]:py-2 min-[1280px]:text-sm min-[1536px]:px-5 min-[1536px]:py-2.5"
             >
               For Providers
@@ -140,7 +140,7 @@ export default function Header() {
               )}
               <div className="mt-2 flex flex-col gap-3 border-t border-gray-100 pt-4">
                 <Link
-                  to="/for-providers"
+                  to="/dashboard"
                   className="inline-flex justify-center rounded-full bg-[#132329] px-5 py-2.5 text-sm font-medium text-white"
                   onClick={() => setIsMenuOpen(false)}
                 >
