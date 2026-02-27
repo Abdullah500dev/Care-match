@@ -129,7 +129,7 @@ export default function WhyCareMatch() {
             <div className="relative w-full shrink-0 lg:mt-0 min-[1280px]:mt-14 min-[1280px]:w-[48%] min-[1920px]:w-[45%] min-[1920px]:mt-14">
               <div className="relative aspect-[4/5] w-full overflow-hidden sm:aspect-[3/4] lg:aspect-[3/2] min-[1280px]:aspect-auto min-[1280px]:h-full min-[1280px]:min-h-[380px] min-[1920px]:min-h-[420px]">
                 <img
-                  src="/assets/images/why-carematch-hero.jpg"
+                  src="/assets/images/carematch.jpeg"
                   alt="Elderly woman and caregiver in a warm, supportive setting"
                   className="h-full w-full object-cover lg:rounded-2xl min-[1280px]:rounded-3xl min-[1920px]:rounded-[24px]"
                   onError={(e) => {
@@ -137,7 +137,7 @@ export default function WhyCareMatch() {
                     e.target.src = "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&q=80";
                   }}
                 />
-                <LoopIcon />
+                {/* <LoopIcon /> */}
               </div>
             </div>
           </div>
