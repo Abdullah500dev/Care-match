@@ -1,275 +1,215 @@
-# 🚀 Care Match AI Backend
+# 🔐 CareMatch AI – Authentication & User Management API
 
-A powerful and flexible **starter template** for backend developers, crafted to speed up development and maintain scalability. This template combines modern tools and libraries with an optimized folder structure to help you kick off your next Node.js project with confidence.
+Backend API for **CareMatch AI**. A comprehensive Node.js authentication and user management system with JWT tokens, email verification, password reset, and Swagger documentation.
 
----
+## ✨ Features
 
-## 🔧 Tech Stack
+- **🔐 JWT Authentication** - Secure token-based authentication
+- **📧 Email Verification** - Account activation via 6-digit code sent by email
+- **🔄 Token Refresh** - Automatic token refresh mechanism
+- **🔒 Password Reset** - Secure password reset via email
+- **👤 User Management** - Complete user profile management
+- **📚 API Documentation** - Interactive Swagger UI documentation
+- **🛡️ Security** - Password hashing, input validation, error handling
+- **📧 Email Integration** - Nodemailer for transactional emails
+- **🗄️ MongoDB** - Scalable database with Mongoose ODM
 
-- ⚡ **Node.js + Express.js**
-- 🗄️ **MongoDB + Mongoose**
-- 🔐 **JWT Authentication + Passport.js**
-- 🤖 **OpenAI Integration**
-- 📧 **Email System (Nodemailer + SMTP)**
-- 📍 **Geographic Data Management**
-- 📁 **File Upload System (Multer)**
-- 🔄 **Real-time Communication (Socket.io)**
-- 📊 **Comprehensive API Documentation (Swagger)**
-- ✅ **Input Validation & Trimming (Joi)**
-- 🛡️ **Security & Error Handling**
+## 🚀 Quick Start
 
-## 📂 Folder Structure
+### Prerequisites
 
----
+- Node.js (v14 or higher)
+- MongoDB
+- SMTP email service (Gmail, SendGrid, etc.)
 
-The project is structured for clarity, scalability, and modularity. Key folders include:
+### Installation
 
-```plaintext
-config/
-├── db.js              # Database connection
-├── env.js              # Environment configuration
-├── geocoder.js         # Google Maps integration
-├── mail.js             # Email service
-├── openai.js           # AI service
-├── socket.js           # Real-time communication
-└── swagger.js          # API documentation
-
-controllers/
-├── aiContentController.js
-├── authController.js
-├── countryStateCityController.js
-├── emailTemplateController.js
-└── userController.js
-
-middlewares/
-├── auth.js
-├── catchAsyncErrors.js
-├── formValidation/
-│   ├── authFormValidation.js
-│   ├── userFormValidation.js
-│   └── aiFormValidation.js
-├── upload.js
-└── validation.js
-
-models/
-├── countryStateCityModel.js
-├── emailTemplateModel.js
-└── userModel.js
-
-routes/
-├── aiContentRouter.js
-├── authRouter.js
-├── countryStateCityRouter.js
-└── userRouter.js
-
-utils/
-├── errorHandler.js
-├── helpers.js
-├── jwtToken.js
-├── newsletter.js
-├── oAuthClient.js
-└── validationResponse.js
-
-helpers/
-├── csvHelper.js
-└── excelHelper.js
-
-scripts/
-├── createDefaultCollections.js
-└── defaultCollections/
-    ├── countrystatecities.json
-    └── emailtemplates.json
-
-Root files:
-├── .env
-├── .gitignore
-├── index.js
-├── LICENSE
-├── package.json
-└── README.md
-```
-
----
-
-## 🧪 API Documentation
-
-A comprehensive **Swagger/OpenAPI 3.0** documentation is integrated and accessible at `/api-docs` endpoint. All endpoints are documented with examples, schemas, and interactive testing capabilities.
-
-### 📡 Available Endpoints
-
-#### Authentication (`/api/auth/`)
-
-- `POST /register` - User registration with email verification
-- `POST /login` - User authentication
-- `POST /password/reset` - Request password reset
-- `POST /password/reset/:token` - Reset password with token
-- `GET /verify/token/:token` - Verify token validity
-- `POST /request/token/new/:token` - Resend verification token
-- `GET /user/account/verify/:token` - Complete account verification
-
-#### User Management (`/api/user/`)
-
-- `GET /logout` - User logout
-- `GET /profile` - Get user profile
-- `PATCH /profile/update` - Update user profile
-- `PUT /password/update` - Update password
-- `GET /account/status` - Get account status
-
-#### Geographic Data (`/api/country-state-city/`)
-
-- `GET /countries` - Get all countries
-- `GET /states?country=X` - Get states for country
-- `GET /cities?country=X&state=Y` - Get cities for state/country
-- `GET /zip?country=X&state=Y&city=Z` - Get ZIP codes
-
-#### AI Content (`/api/ai-content/`)
-
-- `POST /ai/generate` - Generate AI content for campaigns
-
----
-
-## 🚀 Getting Started
-
-1. **Clone or Fork the Repository**
+1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/moaz-ze69/node-express-starter-template.git
-   cd node-express-starter-template
+   git clone <your-repo-url>
+   cd care-match-ai/server
    ```
 
-2. **Install Dependencies**
+2. **Install dependencies**
 
    ```bash
    npm install
    ```
 
-3. **Set up Environment Variables**
-   Create a `.env` file with the following variables:
+3. **Environment Setup**
+   Create a `.env` file in the root directory:
 
-   ```env
-   # Core Application
-   APP_NAME=Your App Name
-   APP_VERSION=1.0.0
-   CLIENT_BASE_URL=http://localhost:5173
-   SERVER_BASE_URL=http://localhost:5274
-   NODE_ENV=development
-   PORT=5274
-
-   # Database
-   DB_HOST=localhost
-   DB_PORT=27017
-   DB_NAME=your_database
-   DB_USERNAME=your_username
-   DB_PASSWORD=your_password
-   DB_AUTHSOURCE=admin
-   DB_REPLICASET=replicaSet=rs0
-
-   # Authentication
-   JWT_SECRET=your_jwt_secret
-   JWT_EXPIRES_IN=7d
-   COOKIE_EXPIRES_IN=7
-
-   # Email
-   SMTP_HOST=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=your_email
-   SMTP_PASS=your_password
-
-   # APIs
-   GOOGLE_MAPS_API_KEY=your_google_maps_key
-   OPENAI_API_KEY=your_openai_key
-   ```
-
-4. **Start Development Server**
+4. **Start the server**
 
    ```bash
+   # Development mode
    npm run dev
+
+   # Production mode
+   npm start
    ```
 
-5. **Populate Database (Optional)**
+5. **Access API Documentation**
+   Visit: `http://localhost:5274/api-docs`
 
-   ```bash
-   npm run populate
-   ```
+## 📚 API Endpoints
 
-6. **Open your browser and navigate to:**
-   - **API Documentation**: http://localhost:5274/api-docs
-   - **API Base**: http://localhost:5274
+### 🔐 Authentication
 
----
+| Method | Endpoint                          | Description               |
+| ------ | --------------------------------- | ------------------------- |
+| `POST` | `/api/auth/register`              | Register a new user       |
+| `POST` | `/api/auth/activate-user` | Activate user with email + 6-digit code |
+| `POST` | `/api/auth/login`                 | User login                |
+| `GET`  | `/api/auth/logout`                | User logout               |
+| `GET`  | `/api/auth/refresh-token`         | Refresh access token      |
+| `POST` | `/api/auth/request/token/new`     | Resend verification email |
 
-## 🛠️ Available Scripts
+### 👤 User Management
 
-```bash
-# Start the application
-npm start
+| Method | Endpoint                         | Description           | Auth Required |
+| ------ | -------------------------------- | --------------------- | ------------- |
+| `GET`  | `/api/auth/me`                   | Get current user info | ✅            |
+| `PUT`  | `/api/auth/update-user-info`     | Update user profile   | ✅            |
+| `PUT`  | `/api/auth/update-user-password` | Update password       | ✅            |
 
-# Development with auto-reload
-npm run dev
+### 🔒 Password Management
 
-# Populate database with default data
-npm run populate
+| Method | Endpoint                           | Description               |
+| ------ | ---------------------------------- | ------------------------- |
+| `POST` | `/api/auth/password/reset`         | Request password reset    |
+| `POST` | `/api/auth/password/reset/{token}` | Reset password with token |
+
+## 🔑 Authentication Flow
+
+### 1. Registration
+
+```json
+POST /api/auth/register
+{
+  "name": "Ahsan",
+  "email": "ahsan.dev.404@gmail.com",
+  "password": "123Admin",
+  "confirmPassword": "123Admin"
+}
 ```
 
----
+### 2. Email Verification (6-digit code)
 
-## 🔒 Security Features
+```json
+POST /api/auth/activate-user
+{
+  "email": "ahsan.dev.404@gmail.com",
+  "code": "847291"
+}
+```
 
-- **JWT Token Authentication** with secure cookie handling
-- **Password Hashing** using Passport.js
-- **Email Verification** system with token-based validation
-- **CORS Configuration** for cross-origin requests
-- **Input Validation & Trimming** with Joi schemas
-- **File Upload Security** with type and size restrictions
-- **Rate Limiting** for AI requests
-- **Environment Variable Validation**
+### 3. Login
 
----
+```json
+POST /api/auth/login
+{
+  "email": "ahsan.dev.404@gmail.com",
+  "password": "123Admin"
+}
+```
 
-## 📈 Performance Optimizations
+### 4. Using Protected Endpoints
 
-- **MongoDB Aggregation** for efficient database queries
-- **Batch Processing** for large datasets (327K+ location records)
-- **Stream-based File Processing** for CSV/Excel files
-- **Connection Pooling** with Mongoose
-- **Error Handling** with async/await patterns
-- **Memory Management** for large file operations
+Add the access token to the `access-token` header:
 
----
+```
+Headers: {
+  "access-token": "your_jwt_access_token_here"
+}
+```
 
-## 🎯 Use Cases
+## 🛡️ Security Features
 
-Perfect for:
+- **Password Hashing** - bcrypt with salt rounds
+- **JWT Tokens** - Secure token-based authentication
+- **Email Validation** - Comprehensive email format validation
+- **Input Validation** - Joi schema validation
+- **Error Handling** - Centralized error handling
+- **CORS Protection** - Cross-origin resource sharing
+- **Rate Limiting** - Built-in protection against abuse
 
-- **SaaS Applications** with user management
-- **Nonprofit Platforms** with fundraising features
-- **Content Management Systems** with AI integration
-- **E-commerce Platforms** with geographic data
-- **Real-time Applications** with Socket.io
-- **Multi-tenant Applications** with organization support
+## 📧 Email Templates
 
----
+The system includes email templates for:
 
-## 📊 Project Metrics
+- Account activation
+- Password reset
 
-- **Files**: 30+ files
-- **Lines of Code**: 2000+ lines
-- **Dependencies**: 25+ packages
-- **API Endpoints**: 17+ routes
-- **Database Models**: 3 schemas
-- **Middleware**: 8+ custom middleware
-- **ES6 Conversion**: 100% complete
+Templates are located in the `mails/` directory and use EJS for dynamic content.
 
----
+## 📖 API Documentation
 
-## 🙌 Contributing
+Interactive API documentation is available at:
 
-Feel free to fork the repo and suggest improvements or raise issues. Contributions are welcome!
+- **Swagger UI**: `http://localhost:5274/api-docs`
+- **OpenAPI Spec**: Automatically generated from JSDoc comments
 
-## 📝 License
+### Using Swagger UI
 
-This project is open source and available under the [ISC License](LICENSE).
+1. Start the server
+2. Visit `http://localhost:5274/api-docs`
+3. Register a user and check email for 6-digit verification code
+4. Activate your account with email + code
+5. Login to get access token
+6. Click "Authorize" and enter your access token
+7. Test protected endpoints
+
+## 📁 Project Structure
+
+```
+├── config/
+│   ├── db.js              # Database configuration
+│   └── swagger.js         # Swagger documentation config
+├── controllers/
+│   └── authController.js  # Authentication logic
+├── middleware/
+│   ├── auth.js            # Authentication middleware
+│   ├── catchAsyncErrors.js # Error handling
+│   └── formValidation/    # Input validation
+├── models/
+│   └── userModel.js       # User database model
+├── routes/
+│   └── authRouter.js      # API routes
+├── services/
+│   └── userService.js     # Business logic
+├── utils/
+│   ├── errorHandler.js    # Error handling utilities
+│   ├── jwtToken.js        # JWT token utilities
+│   ├── sendMail.js        # Email utilities
+│   └── validationResponse.js # Validation helpers
+├── mails/                 # Email templates
+├── uploads/               # File uploads
+└── index.js              # Server entry point
+```
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## 👨‍💻 Author
 
-Built with ❤️ by [Muhammad Moaz Ahmed](https://www.linkedin.com/in/muhammad-moaz-ahmed).
+**CareMatch AI**
+
+## 🙏 Acknowledgments
+
+- Express.js for the web framework
+- Mongoose for MongoDB ODM
+- JWT for authentication
+- Nodemailer for email functionality
+- Swagger for API documentation
+- bcryptjs for password hashing
+
+## 📞 Support
+
+If you have any questions or need help, please open an issue on GitHub or contact the author.
+
+---
+
+⭐ **Star this repository if you find it helpful!**

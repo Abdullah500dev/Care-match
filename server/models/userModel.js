@@ -1,50 +1,69 @@
 import mongoose from "mongoose";
-import passportLocalMongoose from "passport-local-mongoose";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import config from "../config/env.js";
 
 const userSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      required: [true, "Please enter name"],
+    },
     email: {
       type: String,
       required: [true, "Please enter an email"],
-      trim: true,
       match: [
         /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/,
         "Please enter a valid email address",
       ],
       unique: true,
     },
-    firstName: {
+    password: {
       type: String,
-      required: [true, "Please enter your first name"],
-      trim: true,
+      required: [true, "Please enter a password"],
+      select: false,
     },
-    lastName: {
+    admin_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+    },
+    slug: {
       type: String,
-      required: [true, "Please enter your last name"],
-      trim: true,
     },
-    isVerified: {
+    about_us: {
+      type: String,
+    },
+    is_blocked: {
       type: Boolean,
       default: false,
     },
-    isBlocked: {
+    is_verified: {
       type: Boolean,
       default: false,
     },
-    role: {
+    is_visible: {
+      type: Boolean,
+      default: true,
+    },
+    user_type: {
       type: String,
-      enum: ["user", "admin", "super_admin"],
+      enum: ["user", "admin", "authenticator", "moderator"],
       default: "user",
+    },
+    phone: {
+      type: String,
+    },
+    profile_picture: {
+      type: String,
+    },
+    cover_picture: {
+      type: String,
+    },
+    country: {
+      type: String,
     },
     resetPasswordToken: {
       type: String,
-    },
-    termsAndConditionsAccepted: {
-      type: Boolean,
-      default: true,
     },
     resetPasswordExpire: {
       type: Date,
@@ -58,12 +77,44 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-userSchema.methods.getJWTToken = function () {
-  return jwt.sign({ id: this._id }, config.JWT_SECRET, {
-    expiresIn: config.JWT_EXPIRES_IN,
+// Hash Password before saving
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) {
+    next();
+  }
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+// compare password
+userSchema.methods.comparePassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// sign access token
+userSchema.methods.SignAccessToken = function () {
+  return jwt.sign({ id: this._id }, process.env.ACCESS_TOKEN || "", {
+    expiresIn: "7d",
   });
 };
-userSchema.methods.getTokenExpiry = () => Date.now() + 24 * 60 * 60 * 1000;
+
+// sign refresh token
+userSchema.methods.SignRefreshToken = function () {
+  return jwt.sign({ id: this._id }, process.env.REFRESH_TOKEN || "", {
+    expiresIn: "3d",
+  });
+};
+
+// Generate 6-digit verification code for email activation
+userSchema.methods.getVerificationCode = function (minutesToExpire = 15) {
+  const code = String(crypto.randomInt(100000, 999999));
+  this.token = crypto.createHash("sha256").update(code).digest("hex");
+  this.tokenValidityInMinutes = minutesToExpire;
+  this.tokenExpire = Date.now() + minutesToExpire * 60 * 1000;
+  return code;
+};
+
+// Generate token for password reset (kept for reset flow)
 userSchema.methods.getToken = function (minutesToExpire = 15) {
   const userToken = crypto.randomBytes(20).toString("hex");
   this.token = crypto.createHash("sha256").update(userToken).digest("hex");
@@ -72,8 +123,6 @@ userSchema.methods.getToken = function (minutesToExpire = 15) {
   return userToken;
 };
 
-userSchema.plugin(passportLocalMongoose, {
-  usernameField: "email",
-});
+const User = mongoose.model("User", userSchema);
 
-export default mongoose.model("User", userSchema);
+export default User;
