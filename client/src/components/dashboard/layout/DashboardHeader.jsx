@@ -1,19 +1,28 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { Bell, User } from "lucide-react";
+import { Bell, Menu, User } from "lucide-react";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", exact: true },
   { to: "/dashboard/residents", label: "Leads" },
   { to: "/dashboard/communities", label: "My Facilities" },
+  { to: "/dashboard/snf-partners", label: "SNF Partners" },
 ];
 
-export default function DashboardHeader() {
+export default function DashboardHeader({ onMenuClick }) {
   return (
     <header className="border-b border-slate-200 bg-white" style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}>
       <div className="mx-auto flex h-14 min-w-0 max-w-[1800px] items-center justify-between gap-4 px-2 sm:h-16 sm:px-4 min-[1280px]:gap-6">
-        {/* Logo + brand */}
+        {/* Burger (mobile) + Logo + brand */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={onMenuClick}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-900 md:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
           <div className="flex items-center gap-2">
             <img
               src="/assets/images/favicon/favicon.svg"
@@ -63,7 +72,7 @@ export default function DashboardHeader() {
             </button>
             <button
               type="button"
-              className="flex items-center gap-2 rounded-full bg-slate-100 px-1 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:px-2"
+              className="flex min-w-[6.5rem] items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:min-w-0 sm:px-2"
             >
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00B8DB] text-xs font-semibold text-white">
               <User className="hidden h-3.5 w-3.5 text-white sm:inline" />

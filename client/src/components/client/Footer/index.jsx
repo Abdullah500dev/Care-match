@@ -10,10 +10,11 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   const resourcesLinks = [
-    { label: "Care Guides", path: "/care-guides" },
+    { label: "Get Started", path: "/" },
     { label: "Cost Calculator", path: "/cost-calculator" },
     { label: "Blog", path: "/blog" },
-    { label: "Policy", path: "/policy" },
+    { label: "FAQs", path: "/faqs" },
+    { label: "Whitepapers", path: "/whitepapers" },
   ];
 
   const socialLinks = [
@@ -39,13 +40,13 @@ export default function Footer() {
                 className="h-9 w-auto object-contain sm:h-10"
                 style={{ color: ACCENT }}
               />
-              
+              <span className="text-lg font-bold text-white">CareMatch AI</span>
             </Link>
             <p
               className={`mt-3 max-w-sm text-sm leading-relaxed sm:mt-4 w-[65%] sm:text-base ${TEXT_MUTED}`}
             >
-              Unparalled senior care search platform trusted by millions of
-              families nationwide.
+              AI powered solutions for senior care, trusted by families
+              nationwide.
             </p>
             <div className="mt-4 flex flex-wrap gap-4 sm:mt-6 sm:gap-6">
               {socialLinks.map(({ label, href, Icon }) => (
@@ -88,24 +89,14 @@ export default function Footer() {
               Contact Us
             </h3>
             <ul className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
-              <li className="flex items-center gap-2">
-                {/* <Phone
-                    className="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
-                    style={{ color: ACCENT }}
-                /> */}
-                <img src="/assets/images/footer-msg-icon.svg" alt="Phone" className="h-4 w-4 shrink-0 sm:h-5 sm:w-5" />
-                <a
-                  href="tel:2122273266"
-                  className={`text-sm ${TEXT_MUTED} transition hover:text-white sm:text-base`}
-                >
-                  212-Care Connect
-                </a>
+              <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
+                P: 24/7 Live Chat
               </li>
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
-                123 Main Street
+                E: hello@carematch.ai
               </li>
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
-                9am - 5pm EST
+                B: Mon - Sun (24/7)
               </li>
             </ul>
           </div>
@@ -120,7 +111,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-6 flex flex-col gap-2 sm:mt-8 md:flex-row md:items-center md:justify-center">
           <p className={`order-2 text-left text-xs sm:order-1 sm:text-sm ${TEXT_MUTED}`}>
-            © {currentYear} CareMatch. All rights reserved.
+            © {currentYear} CareMatch AI. All Rights Reserved
           </p>
           <div className="order-1 flex flex-wrap items-center justify-start gap-2 sm:order-2 sm:gap-3 md:justify-end">
           <span className={`text-xs ${TEXT_MUTED} sm:text-sm`}>|</span>
