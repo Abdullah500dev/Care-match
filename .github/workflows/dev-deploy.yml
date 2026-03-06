@@ -37,9 +37,9 @@ jobs:
     - name: Deploy Server to Server
       uses: appleboy/scp-action@v0.1.7
       with:
-        host: ${{ secrets.EC2_HOST_DEV }}
+        host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.EC2_SSH_DEV_KEY }}
+        key: ${{ secrets.EC2_SSH_KEY }}
         source: "server/*"
         target: "/home/ubuntu/care-match-ai/server"
         strip_components: 1
@@ -47,9 +47,9 @@ jobs:
     - name: Deploy Client to Server
       uses: appleboy/scp-action@v0.1.7
       with:
-        host: ${{ secrets.EC2_HOST_DEV }}
+        host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.EC2_SSH_DEV_KEY }}
+        key: ${{ secrets.EC2_SSH_KEY }}
         source: "client/*"
         target: "/home/ubuntu/care-match-ai/client"
         strip_components: 1
@@ -57,9 +57,9 @@ jobs:
     - name: Install Dependencies and Restart Services
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.EC2_HOST_DEV }}
+        host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.EC2_SSH_DEV_KEY }}
+        key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           # Navigate to project directory
           cd /home/ubuntu/care-match-ai
@@ -99,9 +99,9 @@ jobs:
     - name: Verify Deployment
       uses: appleboy/ssh-action@v1.0.3
       with:
-        host: ${{ secrets.EC2_HOST_DEV }}
+        host: ${{ secrets.EC2_HOST }}
         username: ubuntu
-        key: ${{ secrets.EC2_SSH_DEV_KEY }}
+        key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           # Check PM2 status
           pm2 list
@@ -113,7 +113,7 @@ jobs:
           fi
 
           # Check server health (server runs on port 3030)
-          if ! curl -s http://localhost:3030/ > /dev/null; then
+          if ! curl -s http://localhost:3002/ > /dev/null; then
             echo "❌ Server health check failed on port 3030"
             pm2 logs care-match-server --lines 20
             exit 1
