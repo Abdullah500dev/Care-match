@@ -5,7 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "NODE_ENV=production PORT=3030 node index.js",
+    "start": "NODE_ENV=production PORT=3002 node index.js",
     "dev": "nodemon index.js",
     "test": "jest"
   },
