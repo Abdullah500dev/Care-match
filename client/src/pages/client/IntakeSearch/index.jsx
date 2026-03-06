@@ -152,12 +152,13 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#f1f5f9] px-3.5 py-2 text-sm font-normal text-[#334155] hover:bg-[#e2e8f0] transition-colors border border-[#e2e8f0]"
+            className="inline-flex  items-center gap-1.5 rounded-lg bg-[#F9F9F9] px-3.5 py-2 text-sm font-bold text-[#334155] hover:bg-[#e2e8f0] transition-colors border border-[#e2e8f0]"
+            style={{ boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A" }}
           >
-            <ArrowLeft className="h-4 w-4 text-[#64748b]" />
+            <ArrowLeft className="h-4 w-4 text-[#1D293D]" />
             Back
           </button>
-          <span className="text-sm font-medium text-[#64748b]">
+          <span className="text-sm font-normal text-[#6B7280]">
             Step {step}/{totalSteps}
           </span>
         </div>
@@ -175,7 +176,7 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
       <div className="mt-10 flex flex-col gap-4">
         <Button
           onClick={onContinue}
-          className="h-12 w-full rounded-xl bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-semibold"
+          className="h-14 w-full rounded-2xl bg-[#00CFF4] text-xl text-white font-semibold"
         >
           {step < totalSteps ? "Continue" : "See matching facilities"}
           <ArrowRight className="h-4 w-4 ml-1" />
@@ -183,7 +184,7 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
         <Button
           variant="secondary"
           onClick={onSaveLater}
-          className="h-11 w-full rounded-xl bg-[#475569] hover:bg-[#334155] text-white font-medium"
+          className="h-14 w-full rounded-2xl bg-[#1D2837] text-xl text-white font-semibold"
         >
           Save and finish later
         </Button>
