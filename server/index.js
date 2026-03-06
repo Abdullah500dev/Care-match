@@ -1,76 +1,101 @@
+import dotenv from "dotenv";
 import express from "express";
-import http from "http";
 import bodyParser from "body-parser";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import passport from "passport";
-import { Server } from "socket.io";
 import swaggerUi from "swagger-ui-express";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-import config from "./config/env.js";
 import database from "./config/db.js";
-import socket from "./config/socket.js";
 import swaggerSpecs from "./config/swagger.js";
-
 import authRouter from "./routes/authRouter.js";
-import userRouter from "./routes/userRouter.js";
-import countryStateCityRouter from "./routes/countryStateCityRouter.js";
-import aiContentRouter from "./routes/aiContentRouter.js";
+import ErrorHandler from "./utils/errorHandler.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config(); 
 
 const app = express();
-const server = http.createServer(app);
-const port = config.PORT;
-const io = new Server(server, {
-  cors: {
-    origin: config.CLIENT_BASE_URL,
-    methods: ["GET", "POST"],
-    credentials: true,
-  },
-});
+const port = process.env.PORT;
 
 database.on("error", console.error.bind(console, "Database connection error:"));
-socket(io);
 
 app.use(
   cors({
-    origin: config.CLIENT_BASE_URL,
+    origin: process.env.CLIENT_BASE_URL,
     optionsSuccessStatus: 200,
     credentials: true,
   })
 );
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(passport.initialize());
 app.use(cookieParser());
-app.use((req, _, next) => {
-  req.io = io;
-  next();
-});
+
 app.use("/uploads", express.static("uploads"));
 
+// Swagger Documentation
 app.use(
   "/api-docs",
   swaggerUi.serve,
   swaggerUi.setup(swaggerSpecs, {
-    explorer: true,
     customCss: ".swagger-ui .topbar { display: none }",
-    customSiteTitle: `${config.APP_NAME} API Documentation`,
+    customSiteTitle: "Care Match AI API Documentation",
   })
 );
 
-app.use("/api/auth/", authRouter);
-app.use("/api/user/", userRouter);
-app.use("/api/country-state-city/", countryStateCityRouter);
-app.use("/api/ai-content/", aiContentRouter);
+app.use("/api/auth", authRouter);
 
-app.get("/", (_, res) =>
-  res.json({
-    message: `Welcome to ${config.APP_NAME} backend.`,
-    documentation: `${config.SERVER_BASE_URL}/api-docs`,
-    version: config.APP_VERSION,
-  })
-);
+// Serve client build if it exists, otherwise show API info
+const clientDistPath = path.join(__dirname, "../client/dist");
+if (fs.existsSync(clientDistPath)) {
+  // Serve static files from client dist
+  app.use(express.static(clientDistPath));
+  
+  // Handle SPA routing - serve index.html for all non-API routes
+  app.get("/*", (req, res, next) => {
+    // Skip API routes and static assets
+    if (req.path.startsWith("/api") || req.path.startsWith("/api-docs") || req.path.startsWith("/uploads")) {
+      return next();
+    }
+    res.sendFile(path.join(clientDistPath, "index.html"));
+  });
+} else {
+  // If no client build exists, serve a simple message
+  app.get("/", (_, res) =>
+    res.json({ message: `Welcome to ${process.env.PROJECT_NAME} backend.` })
+  );
+  
+  app.get("/*", (req, res, next) => {
+    // Skip API routes
+    if (req.path.startsWith("/api") || req.path.startsWith("/api-docs") || req.path.startsWith("/uploads")) {
+      return next();
+    }
+    res.json({
+      message:
+        "Backend API is running. Please build the frontend client to access the full application.",
+      endpoints: {
+        api: "/api",
+        docs: "/api-docs",
+        auth: "/api/auth",
+      },
+    });
+  });
+}
 
-server.listen(port, () => {
-  console.log(`Server is running on port ${port}!`);
+app.all("*", (_, res) => res.status(404).json({ success: false, message: "Route not found", status: 404 }));
+
+// Global error handler – always return JSON (for Swagger and API clients)
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+  res.status(statusCode).json({
+    success: false,
+    message,
+    status: statusCode,
+  });
 });
+
+app.listen(port, () => console.log(`Server is running on port ${port}!`));

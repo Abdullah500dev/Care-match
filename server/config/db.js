@@ -1,20 +1,25 @@
 import mongoose from "mongoose";
-import config from "./env.js";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 mongoose.set("strictQuery", false);
 
 const DB_OPTIONS = {
-  dbName: config.DB_NAME,
-  user: config.DB_USERNAME,
-  pass: config.DB_PASSWORD,
-  authSource: config.DB_AUTHSOURCE,
+  dbName: process.env.DB_NAME,
 };
 
+// Ensure DB_CONNECTION is defined
+if (!process.env.DB_CONNECTION) {
+  console.error("DB_CONNECTION is not defined in .env file!");
+  process.exit(1);
+}
+
 mongoose
-  .connect(
-    `mongodb://${config.DB_HOST}:${config.DB_PORT}/${config.DB_NAME}?${config.DB_REPLICASET}`,
-    DB_OPTIONS
-  )
+  .connect(process.env.DB_CONNECTION, DB_OPTIONS)
+  .then(() => {
+    console.log("Database connected successfully");
+  })
   .catch((err) => {
     console.log("Connection Error: ", err.message);
   });
