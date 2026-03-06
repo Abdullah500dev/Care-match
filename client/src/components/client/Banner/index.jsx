@@ -15,7 +15,7 @@ export default function Banner() {
     return () => clearTimeout(t);
   }, [displayedLength]);
 
-  // When typewriter completes, wait briefly then restart so it always animates
+  // When typewriter completes, wait briefly then restart so it loops
   useEffect(() => {
     if (displayedLength < BANNER_HEADING.length) return;
     const t = setTimeout(() => setDisplayedLength(0), 1500);
@@ -53,30 +53,33 @@ export default function Banner() {
           alt=""
           className="mb-8 h-10 w-10 sm:mb-10 sm:h-12 sm:w-12 md:mb-12 md:h-14 md:w-14 lg:mb-14 lg:h-16 lg:w-16 min-[1280px]:mb-12 min-[1280px]:h-14  min-[1280px]:w-14 min-[1536px]:h-20 min-[1536px]:w-20 min-[1536px]:mb-16"
         />
-        <h1
-          className="font-semibold capitalize tracking-tight text-[#132329] text-3xl leading-tight sm:text-4xl sm:leading-snug md:text-5xl md:leading-[1.15] lg:text-[56px] lg:leading-[1.2]"
-          style={{
-            fontSize: "clamp(1.875rem, 2.5vw + 1rem, 3.25rem)",
-            lineHeight: "1.2",
-          }}
-        >
-          {lines.map((line, i) => (
-            <React.Fragment key={i}>
-              {i > 0 && <br className="hidden sm:block" />}
-              {line}
-            </React.Fragment>
-          ))}
-          <span
-            aria-hidden
-            className={`inline-block h-[0.9em] w-0.5 align-middle bg-[#132329] sm:h-[0.85em] ${
-              showCursor && !isComplete ? "opacity-100" : "opacity-0"
-            }`}
+        {/* Fixed-height wrapper so typewriter loop never shifts the search bar */}
+        <div className="min-h-[5.5rem] sm:min-h-[6rem] md:min-h-[7rem] lg:min-h-[8rem] flex flex-col justify-start">
+          <h1
+            className="font-semibold capitalize tracking-tight text-[#132329] text-3xl leading-tight sm:text-4xl sm:leading-snug md:text-5xl md:leading-[1.15] lg:text-[56px] lg:leading-[1.2]"
             style={{
-              marginLeft: "2px",
-              animation: isComplete ? "none" : undefined,
+              fontSize: "clamp(1.875rem, 2.5vw + 1rem, 3.25rem)",
+              lineHeight: "1.2",
             }}
-          />
-        </h1>
+          >
+            {lines.map((line, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && <br className="hidden sm:block" />}
+                {line}
+              </React.Fragment>
+            ))}
+            <span
+              aria-hidden
+              className={`inline-block h-[0.9em] w-0.5 align-middle bg-[#132329] sm:h-[0.85em] ${
+                showCursor && !isComplete ? "opacity-100" : "opacity-0"
+              }`}
+              style={{
+                marginLeft: "2px",
+                animation: isComplete ? "none" : undefined,
+              }}
+            />
+          </h1>
+        </div>
         <p
           className="mt-3 font-normal text-[#132329] text-base leading-relaxed sm:mt-4 sm:text-lg sm:leading-8 md:mt-5 md:text-xl md:leading-8 lg:text-xl lg:leading-9"
           style={{
