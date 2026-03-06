@@ -19,11 +19,12 @@ export default function Profile() {
   return (
     <>
       <SEO title="Profile" />
-      <div className="min-h-screen bg-white">
-        <div className="max-w-4xl mx-auto px-4 py-6 sm:py-10 sm:px-6">
-          {/* Profile Header */}
-          <div className="flex flex-col gap-6 mb-8 sm:mb-12 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
+      <div className="min-h-screen bg-[#FDFCFB]">
+        <div className="px-4 py-6 sm:py-10 sm:px-6 max-w-4xl mx-auto">
+          {/* Profile Header - same width as grid below */}
+          <div className="flex flex-col gap-6 mb-6 sm:mb-8 sm:flex-row sm:items-center sm:justify-between bg-white rounded-2xl sm:rounded-3xl border border-[#E2E8F0] shadow-sm overflow-hidden">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between w-full px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
               <div className="relative w-24 h-24 sm:w-32 sm:h-32 shrink-0 overflow-visible">
                 <div className="relative z-0 w-full h-full rounded-full overflow-hidden flex items-center justify-center">
                   <img
@@ -60,30 +61,31 @@ export default function Profile() {
                   </Badge>
                 </div>
               </div>
-            </div>
-            <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-3">
-              <button
-                type="button"
-                className="flex flex-col items-center justify-center gap-2 sm:gap-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-3xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] transition-colors p-3 sm:p-4"
-              >
-                <History className="w-4 h-4 sm:w-5 sm:h-5 text-[#94A3B8]" />
-                <span className="text-[10px] sm:text-xs font-medium text-[#62748E] uppercase tracking-wide">
-                  History
-                </span>
-              </button>
-              <button
-                type="button"
-                className="flex flex-col items-center justify-center gap-2 sm:gap-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-3xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] transition-colors p-3 sm:p-4"
-              >
-                <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-[#94A3B8]" />
-                <span className="text-[10px] sm:text-xs font-medium text-[#62748E] uppercase tracking-wide">
-                  Alerts
-                </span>
-              </button>
+              </div>
+              <div className="flex items-center justify-center sm:justify-end gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  className="flex flex-col items-center justify-center gap-2 sm:gap-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-3xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] transition-colors p-3 sm:p-4"
+                >
+                  <History className="w-4 h-4 sm:w-5 sm:h-5 text-[#94A3B8]" />
+                  <span className="text-[10px] sm:text-xs font-medium text-[#62748E] uppercase tracking-wide">
+                    History
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex flex-col items-center justify-center gap-2 sm:gap-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 rounded-3xl bg-white border border-[#E2E8F0] hover:border-[#CBD5E1] transition-colors p-3 sm:p-4"
+                >
+                  <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-[#94A3B8]" />
+                  <span className="text-[10px] sm:text-xs font-medium text-[#62748E] uppercase tracking-wide">
+                    Alerts
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Main Content */}
+          {/* Main Content - same width as profile section above */}
           <div className="grid grid-cols-1 md:grid-cols-[minmax(280px,320px)_1fr] gap-6 md:gap-8">
             {/* Left Column - Assessment */}
             <div>

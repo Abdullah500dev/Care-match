@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { Bell, Menu, User } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -23,16 +23,20 @@ export default function DashboardHeader({ onMenuClick }) {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex items-center gap-2">
+          <Link
+            to="/dashboard"
+            className="flex items-center gap-2 text-slate-900 hover:opacity-90 transition-opacity"
+            aria-label="CareMatch AI – go to home"
+          >
             <img
               src="/assets/images/favicon/favicon.svg"
               alt="CareMatch AI"
               className="h-7 w-7 sm:h-8 sm:w-8"
             />
-            <span className="text-sm font-semibold text-slate-900 sm:text-base">
+            <span className="text-sm font-semibold sm:text-base">
               CareMatch AI
             </span>
-          </div>
+          </Link>
         </div>
         <div className="flex min-w-0 shrink items-center gap-4 sm:gap-6 min-[1280px]:gap-8">
           {/* Center nav (desktop) */}
@@ -44,19 +48,12 @@ export default function DashboardHeader({ onMenuClick }) {
                 end={item.exact}
                 className={({ isActive }) =>
                   [
-                    "relative px-1 transition-colors",
+                    "px-1 transition-colors",
                     isActive ? "text-[#00B8DB]" : "hover:text-slate-900",
                   ].join(" ")
                 }
               >
-                {({ isActive }) => (
-                  <>
-                    <span>{item.label}</span>
-                    {isActive && (
-                      <span className="absolute inset-x-0 -bottom-1 h-0.5 rounded-full bg-[#00B8DB]" />
-                    )}
-                  </>
-                )}
+                {item.label}
               </NavLink>
             ))}
           </nav>
