@@ -18,7 +18,6 @@ import {
 } from "recharts";
 import {
   Download,
-  Plus,
   Users,
   CalendarDays,
   Eye,
@@ -132,33 +131,6 @@ export default function DashboardHome() {
               }}
             >
               Export
-            </span>
-          </Button>
-          <Button
-            size="default"
-            className="relative flex shrink-0 items-center justify-center gap-2 text-white hover:bg-[#00B8DB]/90"
-            style={{
-              minWidth: "140px",
-              width: "173.25px",
-              maxWidth: "100%",
-              height: "48px",
-              borderRadius: "14px",
-              background: "#00B8DB",
-              boxShadow: "0 0 6px -4px #CEFAFE, 0 8px 24px 0 rgba(0, 184, 219, 0.5)",
-            }}
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            <span
-              style={{
-                fontFamily: "Rethink Sans, sans-serif",
-                fontWeight: 700,
-                fontSize: "14px",
-                lineHeight: "20px",
-                letterSpacing: "0px",
-                textAlign: "center",
-              }}
-            >
-              New Facility
             </span>
           </Button>
         </div>

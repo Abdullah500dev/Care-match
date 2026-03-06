@@ -15,7 +15,6 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/dashboard/residents", label: "Leads", icon: Users },
   { to: "/dashboard/communities", label: "Facilities", icon: Building2 },
-  { to: "/dashboard/snf-partners", label: "SNF Partners", icon: Building2 },
   { to: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   { to: "/dashboard/analytics", label: "Analytics", icon: BarChart2 },
