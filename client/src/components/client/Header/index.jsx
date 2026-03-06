@@ -1,11 +1,14 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { Menu, X, User, Search } from "lucide-react";
+import { getUser } from "@/store/auth/authSlice.js";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated, userData } = useSelector(getUser);
 
   const menuItems = [
     { label: "How it Works", target: "how-it-works", isScroll: true },
@@ -85,19 +88,36 @@ export default function Header() {
               className="h-5 w-[2px] rounded-full bg-gray-300 min-[1536px]:h-6"
               aria-hidden
             />
-            <Link
-              to="/profile"
-              className="flex items-center gap-2 text-[#364153] transition-colors hover:text-[#364153]"
-              aria-label="Profile"
-            >
-              <Search className="h-4 w-4 text-[#364153] md:h-5 md:w-5" />
-              <span className="flex h-8 w-8 items-center justify-center rounded-full md:h-8 md:w-8 min-[1024px]:h-8 min-[1024px]:w-8 min-[1280px]:h-8 min-[1280px]:w-8 min-[1536px]:h-9 min-[1536px]:w-9">
-                <User className="h-4 w-4 text-[#364153] md:h-5 md:w-5 min-[1280px]:h-4 min-[1536px]:h-5 min-[1536px]:w-5" />
-              </span>
-              <span className="font-medium text-[#364153] text-sm md:text-base min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base">
-                Sarah Miller
-              </span>
-            </Link>
+            {isAuthenticated && userData ? (
+              <Link
+                to="/profile"
+                className="flex items-center gap-2 text-[#364153] transition-colors hover:text-[#364153]"
+                aria-label="Profile"
+              >
+                <Search className="h-4 w-4 text-[#364153] md:h-5 md:w-5" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-full md:h-8 md:w-8 min-[1024px]:h-8 min-[1024px]:w-8 min-[1280px]:h-8 min-[1280px]:w-8 min-[1536px]:h-9 min-[1536px]:w-9">
+                  <User className="h-4 w-4 text-[#364153] md:h-5 md:w-5 min-[1280px]:h-4 min-[1536px]:h-5 min-[1536px]:w-5" />
+                </span>
+                <span className="font-medium text-[#364153] text-sm md:text-base min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base">
+                  {userData.name || "Profile"}
+                </span>
+              </Link>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/register"
+                  className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
+                >
+                  Sign-in
+                </Link>
+                <Link
+                  to="/login"
+                  className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
+                >
+                  Login
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile menu button (shown until lg 1024px) */}
@@ -147,16 +167,37 @@ export default function Header() {
                 >
                   For Providers
                 </Link>
-                <Link
-                  to="/profile"
-                  className="flex items-center gap-2 px-1"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                    <User className="h-5 w-5 text-gray-600" />
-                  </span>
-                  <span className="font-medium text-gray-700 text-sm sm:text-base">Sarah Miller</span>
-                </Link>
+                {isAuthenticated && userData ? (
+                  <Link
+                    to="/profile"
+                    className="flex items-center gap-2 px-1"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                      <User className="h-5 w-5 text-gray-600" />
+                    </span>
+                    <span className="font-medium text-gray-700 text-sm sm:text-base">
+                      {userData.name || "Profile"}
+                    </span>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-4 px-1">
+                    <Link
+                      to="/register"
+                      className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Sign-in
+                    </Link>
+                    <Link
+                      to="/login"
+                      className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Login
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>

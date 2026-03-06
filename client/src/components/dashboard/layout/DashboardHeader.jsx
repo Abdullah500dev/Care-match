@@ -6,7 +6,6 @@ const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", exact: true },
   { to: "/dashboard/residents", label: "Leads" },
   { to: "/dashboard/communities", label: "My Facilities" },
-  { to: "/dashboard/snf-partners", label: "SNF Partners" },
 ];
 
 export default function DashboardHeader({ onMenuClick }) {

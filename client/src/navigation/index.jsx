@@ -10,6 +10,7 @@ const Page1 = lazy(() => import("../pages/client/Page1"));
 const Page2 = lazy(() => import("../pages/client/Page2"));
 const Contact = lazy(() => import("../pages/client/Contact"));
 const Profile = lazy(() => import("../pages/client/Profile"));
+const IntakeSearch = lazy(() => import("../pages/client/IntakeSearch"));
 
 // dashboard pages
 const DashboardHome = lazy(() => import("../pages/dashboard/DashboardHome"));
@@ -58,6 +59,7 @@ export default function Navigation() {
               <Route path="/page_2" element={<Page2 />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/find-care" element={<IntakeSearch />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />

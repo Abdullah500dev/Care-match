@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 /** Sparkle / asterisk icon for AI Assistant button */
 function SparkleIcon({ className = "" }) {
@@ -27,10 +28,11 @@ function FootnoteIcon({ className = "" }) {
 export default function StartYourSearch() {
   return (
     <section
-      className="relative w-full overflow-hidden py-10 sm:py-16 md:py-20 lg:py-24 min-[1280px]:py-28"
+      className="relative w-full overflow-hidden py-10 sm:py-16 md:py-20 lg:py-24 min-[1280px]:py-28 bg-cover bg-center bg-no-repeat"
       style={{
-        background:
-          "linear-gradient(180deg, #00CFF4 0%, #00B8DC 100%)",
+        backgroundImage: "linear-gradient(180deg, rgba(0,207,244,0.85) 0%, rgba(0,184,220,0.9) 100%), url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
+        backgroundSize: "cover, cover, cover",
+        backgroundPosition: "center, center, center",
       }}
     >
       <div className="container relative z-10 mx-auto min-w-0 px-4 text-center sm:px-6 md:px-8 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
@@ -47,14 +49,14 @@ export default function StartYourSearch() {
 
         {/* Button + input group */}
         <div className="mt-6 flex w-full max-w-full flex-col items-stretch gap-3 sm:mt-10 sm:max-w-none sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
-          <button
-            type="button"
+          <Link
+            to="/find-care"
             className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-semibold transition hover:bg-white/95 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
             style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
           >
             <SparkleIcon />
             Try AI Assistant
-          </button>
+          </Link>
           <input
             type="text"
             placeholder="Enter your location"
