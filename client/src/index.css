@@ -87,9 +87,21 @@
   * {
     @apply border-border;
   }
+  html {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: 'Rethink Sans', sans-serif;
     background-color: #ffffff;
+    overflow-x: hidden;
+    max-width: 100%;
   }
+}
+
+/* Sonner toast height override - Tailwind classes don't override Sonner's defaults */
+[data-sonner-toast] {
+  min-height: 96px !important;
+  border-radius: 24px !important;
 }

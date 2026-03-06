@@ -8,11 +8,16 @@ import PreLoader from "../components/common/PreLoader";
 const Home = lazy(() => import("../pages/client/Home"));
 const Page1 = lazy(() => import("../pages/client/Page1"));
 const Page2 = lazy(() => import("../pages/client/Page2"));
+const Contact = lazy(() => import("../pages/client/Contact"));
+const Profile = lazy(() => import("../pages/client/Profile"));
 
 // dashboard pages
 const DashboardHome = lazy(() => import("../pages/dashboard/DashboardHome"));
 const DashboardResidents = lazy(() => import("../pages/dashboard/Residents"));
 const DashboardCommunities = lazy(() => import("../pages/dashboard/Communities"));
+const DashboardSNFPartners = lazy(() =>
+  import("../pages/dashboard/SNFPartners/index")
+);
 const DashboardMessages = lazy(() => import("../pages/dashboard/Messages"));
 const DashboardSettings = lazy(() => import("../pages/dashboard/Settings"));
 const DashboardCalendar = lazy(() => import("../pages/dashboard/Calendar"));
@@ -51,11 +56,14 @@ export default function Navigation() {
               <Route path="/" element={<Home />} />
               <Route path="/page_1" element={<Page1 />} />
               <Route path="/page_2" element={<Page2 />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/profile" element={<Profile />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />
                 <Route path="residents" element={<DashboardResidents />} />
                 <Route path="communities" element={<DashboardCommunities />} />
+                <Route path="snf-partners" element={<DashboardSNFPartners />} />
                 <Route path="messages" element={<DashboardMessages />} />
                 <Route path="calendar" element={<DashboardCalendar />} />
                 <Route path="analytics" element={<DashboardAnalytics />} />

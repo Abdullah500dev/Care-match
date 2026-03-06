@@ -24,6 +24,7 @@ import {
   Eye,
   TrendingUp,
 } from "lucide-react";
+import AnimatedNumber from "@/components/common/AnimatedNumber";
 
 const SUMMARY_CARDS = [
   {
@@ -87,38 +88,88 @@ const chartConfig = {
 
 export default function DashboardHome() {
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+      <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex flex-col sm:min-w-0">
+          <h1
+            className="flex items-center text-xl font-bold tracking-tight text-slate-900 sm:text-2xl md:text-3xl lg:h-9"
+            style={{ maxWidth: "100%" }}
+          >
             Dashboard Overview
           </h1>
-          <p className="mt-1 text-sm text-slate-500 md:text-base">
+          <p
+            className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
+            style={{ maxWidth: "100%" }}
+          >
             Welcome back, here&apos;s what&apos;s happening with your facilities today.
           </p>
         </div>
-        <div className="mt-4 flex flex-shrink-0 gap-2 sm:mt-0">
-          <Button variant="outline" size="default" className="gap-2 border-slate-200">
-            <Download className="h-4 w-4" />
-            Export
+        <div className="mt-4 flex min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:mt-0">
+          <Button
+            variant="outline"
+            size="default"
+            className="relative flex shrink-0 items-center justify-center gap-2 border-slate-200"
+            style={{
+              minWidth: "100px",
+              width: "121.6px",
+              maxWidth: "100%",
+              height: "48px",
+              borderRadius: "14px",
+              border: "1.5px solid #cbd5e1",
+            }}
+          >
+            <Download className="h-4 w-4 shrink-0 text-[#45556C]" />
+            <span
+              style={{
+                fontFamily: "Rethink Sans, sans-serif",
+                fontWeight: 700,
+                fontSize: "14px",
+                lineHeight: "20px",
+                letterSpacing: "0px",
+                textAlign: "center",
+                color: "#45556C",
+              }}
+            >
+              Export
+            </span>
           </Button>
           <Button
             size="default"
-            className="gap-2 bg-[#00B8DB] text-white hover:bg-[#00B8DB]/90"
+            className="relative flex shrink-0 items-center justify-center gap-2 text-white hover:bg-[#00B8DB]/90"
+            style={{
+              minWidth: "140px",
+              width: "173.25px",
+              maxWidth: "100%",
+              height: "48px",
+              borderRadius: "14px",
+              background: "#00B8DB",
+              boxShadow: "0 0 6px -4px #CEFAFE, 0 8px 24px 0 rgba(0, 184, 219, 0.5)",
+            }}
           >
-            <Plus className="h-4 w-4" />
-            New Facility
+            <Plus className="h-4 w-4 shrink-0" />
+            <span
+              style={{
+                fontFamily: "Rethink Sans, sans-serif",
+                fontWeight: 700,
+                fontSize: "14px",
+                lineHeight: "20px",
+                letterSpacing: "0px",
+                textAlign: "center",
+              }}
+            >
+              New Facility
+            </span>
           </Button>
         </div>
       </div>
 
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {SUMMARY_CARDS.map((item) => {
           const Icon = item.icon;
           return (
-            <Card key={item.label} className="border-slate-200 bg-white shadow-sm">
+            <Card key={item.label} className="min-w-0 border-slate-200 bg-white shadow-sm">
               <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-lg ${item.iconBg} ${item.iconColor}`}
@@ -126,14 +177,16 @@ export default function DashboardHome() {
                   <Icon className="h-4 w-4" />
                 </div>
                 <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  {item.change}
+                  <AnimatedNumber value={item.change} durationMs={1200} startOnView />
                 </span>
               </CardHeader>
               <CardContent>
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   {item.label}
                 </p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">{item.value}</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  <AnimatedNumber value={item.value} durationMs={1500} startOnView />
+                </p>
                 {item.sub && (
                   <p className="mt-0.5 text-xs text-slate-400">{item.sub}</p>
                 )}
@@ -144,15 +197,19 @@ export default function DashboardHome() {
       </div>
 
       {/* Two main cards */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Leads Performance - 2/3 width */}
-        <Card className="border-slate-200 bg-white shadow-sm lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-slate-900">Leads Performance</CardTitle>
-            <CardDescription>Daily leads generated across all facilities</CardDescription>
+        <Card className="min-w-0 border-slate-200 bg-white shadow-sm lg:col-span-2">
+          <CardHeader className="min-w-0">
+            <CardTitle className="min-w-0 text-slate-900 lg:h-7">
+              Leads Performance
+            </CardTitle>
+            <CardDescription className="min-w-0 text-slate-500 lg:h-6">
+              Daily leads generated across all facilities
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[280px] w-full">
+          <CardContent className="min-w-0 overflow-x-auto">
+            <ChartContainer config={chartConfig} className="h-[240px] w-full min-w-0 sm:h-[280px]">
               <AreaChart data={CHART_DATA} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="fillLeads" x1="0" y1="0" x2="0" y2="1">
@@ -188,12 +245,16 @@ export default function DashboardHome() {
         </Card>
 
         {/* Top Hot Leads - 1/3 width */}
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-slate-900">Top Hot Leads</CardTitle>
-            <CardDescription>Highest intent matches</CardDescription>
+        <Card className="min-w-0 border-slate-200 bg-white shadow-sm">
+          <CardHeader className="min-w-0">
+            <CardTitle className="min-w-0 text-slate-900 lg:h-7">
+              Top Hot Leads
+            </CardTitle>
+            <CardDescription className="min-w-0 text-slate-500 lg:h-6">
+              Highest intent matches
+            </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-w-0">
             <ul className="space-y-4">
               {TOP_LEADS.map((lead) => (
                 <li key={lead.initials} className="flex items-start gap-3">
