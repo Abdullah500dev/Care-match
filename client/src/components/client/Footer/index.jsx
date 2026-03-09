@@ -82,19 +82,27 @@ export default function Footer() {
           {/* Right: Contact Us */}
           <div>
             <h3 className="font-semibold text-white text-base sm:text-lg">
-              Contact Us
+              Support
             </h3>
             <ul className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
-              <li className={`flex items-center gap-2 text-sm ${TEXT_MUTED} sm:text-base`}>
-                <img src="/assets/images/footer-msg-icon.svg" alt="Chat" className="h-4 w-4 shrink-0" />
-                24/7 Live Chat
+            
+              <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
+                <Link to="/contact" className=" transition-colors">
+                  Contact Us
+                </Link>
               </li>
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
-                Monday - Sunday
+                AI Assistance – Carrie
+               
               </li>
-              {/* <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
-                9am - 8pm CDT
-              </li> */}
+              <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
+              <a
+                  href="mailto:info@carematchai.com"
+                  className={` transition-colors`}
+                >
+                  info@carematchai.com
+                </a>
+              </li>
             </ul>
           </div>
         </div>
