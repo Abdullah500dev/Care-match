@@ -25,7 +25,7 @@ export default function TopBar() {
               alt=""
               className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"
             />
-            24/7 Live Support
+            Talk to Your AI assistant  - Carrie
           </span>
         </div>
         <div className="flex items-center gap-4">
@@ -40,12 +40,12 @@ export default function TopBar() {
             />
             1-888-CMATCH-AI
           </a> */}
-          <button
+          {/* <button
             type="button"
             className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:bg-white/30 sm:text-sm"
           >
             Call Now
-          </button>
+          </button> */}
         </div>
       </div>
     </div>
