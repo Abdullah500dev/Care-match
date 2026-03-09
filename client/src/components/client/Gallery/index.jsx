@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { TiltCard } from "@/components/ui/tilt-card";
 
 const STAGGER_MS = 80;
 const DURATION_MS = 550;
@@ -52,10 +53,7 @@ const imageCards = [
 
 function StatCard({ bg, backgroundStyle, tickIcon, value, title, description }) {
   return (
-    <div
-      className={`${bg || ""} flex flex-col rounded-xl shadow-md min-h-[150px] justify-between p-3 sm:min-h-[165px] sm:rounded-2xl sm:p-4 md:p-4 md:min-h-[180px] lg:min-h-0 lg:h-full lg:p-4 min-[1280px]:p-5 min-[1536px]:p-6`}
-      style={backgroundStyle ? { background: backgroundStyle } : undefined}
-    >
+    <TiltCard className="h-full" innerClassName={`${bg || ""} flex flex-col rounded-xl shadow-md min-h-[150px] justify-between p-3 sm:min-h-[165px] sm:rounded-2xl sm:p-4 md:p-4 md:min-h-[180px] lg:min-h-0 lg:h-full lg:p-4 min-[1280px]:p-5 min-[1536px]:p-6`} innerStyle={backgroundStyle ? { background: backgroundStyle } : undefined}>
       <div className="flex items-start">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-[52px] lg:w-[52px] min-[1280px]:h-14 min-[1280px]:w-14 min-[1536px]:h-16 min-[1536px]:w-16">
           <img src={tickIcon} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-6 md:w-6 lg:h-10 lg:w-10" />
@@ -70,21 +68,19 @@ function StatCard({ bg, backgroundStyle, tickIcon, value, title, description }) 
         <h3 className="mt-1 font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">{title}</h3>
         <p className="mt-1.5 text-sm font-normal text-white/90 sm:mt-2 sm:text-xs md:text-sm min-[1280px]:text-[16px] min-[1536px]:text-[18px] sm:mr-4">{description}</p>
       </div>
-    </div>
+    </TiltCard>
   );
 }
 
 function ImageCard({ src, alt, className = "", aspectSquare = false, fillHeight = false }) {
   return (
-    <div
-      className={`overflow-hidden rounded-xl shadow-md sm:rounded-2xl ${aspectSquare ? "aspect-square min-h-[140px] sm:min-h-[160px] md:min-h-0" : ""} ${fillHeight ? "lg:aspect-auto lg:h-full lg:min-h-0" : ""} ${className}`}
-    >
+    <TiltCard className={`h-full ${aspectSquare ? "aspect-square min-h-[140px] sm:min-h-[160px] md:min-h-0" : ""} ${fillHeight ? "lg:aspect-auto lg:h-full lg:min-h-0" : ""} ${className}`} innerClassName="overflow-hidden rounded-xl shadow-md sm:rounded-2xl h-full w-full">
       <img
         src={src}
         alt={alt}
         className="h-full w-full object-cover min-h-[160px] sm:min-h-[180px] md:min-h-[200px]"
       />
-    </div>
+    </TiltCard>
   );
 }
 
@@ -140,11 +136,13 @@ export default function Gallery() {
             className={`overflow-hidden rounded-xl shadow-md min-h-[180px] sm:min-h-[220px] sm:rounded-2xl md:col-span-2 md:min-h-[240px] lg:col-span-1 lg:row-span-2 lg:col-start-2 lg:row-start-1 lg:min-h-[360px] lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
             style={getStyle(2)}
           >
-            <img
-              src={imageCards[0].src}
-              alt={imageCards[0].alt}
-              className="h-full w-full object-cover min-h-full"
-            />
+            <TiltCard className="h-full" innerClassName="overflow-hidden rounded-xl h-full w-full">
+              <img
+                src={imageCards[0].src}
+                alt={imageCards[0].alt}
+                className="h-full w-full object-cover min-h-full"
+              />
+            </TiltCard>
           </div>
           {/* Right top: 50+ Years card */}
           <div

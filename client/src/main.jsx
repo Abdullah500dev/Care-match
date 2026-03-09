@@ -9,22 +9,23 @@ import "./index.css";
 import App from "./App.jsx";
 import MyThemeProvider from "./theme";
 import PreLoader from "./components/common/PreLoader";
-import store, { Persistor } from "./store/store.js";
+import ErrorBoundary from "./components/common/ErrorBoundary";
+import store from "./store/store.js";
 
 if (process.env.NODE_ENV === "production") disableReactDevTools();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
+    <ErrorBoundary>
     <Provider store={store}>
       <HelmetProvider>
         <MyThemeProvider>
-          <PersistGate loading={<PreLoader />} persistor={Persistor}>
-            <Suspense fallback={<PreLoader />}>
-              <App />
-            </Suspense>
-          </PersistGate>
+          <Suspense fallback={<PreLoader />}>
+            <App />
+          </Suspense>
         </MyThemeProvider>
       </HelmetProvider>
     </Provider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

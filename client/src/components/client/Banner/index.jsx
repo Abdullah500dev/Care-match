@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import SearchBar from "../SearchBar";
 
+// Use hero-bg.png - "banner" in filename triggers ad blockers (ERR_BLOCKED_BY_CLIENT)
+const BANNER_BG = "/assets/images/hero-bg.png";
+
 const BANNER_HEADING = "Meet carrie – \nYour senior healthcare AI advisor";
 const TYPE_SPEED_MS = 70;
 const CURSOR_BLINK_MS = 530;
@@ -32,20 +35,25 @@ export default function Banner() {
   const isComplete = displayedLength >= BANNER_HEADING.length;
 
   return (
-    <section className="relative w-full min-h-[420px] overflow-hidden sm:min-h-[480px] md:min-h-[520px] lg:min-h-[560px]">
-      {/* Background image as real element so it always renders */}
+    <section
+      className="relative w-full min-h-[420px] overflow-hidden bg-cover bg-center bg-no-repeat sm:min-h-[480px] md:min-h-[520px] lg:min-h-[560px]"
+      style={{
+        backgroundImage: `url(${BANNER_BG})`,
+      }}
+    >
+      {/* Fallback: img element in case CSS background doesn't load */}
       <img
-        src="/assets/images/bannerBg.png"
+        src={BANNER_BG}
         alt=""
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"
       />
-      {/* Gradient overlay on top of BG image */}
+      {/* Subtle gradient – only fades to white at very bottom so image shows through */}
       <div
         className="pointer-events-none absolute inset-0 z-[1]"
         style={{
           background:
-            "linear-gradient(180deg, rgba(255, 255, 255, 0) 70%, #FFFFFF 95%)",
+            "linear-gradient(180deg, transparent 0%, transparent 75%, rgba(255, 255, 255, 0.6) 90%, #FFFFFF 100%)",
         }}
         aria-hidden
       />

@@ -1,4 +1,5 @@
 import React from "react";
+import { TiltCard } from "@/components/ui/tilt-card";
 
 /** Turquoise double-loop / infinity style icon for the image block */
 function LoopIcon({ className = "" }) {
@@ -77,7 +78,7 @@ export default function AssistedLiving() {
           </div>
 
           {/* Dark card: natural (shorter) height, vertically centered, overlapping image */}
-          <div className="mt-4 rounded-xl bg-[#1A202C] p-4 shadow-xl sm:mt-6 sm:rounded-2xl sm:p-6 md:p-8 lg:absolute lg:right-0 lg:top-1/2 lg:mt-0 lg:w-[59%] lg:-translate-y-1/2 lg:rounded-2xl lg:p-8 min-[1280px]:p-10 min-[1920px]:p-12">
+          <TiltCard className="mt-4 sm:mt-6 lg:absolute lg:right-0 lg:top-1/2 lg:mt-0 lg:w-[59%] lg:-translate-y-1/2" innerClassName="rounded-xl bg-[#1A202C] p-4 shadow-xl sm:rounded-2xl sm:p-6 md:p-8 lg:rounded-2xl lg:p-8 min-[1280px]:p-10 min-[1920px]:p-12 h-full">
             <p className="text-left text-sm leading-relaxed text-white sm:text-base md:text-lg min-[1920px]:text-xl">
               Our network focuses exclusively on providing the highest quality
               assisted living. From daily activity support to specialized
@@ -95,7 +96,7 @@ export default function AssistedLiving() {
                 </button>
               ))}
             </div>
-          </div>
+          </TiltCard>
         </div>
       </div>
     </section>

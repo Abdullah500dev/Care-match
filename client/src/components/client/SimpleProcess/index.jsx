@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { TiltCard } from "@/components/ui/tilt-card";
 
 const HEADING_TEXT = "Your Journey To Better Care";
 const TYPE_SPEED_MS = 65;
@@ -120,24 +121,29 @@ export default function SimpleProcess() {
           {STEPS.map((step, index) => (
             <div
               key={step.title}
-              className="flex min-w-0 flex-col rounded-xl p-4 sm:rounded-2xl sm:p-5 md:p-5 lg:p-6 min-[1280px]:p-8"
+              className="h-full"
               style={{
-                backgroundColor: "#00C9F0",
                 opacity: cardsVisible ? 1 : 0,
                 transform: cardsVisible ? "translateY(0)" : "translateY(24px)",
                 transition: `opacity ${CARD_DURATION_MS}ms ease-out, transform ${CARD_DURATION_MS}ms ease-out`,
                 transitionDelay: cardsVisible ? `${index * CARD_STAGGER_MS}ms` : "0ms",
               }}
             >
-              <StepIcon />
-              <div className="mt-8 sm:mt-10 md:mt-12 lg:mt-10 min-[1280px]:mt-14 min-[1920px]:mt-16">
-                <h3 className="text-base font-bold text-white sm:text-lg md:text-xl lg:text-lg min-[1280px]:text-xl min-[1920px]:text-2xl">
-                  {step.title}
-                </h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-white sm:mt-2 sm:text-base lg:text-sm min-[1280px]:text-base min-[1920px]:text-lg">
-                  {step.description}
-                </p>
-              </div>
+              <TiltCard
+                className="h-full"
+                innerClassName="flex min-w-0 flex-col rounded-xl p-4 sm:rounded-2xl sm:p-5 md:p-5 lg:p-6 min-[1280px]:p-8 h-full"
+                innerStyle={{ backgroundColor: "#00C9F0" }}
+              >
+                <StepIcon />
+                <div className="mt-8 sm:mt-10 md:mt-12 lg:mt-10 min-[1280px]:mt-14 min-[1920px]:mt-16">
+                  <h3 className="text-base font-bold text-white sm:text-lg md:text-xl lg:text-lg min-[1280px]:text-xl min-[1920px]:text-2xl">
+                    {step.title}
+                  </h3>
+                  <p className="mt-1.5 text-sm leading-relaxed text-white sm:mt-2 sm:text-base lg:text-sm min-[1280px]:text-base min-[1920px]:text-lg">
+                    {step.description}
+                  </p>
+                </div>
+              </TiltCard>
             </div>
           ))}
         </div>
