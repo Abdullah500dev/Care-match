@@ -10,7 +10,7 @@ const statCards = [
     value: "+15,000",
     title: "Partner Communities",
     description:
-      "Lorem ipsum dolor sit amet consectetur adipiscing elit",
+      "Access verified assisted living, memory care, and skilled nursing communities across the nation for your loved one.",
   },
   {
     bg: "bg-[#1D2837]",
@@ -18,7 +18,7 @@ const statCards = [
     value: "98%",
     title: "Client Satisfaction",
     description:
-      "Lorem ipsum dolor sit amet consectetur adipiscing elit",
+      "Families trust CareMatch to find the right fit. Our personalized matching leads to better outcomes and peace of mind.",
   },
   {
     bg: "bg-[#1D2837]",
@@ -26,7 +26,7 @@ const statCards = [
     value: "50+ Years",
     title: "Combined Experience",
     description:
-      "Lorem ipsum dolor sit amet consectetur adipiscing elit",
+      "Our advisors bring decades of senior care expertise to guide you through options, costs, and community fit.",
   },
   {
     bg: "",
@@ -35,7 +35,7 @@ const statCards = [
     value: null,
     title: "24/7 Service Availability",
     description:
-      "Lorem ipsum dolor sit amet consectetur adipiscing elit",
+      "Get answers and support anytime. We're here around the clock when you're researching care or need to talk.",
   },
 ];
 
