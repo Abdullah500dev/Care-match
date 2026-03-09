@@ -82,7 +82,7 @@ export default function Header() {
               to="/dashboard"
               className="rounded-full bg-[#00B8DB] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 md:px-5 md:py-2.5 min-[1024px]:px-4 min-[1024px]:py-2 min-[1024px]:text-sm min-[1280px]:px-4 min-[1280px]:py-2 min-[1280px]:text-sm min-[1536px]:px-5 min-[1536px]:py-2.5"
             >
-              For Providers
+              Facilities
             </Link>
             <span
               className="h-5 w-[2px] rounded-full bg-gray-300 min-[1536px]:h-6"
