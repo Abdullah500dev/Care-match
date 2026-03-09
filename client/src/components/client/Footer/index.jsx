@@ -85,11 +85,7 @@ export default function Footer() {
               Contact Us
             </h3>
             <ul className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
-              <li className={`flex items-center gap-2 text-sm ${TEXT_MUTED} sm:text-base`}>
-                {/* <img src="/assets/images/footer-msg-icon.svg" alt="Chat" className="h-4 w-4 shrink-0" />
-                24/7 Live Chat */}
-                Support
-              </li>
+            
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
                 <Link to="/contact" className=" transition-colors">
                   Contact Us
