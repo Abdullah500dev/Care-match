@@ -108,7 +108,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="mt-6 flex flex-col gap-2 sm:mt-8 md:flex-row md:items-center md:justify-center">
           <p className={`order-2 text-left text-xs sm:order-1 sm:text-sm ${TEXT_MUTED}`}>
-            © 2019 CareMatch AI. All rights reserved.
+            © 2026 CareMatch AI. All rights reserved.
           </p>
           <div className="order-1 flex flex-wrap items-center justify-start gap-2 sm:order-2 sm:gap-3 md:justify-end">
           <span className={`text-xs ${TEXT_MUTED} sm:text-sm`}>|</span>
