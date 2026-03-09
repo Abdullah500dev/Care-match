@@ -125,13 +125,13 @@ export default function Footer() {
             >
               Terms of Service
             </Link>
-            <span className={`text-xs ${TEXT_MUTED} sm:text-sm`}>|</span>
+            {/* <span className={`text-xs ${TEXT_MUTED} sm:text-sm`}>|</span>
             <Link
               to="/accessibility"
               className={`text-xs ${TEXT_MUTED} transition hover:text-white sm:text-sm`}
             >
               Accessibility
-            </Link>
+            </Link> */}
           </div>
         </div>
       </div>

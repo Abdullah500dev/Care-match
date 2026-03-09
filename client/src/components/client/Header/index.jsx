@@ -104,17 +104,17 @@ export default function Header() {
               </Link>
             ) : (
               <div className="flex items-center gap-3">
-                <Link
+                {/* <Link
                   to="/register"
                   className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
                 >
                   Sign-up
-                </Link>
+                </Link> */}
                 <Link
                   to="/login"
                   className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
                 >
-                  Login
+                  Signup/Login
                 </Link>
               </div>
             )}
