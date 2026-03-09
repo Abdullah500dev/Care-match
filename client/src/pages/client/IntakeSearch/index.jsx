@@ -1,14 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal } from "lucide-react";
+import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal, X, Check, Sparkles, Activity } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 
-const TOTAL_STEPS = 10;
+const BUDGET_SLIDER_MIN = 2000;
+const BUDGET_SLIDER_MAX = 15000;
+const BUDGET_SLIDER_STEP = 500;
+
+const TOTAL_STEPS = 16;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -22,6 +27,45 @@ const AGE_OPTIONS = [
   { id: "under70", label: "Less Than 70", Icon: Users },
   { id: "under80", label: "Less Than 80", Icon: Signal },
   { id: "above80", label: "Above 80", Icon: Zap },
+];
+
+const CARE_TIMELINE_OPTIONS = [
+  { id: "immediately", label: "Immediately", desc: "Urgent need within a few days", Icon: Heart },
+  { id: "within30", label: "Within 30 Days", desc: "Need care within the next month", Icon: Users },
+  { id: "within60", label: "Within 60 Days", desc: "Planning ahead for next 2 months", Icon: Signal },
+  { id: "noRush", label: "No Rush", desc: "Exploring options for future planning", Icon: Zap },
+];
+
+const LIVING_NOW_OPTIONS = [
+  { id: "homeAlone", label: "Home (Alone)", Icon: Heart },
+  { id: "homeFamily", label: "Home (w/ Family)", Icon: Users },
+  { id: "retirement", label: "Retirement Home", Icon: Signal },
+  { id: "assisted", label: "Assisted Living", Icon: Zap },
+  { id: "rehab", label: "Rehab Facility", Icon: Signal },
+  { id: "hospital", label: "Hospital", Icon: Zap },
+];
+
+const MOBILITY_OPTIONS = [
+  { id: "great", label: "Great", desc: "Can get around independently", Icon: Heart },
+  { id: "walkWithHelp", label: "Can Walk With Help", desc: "Uses a cane/walker for support", Icon: User },
+  { id: "wheelchair", label: "Wheelchair", desc: "Primarily uses wheelchair", Icon: Heart },
+  { id: "immobile", label: "Immobile", desc: "Temporary or permanent immobility", Icon: Zap },
+];
+
+const LOVED_ONE_CARE_OPTIONS = [
+  { id: "dailyActivities", label: "Help With Daily Activities (Bathing, Dressing, Eating)" },
+  { id: "memoryCare", label: "Memory Care / Dementia Support" },
+  { id: "medication", label: "Medication Management" },
+  { id: "mobilityAssist", label: "Mobility Assistance" },
+  { id: "medicalMonitoring", label: "Regular Medical Monitoring" },
+  { id: "socialEngagement", label: "Social Engagement & Activities" },
+];
+
+const LEVEL_OF_CARE_OPTIONS = [
+  { id: "assisted", label: "Assisted Living", desc: "Needs help with daily tasks, medication, but still fairly independent", Icon: Users },
+  { id: "independent", label: "Independent Living", desc: "Active seniors who are mostly independent but want amenities and community", Icon: Heart },
+  { id: "memory", label: "Memory Care", desc: "Specialized support for dementia, Alzheimer's, or cognitive decline", Icon: Heart },
+  { id: "snf", label: "Skilled Nursing", desc: "24/7 medical care, post-hospital recovery, or complex health needs", Icon: Heart },
 ];
 
 const CARE_TYPES = [
@@ -47,10 +91,32 @@ const URGENCY_OPTIONS = [
   { id: "3plus", label: "3+ months / Planning ahead" },
 ];
 
+const SPECIAL_NEEDS_PREFERENCES = [
+  { id: "privateRoom", label: "Private room preferred" },
+  { id: "petFriendly", label: "Pet-friendly" },
+  { id: "couples", label: "Couples accommodation" },
+  { id: "cultural", label: "Cultural or language-specific care" },
+  { id: "faithBased", label: "Faith-based community" },
+  { id: "lgbtq", label: "LGBTQ+ welcoming" },
+  { id: "diabetes", label: "Diabetes management" },
+  { id: "physicalTherapy", label: "Physical therapy" },
+  { id: "hospice", label: "Hospice care" },
+  { id: "respiratory", label: "Respiratory support" },
+  { id: "dialysis", label: "Dialysis access nearby" },
+];
+
 const defaultFormData = {
   who: "",
   parentAge: "",
+  careTimeline: "",
+  livingNow: "",
+  mobility: "",
+  lovedOneCare: [],
   location: "",
+  budgetMin: 3000,
+  budgetMax: 6000,
+  levelOfCare: "assisted",
+  specialNeedsPreferences: ["privateRoom"],
   careTypes: [],
   budget: "",
   urgency: "",
@@ -61,12 +127,24 @@ const defaultFormData = {
   specialNeeds: "",
 };
 
+const FINDING_MATCHES_DURATION_MS = 4000;
+
 export default function IntakeSearch() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState(defaultFormData);
+  const [isFindingMatches, setIsFindingMatches] = useState(false);
 
   const progressPercent = (step / TOTAL_STEPS) * 100;
+
+  useEffect(() => {
+    if (!isFindingMatches) return;
+    const t = setTimeout(() => {
+      console.log("Search criteria:", formData);
+      navigate("/"); // TODO: navigate to search results when results page exists
+    }, FINDING_MATCHES_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [isFindingMatches, navigate]);
 
   const goBack = () => {
     if (step > 1) setStep((s) => s - 1);
@@ -75,11 +153,7 @@ export default function IntakeSearch() {
 
   const goNext = () => {
     if (step < TOTAL_STEPS) setStep((s) => s + 1);
-    else {
-      // Submit / go to results
-      console.log("Search criteria:", formData);
-      navigate("/"); // TODO: navigate to search results
-    }
+    else setIsFindingMatches(true);
   };
 
   const handleSaveAndFinishLater = () => {
@@ -96,6 +170,68 @@ export default function IntakeSearch() {
       return { ...prev, [key]: next };
     });
   };
+
+  if (isFindingMatches) {
+    return (
+      <>
+        <SEO title="Finding Matches - CareMatch" />
+        <div
+          className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-12 bg-no-repeat"
+          style={{
+            backgroundImage: "url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
+            backgroundSize: "55% 70%, cover",
+            backgroundPosition: "145% 100%, center",
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-[#E2E8F0] bg-white shadow-xl px-8 py-10 sm:px-10 sm:py-12 text-center"
+            style={{
+              boxShadow: "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
+            }}
+          >
+            {/* Icon cluster: central star + 4 surrounding icons */}
+            <div className="relative flex justify-center items-center mb-8 h-28">
+              <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4]">
+                <Sparkles className="h-10 w-10" />
+              </div>
+              <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+                <Users className="h-5 w-5" />
+              </div>
+              <div className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+                <User className="h-5 w-5" />
+              </div>
+              <div className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+                <Activity className="h-5 w-5" />
+              </div>
+              <div className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+                <Heart className="h-5 w-5" />
+              </div>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold italic text-[#1D293D] mb-3">
+              Finding Your Matches...
+            </h1>
+            <p className="text-[#64748b] text-base mb-6 max-w-sm mx-auto">
+              We&apos;re analyzing hundreds of facilities to find the best fits for your needs. This will just take a moment.
+            </p>
+            <ul className="text-left max-w-xs mx-auto space-y-2 text-[#334155]">
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" aria-hidden />
+                Matching care needs...
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" aria-hidden />
+                Checking availability...
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" aria-hidden />
+                Calculating match scores....
+              </li>
+            </ul>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -115,10 +251,10 @@ export default function IntakeSearch() {
             boxShadow: "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
           }}
         >
-          {/* Left: image inside card */}
+          {/* Left: image inside card (youngPeople on parent's age step, else search_img) */}
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] shrink-0 overflow-hidden rounded-l-2xl">
             <img
-              src="/assets/images/youngPeople.svg"
+              src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
               alt=""
               className="h-full w-full object-cover object-center min-h-[28rem]"
               aria-hidden
@@ -141,6 +277,7 @@ export default function IntakeSearch() {
                 step={step}
                 formData={formData}
                 update={update}
+                setFormData={setFormData}
                 toggleArray={toggleArray}
               />
             </CardShell>
@@ -192,7 +329,7 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
         <Button
           variant="secondary"
           onClick={onSaveLater}
-          className="h-14 w-full rounded-2xl bg-[#1D2837] text-xl text-white font-semibold"
+          className="h-14 w-full rounded-2xl bg-[#1D2837] text-xl font-semibold text-white hover:bg-[#151d26] hover:text-white"
         >
           Save and finish later
         </Button>
@@ -201,11 +338,11 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
   );
 }
 
-function StepContent({ step, formData, update, toggleArray }) {
+function StepContent({ step, formData, update, setFormData, toggleArray }) {
   if (step === 1) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
           Who is in need of a{" "}
           <span
           className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
@@ -242,8 +379,8 @@ function StepContent({ step, formData, update, toggleArray }) {
                 >
                   <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
                 </span>
-                <span className={cn("font-semibold", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
-                <span className={cn("text-sm leading-snug", isSelected ? "text-[#00b4d8]" : "text-[#64748b]")}>{desc}</span>
+                <span className={cn("font-bold", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+                <span className={cn("text-sm font-normal leading-snug", isSelected ? "text-[#00b4d8]" : "text-[#64748b]")}>{desc}</span>
               </button>
             );
           })}
@@ -255,7 +392,7 @@ function StepContent({ step, formData, update, toggleArray }) {
   if (step === 2) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
           What is your{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
@@ -293,7 +430,7 @@ function StepContent({ step, formData, update, toggleArray }) {
                 >
                   <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
                 </span>
-                <span className={cn("font-semibold text-sm sm:text-base", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+                <span className={cn("font-bold text-sm sm:text-base", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
               </button>
             );
           })}
@@ -308,19 +445,48 @@ function StepContent({ step, formData, update, toggleArray }) {
   if (step === 3) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
-          Where are you looking for care?
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+          By when do you need{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            care assist?
+          </span>
         </h1>
-        <p className="text-[#64748b] mb-6">City, state, or ZIP so we can show nearby options.</p>
-        <div className="space-y-2">
-          <Label htmlFor="location" className="text-[#334155]">Location</Label>
-          <Input
-            id="location"
-            placeholder="e.g. Austin, TX or 78701"
-            value={formData.location}
-            onChange={(e) => update("location", e.target.value)}
-            className="rounded-xl border-[#e2e8f0] h-12"
-          />
+        <div className="grid grid-cols-2 gap-4 sm:gap-5">
+          {CARE_TIMELINE_OPTIONS.map(({ id, label, desc, Icon }) => {
+            const isSelected = formData.careTimeline === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update("careTimeline", id)}
+                className={cn(
+                  "flex flex-col items-start gap-2 rounded-xl border p-4 sm:p-5 text-left transition-all duration-200",
+                  isSelected
+                    ? "border-2 border-[#00CFF4] bg-[#F0FBFF] shadow-[inset_0_0_24px_rgba(0,207,244,0.06)]"
+                    : "border border-[#F0F0F0] bg-white hover:border-[#E2E8F0]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-[#00CFF4]" : "bg-[#F8FAFC]"
+                  )}
+                  style={
+                    !isSelected
+                      ? { boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A" }
+                      : undefined
+                  }
+                >
+                  <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
+                </span>
+                <span className={cn("font-bold", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+                <span className={cn("text-sm font-normal leading-snug", isSelected ? "text-[#00b4d8]" : "text-[#64748b]")}>{desc}</span>
+              </button>
+            );
+          })}
         </div>
       </>
     );
@@ -329,7 +495,318 @@ function StepContent({ step, formData, update, toggleArray }) {
   if (step === 4) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+          Where&apos;s your loved one{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            living now?
+          </span>
+        </h1>
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          {LIVING_NOW_OPTIONS.map(({ id, label, Icon }) => {
+            const isSelected = formData.livingNow === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update("livingNow", id)}
+                className={cn(
+                  "flex flex-col sm:flex-row items-center gap-2 rounded-xl border p-3 sm:p-4 text-left transition-all duration-200",
+                  isSelected
+                    ? "border-2 border-[#00CFF4] bg-[#F0FBFF] shadow-[inset_0_0_24px_rgba(0,207,244,0.06)]"
+                    : "border border-[#F0F0F0] bg-white hover:border-[#E2E8F0]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-[#00CFF4]" : "bg-[#F8FAFC]"
+                  )}
+                  style={
+                    !isSelected
+                      ? { boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A" }
+                      : undefined
+                  }
+                >
+                  <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
+                </span>
+                <span className={cn("font-bold text-sm sm:text-base", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  if (step === 5) {
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+          How is your loved one&apos;s{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            mobility?
+          </span>
+        </h1>
+        <div className="grid grid-cols-2 gap-4 sm:gap-5">
+          {MOBILITY_OPTIONS.map(({ id, label, desc, Icon }) => {
+            const isSelected = formData.mobility === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update("mobility", id)}
+                className={cn(
+                  "flex flex-col items-start gap-2 rounded-xl border p-4 sm:p-5 text-left transition-all duration-200",
+                  isSelected
+                    ? "border-2 border-[#00CFF4] bg-[#F0FBFF] shadow-[inset_0_0_24px_rgba(0,207,244,0.06)]"
+                    : "border border-[#F0F0F0] bg-white hover:border-[#E2E8F0]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-[#00CFF4]" : "bg-[#F8FAFC]"
+                  )}
+                  style={
+                    !isSelected
+                      ? { boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A" }
+                      : undefined
+                  }
+                >
+                  <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
+                </span>
+                <span className={cn("font-bold", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+                <span className={cn("text-sm font-normal leading-snug", isSelected ? "text-[#00b4d8]" : "text-[#64748b]")}>{desc}</span>
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  if (step === 6) {
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
+          Tell us more about your{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            loved one!
+          </span>
+        </h1>
+        <p className="text-[#64748b] mb-6 text-center">Select all that apply.</p>
+        <div className="space-y-3">
+          {LOVED_ONE_CARE_OPTIONS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => toggleArray("lovedOneCare", id)}
+              className={cn(
+                "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors text-[#1D293D]",
+                formData.lovedOneCare.includes(id)
+                  ? "border-[#00CFF4] bg-[#F0FBFF]"
+                  : "border-[#e2e8f0] bg-white hover:border-[#94a3b8]"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (step === 7) {
+    const budgetMin = formData.budgetMin ?? BUDGET_SLIDER_MIN;
+    const budgetMax = formData.budgetMax ?? 6000;
+    const formatBudget = (n) => (n >= BUDGET_SLIDER_MAX ? "$15,000+" : `$${n.toLocaleString()}`);
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
+          Any preferred{" "}
+          <span
+            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            location
+          </span>{" "}
+          &{" "}
+          <span
+            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            budget
+          </span>
+          ?
+        </h1>
+        <p className="text-[#64748b] mb-6 text-center">Tell us your preferred location & budget so we can improve our search.</p>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="preferredLocation" className="text-[#334155] font-bold">Desired Location</Label>
+            <Input
+              id="preferredLocation"
+              placeholder="Enter city, zip code, or address"
+              value={formData.location}
+              onChange={(e) => update("location", e.target.value)}
+              className="rounded-xl border-[#e2e8f0] h-12 placeholder:italic"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-[#334155] font-bold">Monthly Budget Range</Label>
+              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} - {formatBudget(budgetMax)}</span>
+            </div>
+            <BudgetRangeSlider
+              budgetMin={budgetMin}
+              budgetMax={budgetMax}
+              min={BUDGET_SLIDER_MIN}
+              max={BUDGET_SLIDER_MAX}
+              step={BUDGET_SLIDER_STEP}
+              onRangeChange={(minVal, maxVal) => {
+                setFormData((prev) => ({ ...prev, budgetMin: minVal, budgetMax: maxVal }));
+              }}
+            />
+            <div className="flex justify-between text-xs text-[#64748b] -mt-2">
+              <span>{formatBudget(BUDGET_SLIDER_MIN)}</span>
+              <span>{formatBudget(BUDGET_SLIDER_MAX)}</span>
+            </div>
+          </div>
+          <div className="rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] px-4 py-3 text-sm text-[#64748b]">
+            <strong className="text-[#334155]">Important:</strong> Most assisted living facilities range from $3,500–$7,000/month. Memory care is typically $5,000–$9,000/month.
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (step === 8) {
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
+          What&apos;s the{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            level of care
+          </span>{" "}
+          needed?
+        </h1>
+        <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {LEVEL_OF_CARE_OPTIONS.map(({ id, label, desc, Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => update("levelOfCare", id)}
+              className={cn(
+                "rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
+                formData.levelOfCare === id
+                  ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]"
+                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex h-10 w-10 shrink-0 rounded-xl items-center justify-center",
+                  formData.levelOfCare === id ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]"
+                )}
+              >
+                <Icon className="h-5 w-5" />
+              </span>
+              <div className="min-w-0">
+                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === id && "text-[#0f172a]")}>
+                  {label}
+                </span>
+                <span className="text-sm text-[#64748b] mt-0.5 block">{desc}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  if (step === 9) {
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
+          Do they have other{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            special needs
+          </span>
+          ?
+        </h1>
+        <p className="text-[#64748b] mb-4 text-center">Select one of the options below or add another need.</p>
+        <div className="space-y-2 mb-4">
+          <Label className="text-[#334155]">Select Preferences &amp; Needs</Label>
+          <div className="min-h-[3.5rem] rounded-xl border-2 border-[#e2e8f0] bg-white px-4 py-3 flex flex-wrap gap-2 items-center">
+            {formData.specialNeedsPreferences.length === 0 ? (
+              <span className="text-[#64748b] text-sm">Select options below</span>
+            ) : (
+              formData.specialNeedsPreferences.map((id) => {
+                const opt = SPECIAL_NEEDS_PREFERENCES.find((o) => o.id === id);
+                return opt ? (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#E0EDFF] px-3 py-1.5 text-sm font-medium text-[#155DFC]"
+                  >
+                    {opt.label}
+                    <button
+                      type="button"
+                      onClick={() => toggleArray("specialNeedsPreferences", id)}
+                      className="p-0.5 rounded hover:bg-[#155DFC]/20 text-[#155DFC]"
+                      aria-label={`Remove ${opt.label}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </span>
+                ) : null;
+              })
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {SPECIAL_NEEDS_PREFERENCES.map(({ id, label }) => {
+            const selected = formData.specialNeedsPreferences.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => toggleArray("specialNeedsPreferences", id)}
+                className={cn(
+                  "rounded-xl border-2 px-4 py-3 font-bold transition-colors inline-flex items-center gap-2",
+                  selected
+                    ? "border-[#155DFC] bg-[#E0EDFF] text-[#155DFC]"
+                    : "border-[#e2e8f0] bg-[#f8fafc] text-[#62748E] hover:border-[#94a3b8]"
+                )}
+              >
+                {selected && <Check className="h-4 w-4 shrink-0" />}
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  if (step === 10) {
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           What type of care do you need?
         </h1>
         <p className="text-[#64748b] mb-6">Select all that apply.</p>
@@ -340,7 +817,7 @@ function StepContent({ step, formData, update, toggleArray }) {
               type="button"
               onClick={() => toggleArray("careTypes", id)}
               className={cn(
-                "rounded-xl border-2 px-4 py-3 font-medium transition-colors",
+                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
                 formData.careTypes.includes(id)
                   ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
                   : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
@@ -354,10 +831,10 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 5) {
+  if (step === 11) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           What is your budget range?
         </h1>
         <p className="text-[#64748b] mb-6">Monthly cost estimate helps us match you to affordable options.</p>
@@ -368,7 +845,7 @@ function StepContent({ step, formData, update, toggleArray }) {
               type="button"
               onClick={() => update("budget", id)}
               className={cn(
-                "w-full rounded-xl border-2 px-4 py-3 text-left font-medium transition-colors",
+                "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
                 formData.budget === id
                   ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
                   : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
@@ -382,10 +859,10 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 6) {
+  if (step === 12) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           When do you need care?
         </h1>
         <p className="text-[#64748b] mb-6">This helps us prioritize your search.</p>
@@ -396,7 +873,7 @@ function StepContent({ step, formData, update, toggleArray }) {
               type="button"
               onClick={() => update("urgency", id)}
               className={cn(
-                "w-full rounded-xl border-2 px-4 py-3 text-left font-medium transition-colors",
+                "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
                 formData.urgency === id
                   ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
                   : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
@@ -410,7 +887,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 7) {
+  if (step === 13) {
     const amenities = [
       { id: "dining", label: "Dining / Meals" },
       { id: "activities", label: "Activities & outings" },
@@ -421,7 +898,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     ];
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           Which amenities matter most?
         </h1>
         <p className="text-[#64748b] mb-6">Select any that are important to you.</p>
@@ -432,7 +909,7 @@ function StepContent({ step, formData, update, toggleArray }) {
               type="button"
               onClick={() => toggleArray("amenities", id)}
               className={cn(
-                "rounded-xl border-2 px-4 py-3 font-medium transition-colors",
+                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
                 formData.amenities.includes(id)
                   ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
                   : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
@@ -446,10 +923,10 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 8) {
+  if (step === 14) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           How far are you willing to travel?
         </h1>
         <p className="text-[#64748b] mb-6">Maximum distance from your location for visits.</p>
@@ -468,7 +945,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 8) {
+  if (step === 15) {
     const lifestyles = [
       { id: "quiet", label: "Quiet & calm" },
       { id: "active", label: "Active & social" },
@@ -477,7 +954,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     ];
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           How often will family visit?
         </h1>
         <p className="text-[#64748b] mb-4">Helps us factor in visitation when matching.</p>
@@ -500,7 +977,7 @@ function StepContent({ step, formData, update, toggleArray }) {
               type="button"
               onClick={() => update("lifestyle", formData.lifestyle === id ? "" : id)}
               className={cn(
-                "rounded-xl border-2 px-4 py-3 font-medium transition-colors",
+                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
                 formData.lifestyle === id
                   ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
                   : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
@@ -524,17 +1001,31 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 10) {
+  if (step === 16) {
     const whoLabel = WHO_OPTIONS.find((o) => o.id === formData.who)?.label || "—";
     const ageLabel = AGE_OPTIONS.find((a) => a.id === formData.parentAge)?.label || "—";
+    const timelineLabel = CARE_TIMELINE_OPTIONS.find((t) => t.id === formData.careTimeline)?.label || "—";
+    const livingNowLabel = LIVING_NOW_OPTIONS.find((l) => l.id === formData.livingNow)?.label || "—";
+    const mobilityLabel = MOBILITY_OPTIONS.find((m) => m.id === formData.mobility)?.label || "—";
+    const lovedOneCareLabel = formData.lovedOneCare.length
+      ? formData.lovedOneCare.map((id) => LOVED_ONE_CARE_OPTIONS.find((o) => o.id === id)?.label).join(", ")
+      : "—";
+    const levelOfCareLabel = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === formData.levelOfCare)?.label || "—";
+    const specialNeedsLabel = formData.specialNeedsPreferences.length
+      ? formData.specialNeedsPreferences.map((id) => SPECIAL_NEEDS_PREFERENCES.find((o) => o.id === id)?.label).filter(Boolean).join(", ")
+      : "—";
     const careLabel = formData.careTypes.length
       ? formData.careTypes.map((id) => CARE_TYPES.find((c) => c.id === id)?.label).join(", ")
       : "—";
     const budgetLabel = BUDGET_RANGES.find((b) => b.id === formData.budget)?.label || "—";
     const urgencyLabel = URGENCY_OPTIONS.find((u) => u.id === formData.urgency)?.label || "—";
+    const budgetMin = formData.budgetMin ?? BUDGET_SLIDER_MIN;
+    const budgetMax = formData.budgetMax ?? 6000;
+    const formatBudget = (n) => (n >= BUDGET_SLIDER_MAX ? "$15,000+" : `$${n.toLocaleString()}`);
+    const budgetRangeLabel = `${formatBudget(budgetMin)} - ${formatBudget(budgetMax)}`;
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
           Review your search criteria
         </h1>
         <p className="text-[#64748b] mb-6">
@@ -543,7 +1034,14 @@ function StepContent({ step, formData, update, toggleArray }) {
         <dl className="space-y-3 text-sm">
           <div><dt className="text-[#64748b]">Who needs care</dt><dd className="font-medium text-[#0f172a]">{whoLabel}</dd></div>
           <div><dt className="text-[#64748b]">Age range</dt><dd className="font-medium text-[#0f172a]">{ageLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Care timeline</dt><dd className="font-medium text-[#0f172a]">{timelineLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Living now</dt><dd className="font-medium text-[#0f172a]">{livingNowLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Mobility</dt><dd className="font-medium text-[#0f172a]">{mobilityLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Care needs (loved one)</dt><dd className="font-medium text-[#0f172a]">{lovedOneCareLabel}</dd></div>
           <div><dt className="text-[#64748b]">Location</dt><dd className="font-medium text-[#0f172a]">{formData.location || "—"}</dd></div>
+          <div><dt className="text-[#64748b]">Level of care</dt><dd className="font-medium text-[#0f172a]">{levelOfCareLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Special needs / preferences</dt><dd className="font-medium text-[#0f172a]">{specialNeedsLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Monthly budget range</dt><dd className="font-medium text-[#0f172a]">{budgetRangeLabel}</dd></div>
           <div><dt className="text-[#64748b]">Care type(s)</dt><dd className="font-medium text-[#0f172a]">{careLabel}</dd></div>
           <div><dt className="text-[#64748b]">Budget</dt><dd className="font-medium text-[#0f172a]">{budgetLabel}</dd></div>
           <div><dt className="text-[#64748b]">When</dt><dd className="font-medium text-[#0f172a]">{urgencyLabel}</dd></div>

@@ -31,7 +31,7 @@ export default function Home() {
   return (
     <Fragment>
       <SEO title="Home" />
-      <div className="content-container flex w-full min-h-screen flex-col overflow-hidden bg-white">
+      <div className="content-container flex w-full min-h-screen flex-col overflow-hidden bg-[#F9FAFB]">
         <Banner />
 
         <AnimateOnScroll>

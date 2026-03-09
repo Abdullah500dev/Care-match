@@ -92,9 +92,9 @@ export default function Footer() {
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
                 Monday - Sunday
               </li>
-              <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
+              {/* <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
                 9am - 8pm CDT
-              </li>
+              </li> */}
             </ul>
           </div>
         </div>
