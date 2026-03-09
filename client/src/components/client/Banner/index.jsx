@@ -49,8 +49,8 @@ export default function Banner() {
       <div className="container relative z-10 mx-auto flex flex-col items-center justify-center px-4 py-12 text-center sm:px-6 sm:py-16 md:py-20 lg:px-8 lg:py-24 min-[1280px]:max-w-4xl min-[1280px]:px-8 min-[1280px]:py-20 min-[1536px]:max-w-[1400px] min-[1536px]:px-12 min-[1536px]:py-28">
         {/* Orb: scales for 1280 (xl) and 1536 (2xl) explicitly */}
         <img
-          src="/assets/images/bolb.svg"
-          alt=""
+          src="/assets/images/favicon/favicon.svg"
+          alt="CareMatch AI"
           className="mb-8 h-10 w-10 sm:mb-10 sm:h-12 sm:w-12 md:mb-12 md:h-14 md:w-14 lg:mb-14 lg:h-16 lg:w-16 min-[1280px]:mb-12 min-[1280px]:h-14  min-[1280px]:w-14 min-[1536px]:h-20 min-[1536px]:w-20 min-[1536px]:mb-16"
         />
         {/* Fixed-height wrapper so typewriter loop never shifts the search bar */}

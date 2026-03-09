@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,20 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 10;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
   { id: "parent", label: "My Parent", desc: "Expert assistance for a cherished mother or father.", Icon: Users },
   { id: "myself", label: "Myself", desc: "Proactive planning for my own secure future.", Icon: User },
   { id: "other", label: "Someone Else", desc: "Helping a relative, friend, or member of community.", Icon: UsersRound },
+];
+
+const AGE_OPTIONS = [
+  { id: "under60", label: "Less Than 60", Icon: Heart },
+  { id: "under70", label: "Less Than 70", Icon: Users },
+  { id: "under80", label: "Less Than 80", Icon: Signal },
+  { id: "above80", label: "Above 80", Icon: Zap },
 ];
 
 const CARE_TYPES = [
@@ -42,6 +49,7 @@ const URGENCY_OPTIONS = [
 
 const defaultFormData = {
   who: "",
+  parentAge: "",
   location: "",
   careTypes: [],
   budget: "",
@@ -110,7 +118,7 @@ export default function IntakeSearch() {
           {/* Left: image inside card */}
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] shrink-0 overflow-hidden rounded-l-2xl">
             <img
-              src="/assets/images/search_img.svg"
+              src="/assets/images/youngPeople.svg"
               alt=""
               className="h-full w-full object-cover object-center min-h-[28rem]"
               aria-hidden
@@ -215,10 +223,10 @@ function StepContent({ step, formData, update, toggleArray }) {
                 type="button"
                 onClick={() => update("who", id)}
                 className={cn(
-                  "flex flex-col items-start gap-2 rounded-xl border p-4 sm:p-5 text-left transition-colors",
+                  "flex flex-col items-start gap-2 rounded-xl border p-4 sm:p-5 text-left transition-all duration-200",
                   isSelected
-                    ? "border-2 border-[#00CFF4]"
-                    : "border border-[#F0F0F0] bg-white"
+                    ? "border-2 border-[#00CFF4] bg-[#F0FBFF] shadow-[inset_0_0_24px_rgba(0,207,244,0.04)]"
+                    : "border border-[#F0F0F0] bg-white hover:border-[#E2E8F0]"
                 )}
               >
                 <span
@@ -247,6 +255,59 @@ function StepContent({ step, formData, update, toggleArray }) {
   if (step === 2) {
     return (
       <>
+        <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-6 text-center">
+          What is your{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            parent&apos;s
+          </span>{" "}
+          age?
+        </h1>
+        <div className="grid grid-cols-2 gap-4 sm:gap-5 mb-6">
+          {AGE_OPTIONS.map(({ id, label, Icon }) => {
+            const isSelected = formData.parentAge === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => update("parentAge", id)}
+                className={cn(
+                  "flex flex-col items-center gap-2 rounded-xl border p-4 sm:p-5 text-center transition-all duration-200",
+                  isSelected
+                    ? "border-2 border-[#00CFF4] bg-[#F0FBFF] shadow-[inset_0_0_24px_rgba(0,207,244,0.06)]"
+                    : "border border-[#F0F0F0] bg-white hover:border-[#E2E8F0]"
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                    isSelected ? "bg-[#00CFF4]" : "bg-[#F8FAFC]"
+                  )}
+                  style={
+                    !isSelected
+                      ? { boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A" }
+                      : undefined
+                  }
+                >
+                  <Icon className={cn("h-5 w-5 shrink-0", isSelected ? "text-white" : "text-[#94a3b8]")} />
+                </span>
+                <span className={cn("font-semibold text-sm sm:text-base", isSelected ? "text-[#00CFF4]" : "text-[#0f172a]")}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] px-4 py-3 text-sm text-[#64748b]">
+          <strong className="text-[#334155]">Important:</strong> Due to senior living community requirements, we are only able to assist those 55 years and older.
+        </div>
+      </>
+    );
+  }
+
+  if (step === 3) {
+    return (
+      <>
         <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
           Where are you looking for care?
         </h1>
@@ -265,7 +326,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 3) {
+  if (step === 4) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
@@ -293,7 +354,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 4) {
+  if (step === 5) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
@@ -321,7 +382,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 5) {
+  if (step === 6) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
@@ -349,7 +410,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 6) {
+  if (step === 7) {
     const amenities = [
       { id: "dining", label: "Dining / Meals" },
       { id: "activities", label: "Activities & outings" },
@@ -385,7 +446,7 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 7) {
+  if (step === 8) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold text-[#0f172a] mb-2">
@@ -463,8 +524,9 @@ function StepContent({ step, formData, update, toggleArray }) {
     );
   }
 
-  if (step === 9) {
+  if (step === 10) {
     const whoLabel = WHO_OPTIONS.find((o) => o.id === formData.who)?.label || "—";
+    const ageLabel = AGE_OPTIONS.find((a) => a.id === formData.parentAge)?.label || "—";
     const careLabel = formData.careTypes.length
       ? formData.careTypes.map((id) => CARE_TYPES.find((c) => c.id === id)?.label).join(", ")
       : "—";
@@ -480,6 +542,7 @@ function StepContent({ step, formData, update, toggleArray }) {
         </p>
         <dl className="space-y-3 text-sm">
           <div><dt className="text-[#64748b]">Who needs care</dt><dd className="font-medium text-[#0f172a]">{whoLabel}</dd></div>
+          <div><dt className="text-[#64748b]">Age range</dt><dd className="font-medium text-[#0f172a]">{ageLabel}</dd></div>
           <div><dt className="text-[#64748b]">Location</dt><dd className="font-medium text-[#0f172a]">{formData.location || "—"}</dd></div>
           <div><dt className="text-[#64748b]">Care type(s)</dt><dd className="font-medium text-[#0f172a]">{careLabel}</dd></div>
           <div><dt className="text-[#64748b]">Budget</dt><dd className="font-medium text-[#0f172a]">{budgetLabel}</dd></div>
