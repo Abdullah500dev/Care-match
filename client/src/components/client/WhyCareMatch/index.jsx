@@ -1,4 +1,5 @@
 import React from "react";
+import { TiltCard } from "@/components/ui/tilt-card";
 
 const ACCENT = "#00CFF4";
 const ACCENT_BG = "rgba(0, 207, 244, 0.22)";
@@ -126,9 +127,8 @@ export default function WhyCareMatch() {
             </div>
 
             {/* Right: image with overlay icon */}
-            <div className="relative w-full shrink-0 lg:mt-0 min-[1280px]:mt-14 min-[1280px]:w-[48%] min-[1920px]:w-[45%] min-[1920px]:mt-14">
-              <div className="relative aspect-[4/5] w-full overflow-hidden sm:aspect-[3/4] lg:aspect-[3/2] min-[1280px]:aspect-auto min-[1280px]:h-full min-[1280px]:min-h-[380px] min-[1920px]:min-h-[420px]">
-                <img
+            <TiltCard className="relative w-full shrink-0 lg:mt-0 min-[1280px]:mt-14 min-[1280px]:w-[48%] min-[1920px]:w-[45%] min-[1920px]:mt-14" innerClassName="relative aspect-[4/5] w-full overflow-hidden sm:aspect-[3/4] lg:aspect-[3/2] min-[1280px]:aspect-auto min-[1280px]:h-full min-[1280px]:min-h-[380px] min-[1920px]:min-h-[420px] rounded-2xl min-[1280px]:rounded-3xl min-[1920px]:rounded-[24px] block">
+              <img
                   src="/assets/images/carematch.jpeg"
                   alt="Elderly woman and caregiver in a warm, supportive setting"
                   className="h-full w-full object-cover lg:rounded-2xl min-[1280px]:rounded-3xl min-[1920px]:rounded-[24px]"
@@ -138,8 +138,7 @@ export default function WhyCareMatch() {
                   }}
                 />
                 {/* <LoopIcon /> */}
-              </div>
-            </div>
+            </TiltCard>
           </div>
         </div>
       </div>

@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import SearchBar from "../SearchBar";
 
+// Import so Vite resolves the URL correctly (works in dev and build)
+import bannerBg from "../../../../public/assets/images/bannerBg.png";
+
 const BANNER_HEADING = "Meet carrie – \nYour senior healthcare AI advisor";
 const TYPE_SPEED_MS = 70;
 const CURSOR_BLINK_MS = 530;
@@ -32,10 +35,15 @@ export default function Banner() {
   const isComplete = displayedLength >= BANNER_HEADING.length;
 
   return (
-    <section className="relative w-full min-h-[420px] overflow-hidden sm:min-h-[480px] md:min-h-[520px] lg:min-h-[560px]">
-      {/* Background image as real element so it always renders */}
+    <section
+      className="relative w-full min-h-[420px] overflow-hidden bg-cover bg-center bg-no-repeat sm:min-h-[480px] md:min-h-[520px] lg:min-h-[560px]"
+      style={{
+        backgroundImage: `url(${bannerBg})`,
+      }}
+    >
+      {/* Fallback: img element in case CSS background doesn't load */}
       <img
-        src="/assets/images/bannerBg.png"
+        src={bannerBg}
         alt=""
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"

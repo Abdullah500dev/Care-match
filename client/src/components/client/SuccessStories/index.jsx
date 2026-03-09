@@ -1,4 +1,5 @@
 import React from "react";
+import { TiltCard } from "@/components/ui/tilt-card";
 
 /** Five filled yellow stars for rating */
 function StarRating() {
@@ -67,9 +68,10 @@ export default function SuccessStories() {
         {/* Testimonial cards: 1 col mobile, 2 cols at md/lg (1024), 3 cols from 1280 */}
         <div className="mt-6 grid grid-cols-1 gap-4 sm:mt-8 sm:gap-6 md:grid-cols-2 md:gap-6 lg:mt-10 lg:gap-6 min-[1280px]:mt-14 min-[1280px]:grid-cols-3 min-[1280px]:gap-10 min-[1920px]:gap-10">
           {TESTIMONIALS.map(({ quote, name, relationship, location }) => (
-            <div
+            <TiltCard
               key={name}
-              className="flex min-w-0 flex-col rounded-xl bg-[#F9F9F9] border border-[#0000000D] p-4 sm:rounded-2xl sm:p-6 lg:p-6 min-[1280px]:p-8 min-[1920px]:p-10"
+              className="h-full"
+              innerClassName="flex min-w-0 flex-col rounded-xl bg-[#F9F9F9] border border-[#0000000D] p-4 sm:rounded-2xl sm:p-6 lg:p-6 min-[1280px]:p-8 min-[1920px]:p-10 h-full"
             >
               <p className="flex-1 text-sm leading-relaxed text-[#101828] sm:text-base md:text-lg lg:text-base min-[1280px]:text-lg min-[1920px]:text-[22px]">
                 &ldquo;{quote}&rdquo;
@@ -82,7 +84,7 @@ export default function SuccessStories() {
                   {relationship} - {location}
                 </p>
               </div>
-            </div>
+            </TiltCard>
           ))}
         </div>
       </div>
