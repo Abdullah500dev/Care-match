@@ -82,7 +82,7 @@ export default function Footer() {
           {/* Right: Contact Us */}
           <div>
             <h3 className="font-semibold text-white text-base sm:text-lg">
-              Contact Us
+              Support
             </h3>
             <ul className="mt-4 space-y-2.5 sm:mt-5 sm:space-y-3">
             
