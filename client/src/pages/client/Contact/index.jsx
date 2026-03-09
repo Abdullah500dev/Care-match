@@ -36,7 +36,7 @@ export default function Contact() {
       <SEO title="Contact" />
       <div className="min-h-screen bg-[#F9FAFB]">
         {/* Back to Results - top left of content area */}
-        <div
+        {/* <div
           className="w-full bg-white px-4 py-8 sm:px-6"
           style={{
             borderBottom: "1px solid #0000001A",
@@ -52,10 +52,19 @@ export default function Contact() {
               Back to Results
             </Link>
           </div>
-        </div>
+        </div> */}
 
         <div className="container mx-auto px-4 py-8 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12">
           <div className="mx-auto max-w-3xl">
+            {/* Heading and subheading */}
+            <div className="mb-8 text-center">
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#0f172a] mb-2">
+                Contact Us
+              </h1>
+              <p className="text-base text-[#64748b] max-w-xl mx-auto">
+                We&apos;d love to hear from you. Send us a message and we&apos;ll get back to you as soon as we can.
+              </p>
+            </div>
             {/* Form Card - white card with rounded corners and subtle shadow */}
             <div
               className="rounded-2xl border border-[#E2E8F0] bg-white p-6 sm:p-8 md:p-10"

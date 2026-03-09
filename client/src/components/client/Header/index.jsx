@@ -108,7 +108,7 @@ export default function Header() {
                   to="/register"
                   className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
                 >
-                  Sign-in
+                  Sign-up
                 </Link>
                 <Link
                   to="/login"
