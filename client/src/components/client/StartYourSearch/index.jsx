@@ -55,7 +55,7 @@ export default function StartYourSearch() {
             style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
           >
             <SparkleIcon />
-            Try AI Assistant
+            Try AI Assistant - Carrie
           </Link>
           <input
             type="text"

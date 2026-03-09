@@ -4,7 +4,6 @@ export default function PreLoader() {
   return (
     <div className="preloader">
       <div className="preloader-inner">
-        <div className="preloader-spinner" aria-hidden />
         <img
           src="/assets/images/favicon/favicon.svg"
           alt="CareMatch AI"

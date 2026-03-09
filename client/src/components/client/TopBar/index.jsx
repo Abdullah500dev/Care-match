@@ -5,18 +5,18 @@ export default function TopBar() {
   const location = useLocation();
   const isDashboard = location.pathname.startsWith("/dashboard");
 
-  // Extra left/right gaps only on dashboard; inline styles so they always apply
+  // Use same container as Header so top bar and header align
+  const containerClass = isDashboard
+    ? "mx-auto max-w-[1800px] px-2 sm:px-4"
+    : "container mx-auto px-6 sm:px-8 md:px-10 lg:max-w-6xl lg:px-12 min-[1280px]:max-w-[1400px] min-[1280px]:px-16 min-[1536px]:max-w-[1600px] min-[1536px]:px-20 min-[1920px]:max-w-[1800px] min-[1920px]:px-24";
+
   return (
     <div
       className="w-full bg-[#00BCD4] py-2 sm:py-2.5"
       style={isDashboard ? { paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" } : undefined}
     >
       <div
-        className={`mx-auto flex min-w-0 flex-col items-center justify-between gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4 ${
-          isDashboard
-            ? "max-w-[1800px] px-2 sm:px-4"
-            : "container px-4 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14"
-        }`}
+        className={`flex min-w-0 flex-col items-center justify-between gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:gap-4 ${containerClass}`}
       >
         <div className="flex min-w-0 flex-wrap items-center justify-center gap-4 sm:justify-start sm:gap-6">
           <span className="flex items-center gap-1.5 text-xs font-semibold text-white sm:gap-2 sm:text-sm">

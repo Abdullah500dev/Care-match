@@ -1,8 +1,14 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, ArrowRight } from "lucide-react";
 
 export default function SearchBar() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
+
+  const handleSearch = () => {
+    navigate("/find-care");
+  };
 
   return (
     <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl">
@@ -32,6 +38,7 @@ export default function SearchBar() {
             <button
               className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
               aria-label="Search"
+              onClick={handleSearch}
             >
               <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
             </button>
