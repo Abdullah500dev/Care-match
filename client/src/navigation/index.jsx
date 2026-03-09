@@ -4,27 +4,39 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import ScrollToTop from "../utils/scroll-top";
 import PreLoader from "../components/common/PreLoader";
 
-// client pages
-const Home = lazy(() => import("../pages/client/Home"));
-const Page1 = lazy(() => import("../pages/client/Page1"));
-const Page2 = lazy(() => import("../pages/client/Page2"));
-const Contact = lazy(() => import("../pages/client/Contact"));
-const Profile = lazy(() => import("../pages/client/Profile"));
-const IntakeSearch = lazy(() => import("../pages/client/IntakeSearch"));
+// Eager-load all client pages to avoid "Failed to fetch dynamically imported module"
+import Home from "../pages/client/Home";
+import Page1 from "../pages/client/Page1";
+import Page2 from "../pages/client/Page2";
+import Contact from "../pages/client/Contact";
+import Profile from "../pages/client/Profile";
+import IntakeSearch from "../pages/client/IntakeSearch";
+import NotFound from "../pages/common/NotFound";
 
-// dashboard pages
-const DashboardHome = lazy(() => import("../pages/dashboard/DashboardHome"));
-const DashboardResidents = lazy(() => import("../pages/dashboard/Residents"));
-const DashboardCommunities = lazy(() => import("../pages/dashboard/Communities"));
-const DashboardSNFPartners = lazy(() =>
+// Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
+const lazyWithRetry = (importFn) =>
+  lazy(async () => {
+    try {
+      return await importFn();
+    } catch (e) {
+      if (e?.message?.includes("Failed to fetch dynamically imported module")) {
+        window.location.reload();
+      }
+      throw e;
+    }
+  });
+
+// dashboard pages (lazy - less frequently used)
+const DashboardHome = lazyWithRetry(() => import("../pages/dashboard/DashboardHome"));
+const DashboardResidents = lazyWithRetry(() => import("../pages/dashboard/Residents"));
+const DashboardCommunities = lazyWithRetry(() => import("../pages/dashboard/Communities"));
+const DashboardSNFPartners = lazyWithRetry(() =>
   import("../pages/dashboard/SNFPartners/index")
 );
-const DashboardMessages = lazy(() => import("../pages/dashboard/Messages"));
-const DashboardSettings = lazy(() => import("../pages/dashboard/Settings"));
-const DashboardCalendar = lazy(() => import("../pages/dashboard/Calendar"));
-const DashboardAnalytics = lazy(() => import("../pages/dashboard/Analytics"));
-
-const NotFound = lazy(() => import("../pages/common/NotFound"));
+const DashboardMessages = lazyWithRetry(() => import("../pages/dashboard/Messages"));
+const DashboardSettings = lazyWithRetry(() => import("../pages/dashboard/Settings"));
+const DashboardCalendar = lazyWithRetry(() => import("../pages/dashboard/Calendar"));
+const DashboardAnalytics = lazyWithRetry(() => import("../pages/dashboard/Analytics"));
 
 import Header from "../components/client/Header";
 import TopBar from "../components/client/TopBar";

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import DashboardSidebar from "./Sidebar";
 import DashboardHeader from "./DashboardHeader";
-import DashboardFooter from "./DashboardFooter";
+import Footer from "../../client/Footer";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,7 +27,7 @@ export default function DashboardLayout() {
       <div className="h-12 w-full shrink-0 bg-white" aria-hidden />
 
       {/* Full-width footer at bottom */}
-      <DashboardFooter />
+      <Footer />
     </div>
   );
 }
