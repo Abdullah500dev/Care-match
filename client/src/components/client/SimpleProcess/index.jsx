@@ -8,17 +8,6 @@ const CARD_STAGGER_MS = 100;
 const CARD_DURATION_MS = 500;
 const TYPEWRITER_PAUSE_BEFORE_RESTART_MS = 2500;
 
-/** White square with light cyan circle and dark cyan checkmark for process cards */
-function StepIcon() {
-  return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg sm:h-14 sm:w-14 md:h-16 md:w-16 min-[1920px]:h-20 min-[1920px]:w-20">
-      <span className="flex h-full w-full items-center justify-center rounded-full bg-[#00C9F0]/30  [&>img]:object-contain">
-        <img src="/assets/images/simpleprocessicon.svg" alt="" aria-hidden />
-      </span>
-    </div>
-  );
-}
-
 const STEPS = [
   {
     title: "Share Your Needs",
@@ -134,8 +123,7 @@ export default function SimpleProcess() {
                 innerClassName="flex min-w-0 flex-col rounded-xl p-4 sm:rounded-2xl sm:p-5 md:p-5 lg:p-6 min-[1280px]:p-8 h-full"
                 innerStyle={{ backgroundColor: "#00C9F0" }}
               >
-                <StepIcon />
-                <div className="mt-8 sm:mt-10 md:mt-12 lg:mt-10 min-[1280px]:mt-14 min-[1920px]:mt-16">
+                <div>
                   <h3 className="text-base font-bold text-white sm:text-lg md:text-xl lg:text-lg min-[1280px]:text-xl min-[1920px]:text-2xl">
                     {step.title}
                   </h3>

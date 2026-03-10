@@ -25,27 +25,10 @@ export default function TopBar() {
               alt=""
               className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"
             />
-            Talk to Your AI assistant  - Carrie
+            {location.pathname === "/care-explorer"
+              ? "AI-powered recommendations available"
+              : "Talk to Your AI assistant - Carrie"}
           </span>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* <a
-            href="tel:1-888-262-8244"
-            className="flex items-center gap-1.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 sm:gap-2 sm:text-sm sm:shrink-0"
-          >
-            <img
-              src="/assets/images/phone.svg"
-              alt=""
-              className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4"
-            />
-            1-888-CMATCH-AI
-          </a> */}
-          {/* <button
-            type="button"
-            className="rounded-lg bg-white/20 px-3 py-1.5 text-xs font-semibold text-white transition-opacity hover:bg-white/30 sm:text-sm"
-          >
-            Call Now
-          </button> */}
         </div>
       </div>
     </div>

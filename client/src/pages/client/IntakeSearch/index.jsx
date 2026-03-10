@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
+import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
 
 const BUDGET_SLIDER_MIN = 2000;
 const BUDGET_SLIDER_MAX = 15000;
 const BUDGET_SLIDER_STEP = 500;
 
-const TOTAL_STEPS = 16;
+const TOTAL_STEPS = 9;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -24,8 +25,8 @@ const WHO_OPTIONS = [
 
 const AGE_OPTIONS = [
   { id: "under60", label: "Less Than 60", Icon: Heart },
-  { id: "under70", label: "Less Than 70", Icon: Users },
-  { id: "under80", label: "Less Than 80", Icon: Signal },
+  { id: "under70", label: "60-69", Icon: Users },
+  { id: "under80", label: "70-79", Icon: Signal },
   { id: "above80", label: "Above 80", Icon: Zap },
 ];
 
@@ -115,7 +116,7 @@ const defaultFormData = {
   location: "",
   budgetMin: 3000,
   budgetMax: 6000,
-  levelOfCare: "assisted",
+  levelOfCare: "",
   specialNeedsPreferences: ["privateRoom"],
   careTypes: [],
   budget: "",
@@ -141,7 +142,7 @@ export default function IntakeSearch() {
     if (!isFindingMatches) return;
     const t = setTimeout(() => {
       console.log("Search criteria:", formData);
-      navigate("/"); // TODO: navigate to search results when results page exists
+      navigate("/care-explorer");
     }, FINDING_MATCHES_DURATION_MS);
     return () => clearTimeout(t);
   }, [isFindingMatches, navigate]);
@@ -253,12 +254,14 @@ export default function IntakeSearch() {
         >
           {/* Left: image inside card (youngPeople on parent's age step, else search_img) */}
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] shrink-0 overflow-hidden rounded-l-2xl">
-            <img
-              src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
-              alt=""
-              className="h-full w-full object-cover object-center min-h-[28rem]"
-              aria-hidden
-            />
+            <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
+              <img
+                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
+                alt=""
+                className="h-full w-full object-cover object-center min-h-[28rem]"
+                aria-hidden
+              />
+            </TiltCard>
           </div>
 
           {/* Right: form content */}
@@ -689,6 +692,10 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
   }
 
   if (step === 8) {
+    const assistedOption = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === "assisted");
+    if (!assistedOption) return null;
+    const { id, label, desc, Icon } = assistedOption;
+    const isSelected = formData.levelOfCare === id;
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
@@ -702,35 +709,49 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           needed?
         </h1>
         <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
+        {/* Removed from step 8 UI (commented, not deleted) — Independent Living, Memory Care, Skilled Nursing. Original grid with all 4 cards:
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {LEVEL_OF_CARE_OPTIONS.map(({ id, label, desc, Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => update("levelOfCare", id)}
-              className={cn(
-                "rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
-                formData.levelOfCare === id
-                  ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-10 w-10 shrink-0 rounded-xl items-center justify-center",
-                  formData.levelOfCare === id ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]"
-                )}
-              >
-                <Icon className="h-5 w-5" />
+          {LEVEL_OF_CARE_OPTIONS.map(({ id: optId, label: optLabel, desc: optDesc, Icon: OptIcon }) => (
+            <button key={optId} type="button" onClick={() => update("levelOfCare", optId)}
+              className={cn("rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
+                formData.levelOfCare === optId ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]" : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]")}>
+              <span className={cn("flex h-10 w-10 shrink-0 rounded-xl items-center justify-center", formData.levelOfCare === optId ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]")}>
+                <OptIcon className="h-5 w-5" />
               </span>
               <div className="min-w-0">
-                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === id && "text-[#0f172a]")}>
-                  {label}
-                </span>
-                <span className="text-sm text-[#64748b] mt-0.5 block">{desc}</span>
+                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === optId && "text-[#0f172a]")}>{optLabel}</span>
+                <span className="text-sm text-[#64748b] mt-0.5 block">{optDesc}</span>
               </div>
             </button>
           ))}
+        </div>
+        */}
+        <div className="flex min-h-[220px] items-center justify-center">
+          <button
+            type="button"
+            onClick={() => update("levelOfCare", id)}
+            className={cn(
+              "w-full max-w-md rounded-2xl border-2 px-6 py-6 sm:px-8 sm:py-8 text-left transition-colors flex gap-4 sm:gap-5 items-start",
+              isSelected
+                ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]"
+                : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-xl items-center justify-center",
+                isSelected ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]"
+              )}
+            >
+              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className={cn("block font-bold text-lg sm:text-xl text-[#0f172a]")}>
+                {label}
+              </span>
+              <span className="text-sm sm:text-base text-[#64748b] mt-1 block">{desc}</span>
+            </div>
+          </button>
         </div>
       </>
     );
@@ -803,253 +824,254 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     );
   }
 
-  if (step === 10) {
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          What type of care do you need?
-        </h1>
-        <p className="text-[#64748b] mb-6">Select all that apply.</p>
-        <div className="flex flex-wrap gap-3">
-          {CARE_TYPES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => toggleArray("careTypes", id)}
-              className={cn(
-                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
-                formData.careTypes.includes(id)
-                  ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  }
+  // Steps 10–16 commented out – flow ends at step 9
+  // if (step === 10) {
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         What type of care do you need?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">Select all that apply.</p>
+  //       <div className="flex flex-wrap gap-3">
+  //         {CARE_TYPES.map(({ id, label }) => (
+  //           <button
+  //             key={id}
+  //             type="button"
+  //             onClick={() => toggleArray("careTypes", id)}
+  //             className={cn(
+  //               "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
+  //               formData.careTypes.includes(id)
+  //                 ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
+  //                 : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+  //             )}
+  //           >
+  //             {label}
+  //           </button>
+  //         ))}
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 11) {
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          What is your budget range?
-        </h1>
-        <p className="text-[#64748b] mb-6">Monthly cost estimate helps us match you to affordable options.</p>
-        <div className="space-y-3">
-          {BUDGET_RANGES.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => update("budget", id)}
-              className={cn(
-                "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
-                formData.budget === id
-                  ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  }
+  // if (step === 11) {
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         What is your budget range?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">Monthly cost estimate helps us match you to affordable options.</p>
+  //       <div className="space-y-3">
+  //         {BUDGET_RANGES.map(({ id, label }) => (
+  //           <button
+  //             key={id}
+  //             type="button"
+  //             onClick={() => update("budget", id)}
+  //             className={cn(
+  //               "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
+  //               formData.budget === id
+  //                 ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
+  //                 : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+  //             )}
+  //           >
+  //             {label}
+  //           </button>
+  //         ))}
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 12) {
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          When do you need care?
-        </h1>
-        <p className="text-[#64748b] mb-6">This helps us prioritize your search.</p>
-        <div className="space-y-3">
-          {URGENCY_OPTIONS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => update("urgency", id)}
-              className={cn(
-                "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
-                formData.urgency === id
-                  ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  }
+  // if (step === 12) {
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         When do you need care?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">This helps us prioritize your search.</p>
+  //       <div className="space-y-3">
+  //         {URGENCY_OPTIONS.map(({ id, label }) => (
+  //           <button
+  //             key={id}
+  //             type="button"
+  //             onClick={() => update("urgency", id)}
+  //             className={cn(
+  //               "w-full rounded-xl border-2 px-4 py-3 text-left font-bold transition-colors",
+  //               formData.urgency === id
+  //                 ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
+  //                 : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+  //             )}
+  //           >
+  //             {label}
+  //           </button>
+  //         ))}
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 13) {
-    const amenities = [
-      { id: "dining", label: "Dining / Meals" },
-      { id: "activities", label: "Activities & outings" },
-      { id: "therapy", label: "Physical / OT therapy" },
-      { id: "memory", label: "Memory programs" },
-      { id: "medical", label: "On-site medical" },
-      { id: "transport", label: "Transportation" },
-    ];
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          Which amenities matter most?
-        </h1>
-        <p className="text-[#64748b] mb-6">Select any that are important to you.</p>
-        <div className="flex flex-wrap gap-3">
-          {amenities.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => toggleArray("amenities", id)}
-              className={cn(
-                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
-                formData.amenities.includes(id)
-                  ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </>
-    );
-  }
+  // if (step === 13) {
+  //   const amenities = [
+  //     { id: "dining", label: "Dining / Meals" },
+  //     { id: "activities", label: "Activities & outings" },
+  //     { id: "therapy", label: "Physical / OT therapy" },
+  //     { id: "memory", label: "Memory programs" },
+  //     { id: "medical", label: "On-site medical" },
+  //     { id: "transport", label: "Transportation" },
+  //   ];
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         Which amenities matter most?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">Select any that are important to you.</p>
+  //       <div className="flex flex-wrap gap-3">
+  //         {amenities.map(({ id, label }) => (
+  //           <button
+  //             key={id}
+  //             type="button"
+  //             onClick={() => toggleArray("amenities", id)}
+  //             className={cn(
+  //               "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
+  //               formData.amenities.includes(id)
+  //                 ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
+  //                 : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+  //             )}
+  //           >
+  //             {label}
+  //           </button>
+  //         ))}
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 14) {
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          How far are you willing to travel?
-        </h1>
-        <p className="text-[#64748b] mb-6">Maximum distance from your location for visits.</p>
-        <div className="space-y-2">
-          <Label htmlFor="maxMiles" className="text-[#334155]">Max distance (miles)</Label>
-          <Input
-            id="maxMiles"
-            type="number"
-            placeholder="e.g. 25"
-            value={formData.maxMiles}
-            onChange={(e) => update("maxMiles", e.target.value)}
-            className="rounded-xl border-[#e2e8f0] h-12"
-          />
-        </div>
-      </>
-    );
-  }
+  // if (step === 14) {
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         How far are you willing to travel?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">Maximum distance from your location for visits.</p>
+  //       <div className="space-y-2">
+  //         <Label htmlFor="maxMiles" className="text-[#334155]">Max distance (miles)</Label>
+  //         <Input
+  //           id="maxMiles"
+  //           type="number"
+  //           placeholder="e.g. 25"
+  //           value={formData.maxMiles}
+  //           onChange={(e) => update("maxMiles", e.target.value)}
+  //           className="rounded-xl border-[#e2e8f0] h-12"
+  //         />
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 15) {
-    const lifestyles = [
-      { id: "quiet", label: "Quiet & calm" },
-      { id: "active", label: "Active & social" },
-      { id: "faith", label: "Faith-based" },
-      { id: "outdoors", label: "Outdoor access" },
-    ];
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          How often will family visit?
-        </h1>
-        <p className="text-[#64748b] mb-4">Helps us factor in visitation when matching.</p>
-        <div className="space-y-2 mb-6">
-          <Label htmlFor="visitFrequency" className="text-[#334155]">Visit frequency</Label>
-          <Input
-            id="visitFrequency"
-            placeholder="e.g. Weekly, Daily, Monthly"
-            value={formData.visitFrequency}
-            onChange={(e) => update("visitFrequency", e.target.value)}
-            className="rounded-xl border-[#e2e8f0] h-12"
-          />
-        </div>
-        <h2 className="text-lg font-bold text-[#0f172a] mb-2">Lifestyle or personality preferences</h2>
-        <p className="text-[#64748b] mb-4">Optional — we use this to improve fit.</p>
-        <div className="flex flex-wrap gap-3 mb-6">
-          {lifestyles.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => update("lifestyle", formData.lifestyle === id ? "" : id)}
-              className={cn(
-                "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
-                formData.lifestyle === id
-                  ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
-                  : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="specialNeeds" className="text-[#334155]">Special needs or notes</Label>
-          <Input
-            id="specialNeeds"
-            placeholder="e.g. diabetic care, wheelchair access"
-            value={formData.specialNeeds}
-            onChange={(e) => update("specialNeeds", e.target.value)}
-            className="rounded-xl border-[#e2e8f0] h-12"
-          />
-        </div>
-      </>
-    );
-  }
+  // if (step === 15) {
+  //   const lifestyles = [
+  //     { id: "quiet", label: "Quiet & calm" },
+  //     { id: "active", label: "Active & social" },
+  //     { id: "faith", label: "Faith-based" },
+  //     { id: "outdoors", label: "Outdoor access" },
+  //   ];
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         How often will family visit?
+  //       </h1>
+  //       <p className="text-[#64748b] mb-4">Helps us factor in visitation when matching.</p>
+  //       <div className="space-y-2 mb-6">
+  //         <Label htmlFor="visitFrequency" className="text-[#334155]">Visit frequency</Label>
+  //         <Input
+  //           id="visitFrequency"
+  //           placeholder="e.g. Weekly, Daily, Monthly"
+  //           value={formData.visitFrequency}
+  //           onChange={(e) => update("visitFrequency", e.target.value)}
+  //           className="rounded-xl border-[#e2e8f0] h-12"
+  //         />
+  //       </div>
+  //       <h2 className="text-lg font-bold text-[#0f172a] mb-2">Lifestyle or personality preferences</h2>
+  //       <p className="text-[#64748b] mb-4">Optional — we use this to improve fit.</p>
+  //       <div className="flex flex-wrap gap-3 mb-6">
+  //         {lifestyles.map(({ id, label }) => (
+  //           <button
+  //             key={id}
+  //             type="button"
+  //             onClick={() => update("lifestyle", formData.lifestyle === id ? "" : id)}
+  //             className={cn(
+  //               "rounded-xl border-2 px-4 py-3 font-bold transition-colors",
+  //               formData.lifestyle === id
+  //                 ? "border-[#0ea5e9] bg-[#e0f2fe] text-[#0f172a]"
+  //                 : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+  //             )}
+  //           >
+  //             {label}
+  //           </button>
+  //         ))}
+  //       </div>
+  //       <div className="space-y-2">
+  //         <Label htmlFor="specialNeeds" className="text-[#334155]">Special needs or notes</Label>
+  //         <Input
+  //           id="specialNeeds"
+  //           placeholder="e.g. diabetic care, wheelchair access"
+  //           value={formData.specialNeeds}
+  //           onChange={(e) => update("specialNeeds", e.target.value)}
+  //           className="rounded-xl border-[#e2e8f0] h-12"
+  //         />
+  //       </div>
+  //     </>
+  //   );
+  // }
 
-  if (step === 16) {
-    const whoLabel = WHO_OPTIONS.find((o) => o.id === formData.who)?.label || "—";
-    const ageLabel = AGE_OPTIONS.find((a) => a.id === formData.parentAge)?.label || "—";
-    const timelineLabel = CARE_TIMELINE_OPTIONS.find((t) => t.id === formData.careTimeline)?.label || "—";
-    const livingNowLabel = LIVING_NOW_OPTIONS.find((l) => l.id === formData.livingNow)?.label || "—";
-    const mobilityLabel = MOBILITY_OPTIONS.find((m) => m.id === formData.mobility)?.label || "—";
-    const lovedOneCareLabel = formData.lovedOneCare.length
-      ? formData.lovedOneCare.map((id) => LOVED_ONE_CARE_OPTIONS.find((o) => o.id === id)?.label).join(", ")
-      : "—";
-    const levelOfCareLabel = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === formData.levelOfCare)?.label || "—";
-    const specialNeedsLabel = formData.specialNeedsPreferences.length
-      ? formData.specialNeedsPreferences.map((id) => SPECIAL_NEEDS_PREFERENCES.find((o) => o.id === id)?.label).filter(Boolean).join(", ")
-      : "—";
-    const careLabel = formData.careTypes.length
-      ? formData.careTypes.map((id) => CARE_TYPES.find((c) => c.id === id)?.label).join(", ")
-      : "—";
-    const budgetLabel = BUDGET_RANGES.find((b) => b.id === formData.budget)?.label || "—";
-    const urgencyLabel = URGENCY_OPTIONS.find((u) => u.id === formData.urgency)?.label || "—";
-    const budgetMin = formData.budgetMin ?? BUDGET_SLIDER_MIN;
-    const budgetMax = formData.budgetMax ?? 6000;
-    const formatBudget = (n) => (n >= BUDGET_SLIDER_MAX ? "$15,000+" : `$${n.toLocaleString()}`);
-    const budgetRangeLabel = `${formatBudget(budgetMin)} - ${formatBudget(budgetMax)}`;
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
-          Review your search criteria
-        </h1>
-        <p className="text-[#64748b] mb-6">
-          Click &quot;See matching facilities&quot; to get your personalized list.
-        </p>
-        <dl className="space-y-3 text-sm">
-          <div><dt className="text-[#64748b]">Who needs care</dt><dd className="font-medium text-[#0f172a]">{whoLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Age range</dt><dd className="font-medium text-[#0f172a]">{ageLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Care timeline</dt><dd className="font-medium text-[#0f172a]">{timelineLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Living now</dt><dd className="font-medium text-[#0f172a]">{livingNowLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Mobility</dt><dd className="font-medium text-[#0f172a]">{mobilityLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Care needs (loved one)</dt><dd className="font-medium text-[#0f172a]">{lovedOneCareLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Location</dt><dd className="font-medium text-[#0f172a]">{formData.location || "—"}</dd></div>
-          <div><dt className="text-[#64748b]">Level of care</dt><dd className="font-medium text-[#0f172a]">{levelOfCareLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Special needs / preferences</dt><dd className="font-medium text-[#0f172a]">{specialNeedsLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Monthly budget range</dt><dd className="font-medium text-[#0f172a]">{budgetRangeLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Care type(s)</dt><dd className="font-medium text-[#0f172a]">{careLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Budget</dt><dd className="font-medium text-[#0f172a]">{budgetLabel}</dd></div>
-          <div><dt className="text-[#64748b]">When</dt><dd className="font-medium text-[#0f172a]">{urgencyLabel}</dd></div>
-          <div><dt className="text-[#64748b]">Max distance</dt><dd className="font-medium text-[#0f172a]">{formData.maxMiles ? `${formData.maxMiles} mi` : "—"}</dd></div>
-        </dl>
-      </>
-    );
-  }
+  // if (step === 16) {
+  //   const whoLabel = WHO_OPTIONS.find((o) => o.id === formData.who)?.label || "—";
+  //   const ageLabel = AGE_OPTIONS.find((a) => a.id === formData.parentAge)?.label || "—";
+  //   const timelineLabel = CARE_TIMELINE_OPTIONS.find((t) => t.id === formData.careTimeline)?.label || "—";
+  //   const livingNowLabel = LIVING_NOW_OPTIONS.find((l) => l.id === formData.livingNow)?.label || "—";
+  //   const mobilityLabel = MOBILITY_OPTIONS.find((m) => m.id === formData.mobility)?.label || "—";
+  //   const lovedOneCareLabel = formData.lovedOneCare.length
+  //     ? formData.lovedOneCare.map((id) => LOVED_ONE_CARE_OPTIONS.find((o) => o.id === id)?.label).join(", ")
+  //     : "—";
+  //   const levelOfCareLabel = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === formData.levelOfCare)?.label || "—";
+  //   const specialNeedsLabel = formData.specialNeedsPreferences.length
+  //     ? formData.specialNeedsPreferences.map((id) => SPECIAL_NEEDS_PREFERENCES.find((o) => o.id === id)?.label).filter(Boolean).join(", ")
+  //     : "—";
+  //   const careLabel = formData.careTypes.length
+  //     ? formData.careTypes.map((id) => CARE_TYPES.find((c) => c.id === id)?.label).join(", ")
+  //     : "—";
+  //   const budgetLabel = BUDGET_RANGES.find((b) => b.id === formData.budget)?.label || "—";
+  //   const urgencyLabel = URGENCY_OPTIONS.find((u) => u.id === formData.urgency)?.label || "—";
+  //   const budgetMin = formData.budgetMin ?? BUDGET_SLIDER_MIN;
+  //   const budgetMax = formData.budgetMax ?? 6000;
+  //   const formatBudget = (n) => (n >= BUDGET_SLIDER_MAX ? "$15,000+" : `$${n.toLocaleString()}`);
+  //   const budgetRangeLabel = `${formatBudget(budgetMin)} - ${formatBudget(budgetMax)}`;
+  //   return (
+  //     <>
+  //       <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2">
+  //         Review your search criteria
+  //       </h1>
+  //       <p className="text-[#64748b] mb-6">
+  //         Click &quot;See matching facilities&quot; to get your personalized list.
+  //       </p>
+  //       <dl className="space-y-3 text-sm">
+  //         <div><dt className="text-[#64748b]">Who needs care</dt><dd className="font-medium text-[#0f172a]">{whoLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Age range</dt><dd className="font-medium text-[#0f172a]">{ageLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Care timeline</dt><dd className="font-medium text-[#0f172a]">{timelineLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Living now</dt><dd className="font-medium text-[#0f172a]">{livingNowLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Mobility</dt><dd className="font-medium text-[#0f172a]">{mobilityLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Care needs (loved one)</dt><dd className="font-medium text-[#0f172a]">{lovedOneCareLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Location</dt><dd className="font-medium text-[#0f172a]">{formData.location || "—"}</dd></div>
+  //         <div><dt className="text-[#64748b]">Level of care</dt><dd className="font-medium text-[#0f172a]">{levelOfCareLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Special needs / preferences</dt><dd className="font-medium text-[#0f172a]">{specialNeedsLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Monthly budget range</dt><dd className="font-medium text-[#0f172a]">{budgetRangeLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Care type(s)</dt><dd className="font-medium text-[#0f172a]">{careLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Budget</dt><dd className="font-medium text-[#0f172a]">{budgetLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">When</dt><dd className="font-medium text-[#0f172a]">{urgencyLabel}</dd></div>
+  //         <div><dt className="text-[#64748b]">Max distance</dt><dd className="font-medium text-[#0f172a]">{formData.maxMiles ? `${formData.maxMiles} mi` : "—"}</dd></div>
+  //       </dl>
+  //     </>
+  //   );
+  // }
 
   return null;
 }

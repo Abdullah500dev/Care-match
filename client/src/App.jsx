@@ -4,7 +4,7 @@ import Navigation from "./navigation";
 
 export default function App() {
   return (
-    <div className="App min-w-0 max-w-full overflow-x-hidden">
+    <div className="App min-w-0 max-w-full">
       <Navigation />
     </div>
   );

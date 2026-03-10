@@ -1,5 +1,7 @@
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useRef } from "react";
+import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { ChevronUp } from "lucide-react";
 
 import ScrollToTop from "../utils/scroll-top";
 import PreLoader from "../components/common/PreLoader";
@@ -11,6 +13,7 @@ import Page2 from "../pages/client/Page2";
 import Contact from "../pages/client/Contact";
 import Profile from "../pages/client/Profile";
 import IntakeSearch from "../pages/client/IntakeSearch";
+import CareExplorer from "../pages/client/CareExplorer";
 import NotFound from "../pages/common/NotFound";
 
 // Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
@@ -46,15 +49,39 @@ import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 const Layout = ({ children }) => {
   const location = useLocation();
   const isDashboardRoute = location.pathname.startsWith("/dashboard");
+  const isHomePage = location.pathname === "/";
+  const topAnchorRef = useRef(null);
+
+  const scrollToTop = () => {
+    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
+    document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.scrollTo?.({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <>
+      <div ref={topAnchorRef} aria-hidden="true" />
       <div className="sticky top-0 z-50 w-full">
         <TopBar />
         {!isDashboardRoute && <Header />}
       </div>
       {children}
       {!isDashboardRoute && <Footer />}
+      {/* Scroll to top - home page only, rendered via portal to body */}
+      {isHomePage &&
+        createPortal(
+          <button
+            type="button"
+            onClick={scrollToTop}
+            className="fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-[#00CFF4] text-white shadow-xl transition-all duration-300 hover:bg-[#00b8d8] hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[#00CFF4] focus:ring-offset-2"
+            aria-label="Scroll to top"
+          >
+            <ChevronUp className="h-7 w-7" />
+          </button>,
+          document.body
+        )}
     </>
   );
 };
@@ -72,6 +99,7 @@ export default function Navigation() {
               <Route path="/contact" element={<Contact />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/find-care" element={<IntakeSearch />} />
+              <Route path="/care-explorer" element={<CareExplorer />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />
