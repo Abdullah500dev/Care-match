@@ -13,17 +13,17 @@ function SparkleIcon({ className = "" }) {
   );
 }
 
-/** Small circular check icon for footnotes */
-function FootnoteIcon({ className = "" }) {
-  return (
-    <img
-      src="/assets/images/tick-search.svg"
-      alt=""
-      aria-hidden
-      className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${className}`}
-    />
-  );
-}
+/** Small circular check icon for footnotes — commented out (checkbox/tick removed site-wide) */
+// function FootnoteIcon({ className = "" }) {
+//   return (
+//     <img
+//       src="/assets/images/tick-search.svg"
+//       alt=""
+//       aria-hidden
+//       className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${className}`}
+//     />
+//   );
+// }
 
 export default function StartYourSearch() {
   return (
@@ -65,14 +65,12 @@ export default function StartYourSearch() {
           />
         </div>
 
-        {/* Footnotes */}
+        {/* Footnotes — check icons commented out */}
         <div className="mt-5 flex flex-wrap items-center justify-center gap-4 sm:mt-8 sm:gap-10">
-          <span className="inline-flex items-center gap-1.5 text-xs text-white/90 sm:gap-2 sm:text-sm">
-            <FootnoteIcon className="text-white/70" />
+          <span className="text-xs text-white/90 sm:text-sm">
             No Credit Card Required
           </span>
-          <span className="inline-flex items-center gap-1.5 text-xs text-white/90 sm:gap-2 sm:text-sm">
-            <FootnoteIcon className="text-white/70" />
+          <span className="text-xs text-white/90 sm:text-sm">
             100% Free Service
           </span>
         </div>

@@ -7,7 +7,7 @@ const DURATION_MS = 550;
 const statCards = [
   {
     bg: "bg-[#00CFF4]",
-    tickIcon: "/assets/images/tick1.svg",
+    // tickIcon: "/assets/images/tick1.svg", // checkbox commented out
     value: "+15,000",
     title: "Partner Communities",
     description:
@@ -15,7 +15,7 @@ const statCards = [
   },
   {
     bg: "bg-[#1D2837]",
-    tickIcon: "/assets/images/tick2.svg",
+    // tickIcon: "/assets/images/tick2.svg", // checkbox commented out
     value: "98%",
     title: "Client Satisfaction",
     description:
@@ -23,7 +23,7 @@ const statCards = [
   },
   {
     bg: "bg-[#1D2837]",
-    tickIcon: "/assets/images/tick2.svg",
+    // tickIcon: "/assets/images/tick2.svg", // checkbox commented out
     value: "50+ Years",
     title: "Combined Experience",
     description:
@@ -32,7 +32,7 @@ const statCards = [
   {
     bg: "",
     backgroundStyle: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)",
-    tickIcon: "/assets/images/tick3.svg",
+    // tickIcon: "/assets/images/tick3.svg", // checkbox commented out
     value: null,
     title: "24/7 Service Availability",
     description:
@@ -54,14 +54,16 @@ const imageCards = [
 function StatCard({ bg, backgroundStyle, tickIcon, value, title, description }) {
   return (
     <TiltCard className="h-full" innerClassName={`${bg || ""} flex flex-col rounded-xl shadow-md min-h-[150px] justify-between p-3 sm:min-h-[165px] sm:rounded-2xl sm:p-4 md:p-4 md:min-h-[180px] lg:min-h-0 lg:h-full lg:p-4 min-[1280px]:p-5 min-[1536px]:p-6`} innerStyle={backgroundStyle ? { background: backgroundStyle } : undefined}>
+      {/* Checkbox/tick icon commented out — was in top-left of each stat card
       <div className="flex items-start">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-[52px] lg:w-[52px] min-[1280px]:h-14 min-[1280px]:w-14 min-[1536px]:h-16 min-[1536px]:w-16">
           <img src={tickIcon} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-6 md:w-6 lg:h-10 lg:w-10" />
         </span>
       </div>
-      <div>
+      */}
+      <div className="flex-1 min-w-0">
         {value && (
-          <p className=" font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">
+          <p className="font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">
             {value}
           </p>
         )}

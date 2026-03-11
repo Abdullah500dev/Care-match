@@ -1,18 +1,18 @@
 import React from "react";
 import { TiltCard } from "@/components/ui/tilt-card";
 
-/** Turquoise double-loop / infinity style icon for the image block */
+/** Turquoise double-loop / infinity style icon for the image block; sized/inset so it stays inside the image on smaller screens (< 1920px) */
 function LoopIcon({ className = "" }) {
   return (
     <div
-      className={`absolute bottom-3 right-3 z-10 flex h-10 w-10 items-center justify-center sm:bottom-4 sm:right-4 sm:h-12 sm:w-12 min-[1920px]:bottom-4 min-[1920px]:right-4 min-[1920px]:h-12 min-[1920px]:w-12 ${className}`}
+      className={`absolute bottom-0 right-0.5 z-10 flex min-[640px]:max-[760px]:right-0 h-7 w-7 items-center justify-center min-[410px]:h-9 min-[410px]:w-9 min-[500px]:h-12 min-[500px]:w-12 sm:bottom-0 sm:right-3.5 sm:h-14 sm:w-14 md:bottom-0 md:right-1.5 md:h-16 md:w-16 lg:bottom-0 lg:right-0 lg:h-10 lg:w-10 min-[1500px]:max-[1920px]:right-0 min-[1500px]:max-[1920px]:h-12 min-[1500px]:max-[1920px]:w-12 min-[1920px]:bottom-0 min-[1920px]:right-0 min-[1920px]:h-16 min-[1920px]:w-16 ${className}`}
       aria-hidden
     >
       <img
         src="/assets/images/favicon/favicon.svg"
         alt=""
         aria-hidden
-        className="h-10 w-10 sm:h-12 sm:w-12 md:h-14 md:w-14 min-[1920px]:h-16 min-[1920px]:w-16"
+        className="h-full w-full max-h-full max-w-full object-contain"
       />
     </div>
   );
@@ -27,7 +27,7 @@ const FEATURE_BUTTONS = [
 export default function AssistedLiving() {
   return (
     <section
-      className="relative w-full overflow-hidden py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28"
+      className="relative w-full overflow-hidden py-10 min-[574px]:pt-20 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28"
       style={{
         background:
           "linear-gradient(117.63deg, rgba(249, 171, 97, 0.22) 2.27%, rgba(0, 207, 244, 0.22) 56.96%, rgba(185, 244, 255, 0.22) 111.64%)",
@@ -65,9 +65,9 @@ export default function AssistedLiving() {
 
         {/* Image left at full height; dark card shorter and overlapping from the right */}
         <div className="relative mt-4 sm:mt-6 md:mt-10 lg:mt-14 min-[1280px]:mt-20 min-[1920px]:mt-40">
-          {/* Left: image full height with overlapping icon */}
-          <div className="relative w-full lg:w-[45%]">
-            <div className="relative overflow-hidden">
+          {/* Left: image full height with overlapping icon; overflow-visible so logo isn't clipped on small screens */}
+          <div className="relative w-full lg:w-[45%] overflow-visible">
+            <div className="relative overflow-hidden rounded-lg">
               <img
                 src="/assets/images/AssistedLivingSolutions.svg"
                 alt="Family and caregivers outdoors with mobility support"
