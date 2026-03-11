@@ -245,27 +245,27 @@ export default function IntakeSearch() {
           backgroundPosition: "145% 100%, center",
         }}
       >
-        {/* Single white card: image left, form right (like reference design) */}
+        {/* Single white card: image left (fixed-height column), form right */}
         <div
-          className="w-full max-w-5xl rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden shadow-lg flex flex-col lg:flex-row min-h-[32rem] lg:min-h-[36rem]"
+          className="w-full max-w-5xl rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden shadow-lg flex flex-col lg:flex-row min-h-[32rem] lg:min-h-0 lg:items-stretch"
           style={{
             boxShadow: "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
           }}
         >
-          {/* Left: image inside card (youngPeople on parent's age step, else search_img) */}
-          <div className="hidden lg:block lg:w-[42%] xl:w-[40%] shrink-0 overflow-hidden rounded-l-2xl">
+          {/* Left: image in separate fixed-height div so form content changes don't move the picture */}
+          <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 lg:h-[36rem] overflow-hidden rounded-l-2xl">
             <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
               <img
                 src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
                 alt=""
-                className="h-full w-full object-cover object-center min-h-[28rem]"
+                className="h-full w-full object-cover object-center"
                 aria-hidden
               />
             </TiltCard>
           </div>
 
-          {/* Right: form content */}
-          <div className="flex-1 flex flex-col lg:min-w-0 ">
+          {/* Right: form content (can grow independently) */}
+          <div className="flex-1 flex flex-col lg:min-w-0 min-h-0">
         <Progress value={progressPercent} className="h-1.5 w-full bg-[#e2e8f0] [&>div]:!bg-[#0ea5e9]" />
 
             <CardShell
@@ -345,10 +345,10 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
   if (step === 1) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center w-full">
           Who is in need of a{" "}
-          <span
-          className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent  pr-3"
           style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
         >
           senior care?
@@ -665,7 +665,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-[#334155] font-bold">Monthly Budget Range</Label>
+              <Label className="text-[#334155] font-bold">How far are you willing to travel?  </Label>
               <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} - {formatBudget(budgetMax)}</span>
             </div>
             <BudgetRangeSlider

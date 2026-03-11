@@ -19,91 +19,110 @@ const FacilityCard = ({
     "24/7 medical staff on-site",
   ],
   imageSrc = DEFAULT_IMAGE,
+  compact = false,
 }) => {
   return (
     <div
-      className="flex flex-col sm:flex-row max-w-[820px] overflow-hidden rounded-2xl bg-white"
+      className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "flex-col" : "flex-col sm:flex-row"}`}
       style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
     >
-      {/* Image Section - ~1/3 width on desktop */}
-      <div className="relative sm:w-[33.333%] w-full min-h-[200px] sm:min-h-[220px] flex-shrink-0">
+      {/* Image Section - compact: always on top ~45–50%; listing: side-by-side on sm+ */}
+      <div className={`relative w-full flex-shrink-0 ${compact ? "aspect-[4/3] min-h-[180px]" : "sm:w-[33.333%] min-h-[180px] min-[400px]:min-h-[200px] sm:min-h-[220px]"}`}>
         <img src={imageSrc} alt={name} className="h-full w-full object-cover" />
         {/* Match Badge - dark semi-transparent oval */}
-        <div className="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
-          <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+        <div className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 text-white backdrop-blur-sm font-bold ${compact ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-xs"}`}>
+          <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" />
           {matchPercent}% Personalized Match
         </div>
         {/* Heart - white semi-transparent with thin border */}
         <button
           type="button"
-          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-white/70 backdrop-blur-sm hover:bg-white/90 transition-colors"
+          className={`absolute right-3 top-3 flex items-center justify-center rounded-full border border-white/60 bg-white/70 backdrop-blur-sm hover:bg-white/90 transition-colors ${compact ? "h-7 w-7" : "h-9 w-9"}`}
           aria-label="Save to favorites"
         >
-          <Heart className="h-4 w-4 text-[#132329] stroke-[2]" />
+          <Heart className={`text-[#132329] stroke-[2] ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
         </button>
-        {/* Distance - dark semi-transparent oval */}
-        <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-white backdrop-blur-sm">
-          <MapPin className="h-3 w-3" />
+        {/* Distance - light backdrop blur + opacity, no border */}
+        <div
+          className={`absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full font-bold uppercase tracking-wide text-white ${compact ? "px-2.5 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]"}`}
+          style={{
+            backdropFilter: "blur(1px)",
+            WebkitBackdropFilter: "blur(2px)",
+            backgroundColor: "transparent",
+            textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+          }}
+        >
+          <MapPin className={`text-[#00CFF4] shrink-0 ${compact ? "h-2.5 w-2.5" : "h-3 w-3"}`} strokeWidth={2} />
           {distance}
         </div>
       </div>
 
       {/* Content Section - ~2/3 width */}
-      <div className="flex flex-1 flex-col justify-between px-6 py-5 bg-white">
-        {/* Top row */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-bold tracking-widest text-[#155DFC] uppercase">
+      <div className={`flex flex-1 flex-col justify-between bg-white min-w-0 ${compact ? "px-3 py-2.5 sm:px-4 sm:py-3" : "px-4 py-4 sm:px-6 sm:py-5"}`}>
+        {/* Top row - stacks on small screens */}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+          <div className="min-w-0">
+            <p className={`font-bold tracking-widest text-[#155DFC] uppercase truncate max-w-full ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
               {category}
             </p>
-            <h3 className="mt-1 text-xl font-bold text-[#132329]">{name}</h3>
-            <div className="mt-1.5 flex items-center gap-2 text-sm">
-              <div className="flex items-center gap-1.5 rounded-full border border-[#E2E8F0] bg-[#FEFCE8]/55 px-2.5 py-1">
-                <Star className="h-4 w-4 fill-[#FBBF24] text-[#FBBF24]" />
+            <h3 className={`mt-0.5 font-bold text-[#132329] break-words ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"}`}>{name}</h3>
+            <div className={`flex flex-wrap items-center gap-1.5 ${compact ? "mt-1 text-[10px] sm:text-xs" : "mt-1.5 gap-2 text-xs sm:text-sm"}`}>
+              <div className="flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-[#FEFCE8]/55 px-2 py-0.5">
+                <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
                 <span className="font-semibold text-[#132329]">{rating}</span>
               </div>
               <span className="text-[#64748b]">{reviewCount} family reviews</span>
             </div>
           </div>
           {/* Monthly Investment - light grey box */}
-          <div className="flex-shrink-0 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-2.5 text-right">
+          <div className={`flex-shrink-0 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-left sm:text-right w-fit sm:w-auto ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}>
             <p className="text-[10px] font-bold tracking-wider text-[#64748b] uppercase">
               MONTHLY INVESTMENT
             </p>
-            <p className="mt-0.5 text-base font-bold text-[#132329]">
+            <p className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}>
               {priceRange}
-              <span className="text-sm font-normal text-[#64748b]"> /mo</span>
+              <span className={`font-normal text-[#64748b] ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}> /mo</span>
             </p>
           </div>
         </div>
 
         {/* Features */}
-        <div className="mt-4">
-          <p className="text-[11px] font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-[#155DFC]" />
+        <div
+          className={`overflow-hidden ${compact ? "mt-2 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5" : "mt-3 sm:mt-4 rounded-2xl sm:rounded-3xl px-3 py-2.5 sm:px-4 sm:py-3"}`}
+          style={{
+            background: "#F8FAFC80",
+            borderRadius: "16px",
+          }}
+        >
+          <p className={`font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5 ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
+            <Sparkles className={`text-[#155DFC] shrink-0 ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} />
             WHY THIS FITS
           </p>
-          <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1.5">
+          <div className={`grid gap-y-1 ${compact ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3" : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"}`}>
             {features.map((feature, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm text-[#132329]">
-                <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-[#00CFF4]" />
-                <span>{feature}</span>
+              <div key={i} className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"}`}>
+                <span className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
+                  <CheckCircle2 className={`shrink-0 text-[#155DFC] ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} strokeWidth={2} />
+                </span>
+                <span className="break-words">{feature}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Buttons */}
-        <div className="mt-5 flex gap-3">
+        {/* Buttons - full width on mobile, flex on larger */}
+        <div className={`flex flex-col sm:flex-row flex-wrap ${compact ? "mt-2 gap-2 sm:gap-3" : "mt-4 sm:mt-5 gap-3 sm:gap-4"}`}>
           <Link
             to="/contact"
-            className="flex items-center gap-2 rounded-xl bg-[#0F172A] px-8 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1e293b]"
+            className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+            style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
           >
-            Explore <ArrowRight className="h-4 w-4" />
+            Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
           </Link>
           <button
             type="button"
-            className="rounded-xl border border-[#E2E8F0] bg-white px-8 py-3 text-sm font-semibold text-[#132329] transition-colors hover:bg-[#F8FAFC]"
+            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+            style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
           >
             Request a Tour
           </button>

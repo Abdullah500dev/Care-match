@@ -27,8 +27,8 @@ const FiltersSidebar = () => {
   const [budgetMax, setBudgetMax] = useState(4500);
 
   return (
-    <aside className="w-full flex flex-col gap-5">
-      <div className="rounded-xl border border-[#F7F4EF] bg-white p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
+    <aside className="w-full flex flex-col gap-4 sm:gap-5 min-w-0">
+      <div className="rounded-xl border border-[#F7F4EF] bg-white p-3 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
         <h3 className="font-semibold text-sm text-[#364153] mb-3">Filters</h3>
         <div className="relative mb-4">
           <Input
@@ -102,7 +102,7 @@ const FiltersSidebar = () => {
         <div className="my-4 border-t border-[#E2E8F0]" />
 
         <h3 className="font-semibold text-sm text-[#364153] mb-3">Must-Have Amenities</h3>
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
           {amenities.map((item) => (
             <label
               key={item}
@@ -121,7 +121,7 @@ const FiltersSidebar = () => {
         </button>
       </div>
 
-      <div className="rounded-xl p-4 bg-white border border-[#F7F4EF] font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
+      <div className="rounded-xl p-3 sm:p-4 bg-white border border-[#F7F4EF] font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
           <div className="flex items-start gap-3 mb-3">
             <div
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"

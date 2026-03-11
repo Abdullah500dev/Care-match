@@ -37,7 +37,7 @@ export default function Footer() {
                 className="h-9 w-auto object-contain sm:h-10"
                 style={{ color: ACCENT }}
               />
-              <span className="text-lg font-bold text-white">CareMatch AI</span>
+             
             </Link>
             <p
               className={`mt-3 max-w-sm text-sm leading-relaxed sm:mt-4 w-[65%] sm:text-base ${TEXT_MUTED}`}
