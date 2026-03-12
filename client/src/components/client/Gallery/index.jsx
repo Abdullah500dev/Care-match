@@ -7,36 +7,40 @@ const DURATION_MS = 550;
 const statCards = [
   {
     bg: "bg-[#00CFF4]",
-    // tickIcon: "/assets/images/tick1.svg", // checkbox commented out
     value: "+15,000",
     title: "Partner Communities",
     description:
       "Access verified assisted living, memory care, and skilled nursing communities across the nation for your loved one.",
+    imageSrc: "/assets/images/search_img.svg",
+    imageAlt: "Search for care",
   },
   {
     bg: "bg-[#1D2837]",
-    // tickIcon: "/assets/images/tick2.svg", // checkbox commented out
     value: "98%",
     title: "Client Satisfaction",
     description:
       "Families trust CareMatch to find the right fit. Our personalized matching leads to better outcomes and peace of mind.",
+    imageSrc: "/assets/images/oldMan.svg",
+    imageAlt: "Young people",
   },
   {
     bg: "bg-[#1D2837]",
-    // tickIcon: "/assets/images/tick2.svg", // checkbox commented out
     value: "50+ Years",
     title: "Combined Experience",
     description:
       "Our advisors bring decades of senior care expertise to guide you through options, costs, and community fit.",
+    imageSrc: "/assets/images/greetingPeople.svg",
+    imageAlt: "Greeting people",
   },
   {
     bg: "",
     backgroundStyle: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)",
-    // tickIcon: "/assets/images/tick3.svg", // checkbox commented out
     value: null,
     title: "24/7 Service Availability",
     description:
       "Get answers and support anytime. We're here around the clock when you're researching care or need to talk.",
+    imageSrc: "/assets/images/wheelChair.svg",
+    imageAlt: "Search for care",
   },
 ];
 
@@ -51,26 +55,48 @@ const imageCards = [
   },
 ];
 
-function StatCard({ bg, backgroundStyle, tickIcon, value, title, description }) {
+/** Flip card: image on front, text on back; 180deg Y flip on hover */
+function FlipStatCard({ bg, backgroundStyle, value, title, description, imageSrc, imageAlt }) {
   return (
-    <TiltCard className="h-full" innerClassName={`${bg || ""} flex flex-col rounded-xl shadow-md min-h-[150px] justify-between p-3 sm:min-h-[165px] sm:rounded-2xl sm:p-4 md:p-4 md:min-h-[180px] lg:min-h-0 lg:h-full lg:p-4 min-[1280px]:p-5 min-[1536px]:p-6`} innerStyle={backgroundStyle ? { background: backgroundStyle } : undefined}>
-      {/* Checkbox/tick icon commented out — was in top-left of each stat card
-      <div className="flex items-start">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white sm:h-11 sm:w-11 md:h-12 md:w-12 lg:h-[52px] lg:w-[52px] min-[1280px]:h-14 min-[1280px]:w-14 min-[1536px]:h-16 min-[1536px]:w-16">
-          <img src={tickIcon} alt="" className="h-5 w-5 object-contain sm:h-6 sm:w-6 md:h-6 md:w-6 lg:h-10 lg:w-10" />
-        </span>
+    <div
+      className="group h-full min-h-[150px] sm:min-h-[165px] md:min-h-[180px] lg:min-h-0 cursor-pointer"
+      style={{ perspective: "1000px" }}
+    >
+      <div
+        className="relative h-full w-full transition-transform duration-500 ease-in-out group-hover:[transform:rotateY(180deg)]"
+        style={{ transformStyle: "preserve-3d" }}
+      >
+        {/* Front: image */}
+        <div
+          className="absolute inset-0 overflow-hidden rounded-xl shadow-md sm:rounded-2xl [backface-visibility:hidden]"
+          style={{ transform: "rotateY(0deg)" }}
+        >
+          <img
+            src={imageSrc}
+            alt={imageAlt}
+            className="h-full w-full object-cover"
+          />
+        </div>
+        {/* Back: text content */}
+        <div
+          className={`absolute inset-0 flex flex-col justify-between rounded-xl shadow-md p-3 sm:rounded-2xl sm:p-4 md:p-4 lg:p-4 min-[1280px]:p-5 min-[1536px]:p-6 [backface-visibility:hidden] ${bg || ""}`}
+          style={{
+            transform: "rotateY(180deg)",
+            ...(backgroundStyle ? { background: backgroundStyle } : {}),
+          }}
+        >
+          <div className="flex-1 min-w-0">
+            {value && (
+              <p className="font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">
+                {value}
+              </p>
+            )}
+            <h3 className="mt-1 font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">{title}</h3>
+            <p className="mt-1.5 text-sm font-normal text-white/90 sm:mt-2 sm:text-xs md:text-sm min-[1280px]:text-[16px] min-[1536px]:text-[18px] sm:mr-4">{description}</p>
+          </div>
+        </div>
       </div>
-      */}
-      <div className="flex-1 min-w-0">
-        {value && (
-          <p className="font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">
-            {value}
-          </p>
-        )}
-        <h3 className="mt-1 font-bold text-white text-sm sm:text-base md:text-lg min-[1280px]:text-2xl min-[1536px]:text-[28px]">{title}</h3>
-        <p className="mt-1.5 text-sm font-normal text-white/90 sm:mt-2 sm:text-xs md:text-sm min-[1280px]:text-[16px] min-[1536px]:text-[18px] sm:mr-4">{description}</p>
-      </div>
-    </TiltCard>
+    </div>
   );
 }
 
@@ -124,14 +150,14 @@ export default function Gallery() {
             className={`lg:row-start-1 lg:col-start-1 lg:min-h-0 lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
             style={getStyle(0)}
           >
-            <StatCard {...statCards[0]} />
+            <FlipStatCard {...statCards[0]} />
           </div>
           {/* Left col: 98% (row 2) */}
           <div
             className={`lg:row-start-2 lg:col-start-1 lg:min-h-0 lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
             style={getStyle(1)}
           >
-            <StatCard {...statCards[1]} />
+            <FlipStatCard {...statCards[1]} />
           </div>
           {/* Column-full image */}
           <div
@@ -151,7 +177,7 @@ export default function Gallery() {
             className={`lg:row-start-1 lg:col-start-3 lg:min-h-0 lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
             style={getStyle(3)}
           >
-            <StatCard {...statCards[2]} />
+            <FlipStatCard {...statCards[2]} />
           </div>
           {/* Right top: square image */}
           <div
@@ -165,7 +191,7 @@ export default function Gallery() {
             className={`md:col-span-2 lg:row-start-2 lg:col-span-2 lg:col-start-3 lg:min-h-0 lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
             style={getStyle(5)}
           >
-            <StatCard {...statCards[3]} />
+            <FlipStatCard {...statCards[3]} />
           </div>
         </div>
       </div>
