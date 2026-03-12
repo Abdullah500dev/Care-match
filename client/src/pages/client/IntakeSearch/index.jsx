@@ -348,7 +348,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center w-full">
           Who is in need of a{" "}
             <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent  pr-3"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent  pr-4"
           style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
         >
           senior care?
@@ -451,7 +451,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
           By when do you need{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             care assist?
@@ -498,10 +498,10 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
   if (step === 4) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
           Where&apos;s your loved one{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             living now?
@@ -547,10 +547,10 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
   if (step === 5) {
     return (
       <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
           How is your loved one&apos;s{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             mobility?
@@ -600,7 +600,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
           Tell us more about your{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             loved one!
@@ -661,6 +661,18 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
               value={formData.location}
               onChange={(e) => update("location", e.target.value)}
               className="rounded-xl border-[#e2e8f0] h-12 placeholder:italic"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="maxDistance" className="text-[#334155] font-bold">Max distance (miles)</Label>
+            <Input
+              id="maxDistance"
+              type="text"
+              inputMode="numeric"
+              placeholder="e.g. 25"
+              value={formData.maxMiles}
+              onChange={(e) => update("maxMiles", e.target.value)}
+              className="rounded-xl border-[#e2e8f0] h-12 "
             />
           </div>
           <div className="space-y-2">
