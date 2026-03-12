@@ -55,17 +55,49 @@ const imageCards = [
   },
 ];
 
-/** Flip card: image on front, text on back; 180deg Y flip on hover */
+const AUTO_FLIP_MS = 5000;
+const MAX_INITIAL_DELAY_MS = 5000;
+
+/** Random delay 0–MAX_INITIAL_DELAY_MS so cards flip at staggered times */
+function getRandomInitialDelayMs() {
+  return Math.random() * MAX_INITIAL_DELAY_MS;
+}
+
+/** Flip card: image on front, text on back; 180deg Y flip on hover or after random delay then every 5s */
 function FlipStatCard({ bg, backgroundStyle, value, title, description, imageSrc, imageAlt }) {
+  const [initialDelayMs] = useState(getRandomInitialDelayMs);
+  const [timerFlipped, setTimerFlipped] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    let intervalId = null;
+    const timeoutId = setTimeout(() => {
+      setTimerFlipped(true);
+      intervalId = setInterval(() => setTimerFlipped((prev) => !prev), AUTO_FLIP_MS);
+    }, initialDelayMs);
+    return () => {
+      clearTimeout(timeoutId);
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [initialDelayMs]);
+
+  const showBack = isHovered || timerFlipped;
+
   return (
     <div
-      className="group h-full min-h-[150px] sm:min-h-[165px] md:min-h-[180px] lg:min-h-0 cursor-pointer"
+      className="h-full min-h-[150px] sm:min-h-[165px] md:min-h-[180px] lg:min-h-0 cursor-pointer"
       style={{ perspective: "1000px" }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <div
-        className="relative h-full w-full transition-transform duration-500 ease-in-out group-hover:[transform:rotateY(180deg)]"
-        style={{ transformStyle: "preserve-3d" }}
-      >
+    <div
+  className="relative h-full w-full transition-transform"
+  style={{
+    transformStyle: "preserve-3d",
+    transform: showBack ? "rotateY(180deg)" : "rotateY(0deg)",
+    transition: "transform 2s cubic-bezier(0.77, 0, 0.175, 1)", // slow & smooth
+  }}
+>
         {/* Front: image */}
         <div
           className="absolute inset-0 overflow-hidden rounded-xl shadow-md sm:rounded-2xl [backface-visibility:hidden]"
