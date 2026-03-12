@@ -111,7 +111,7 @@ export default function Banner() {
             marginTop: "clamp(0.75rem, 1.25vw, 1.25rem)",
           }}
         >
-          <span className="block sm:inline">Let carrie help you discover verified senior living communities</span>
+          <span className="block sm:inline">Let Carrie help you discover verified senior living communities</span>
           <br className="hidden sm:block" />
           <span className="block sm:inline">tailored to your loved one's needs. 100% free, personalized service.</span>
         </p>

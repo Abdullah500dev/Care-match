@@ -40,9 +40,18 @@ export default function Header() {
     <nav className="border-b border-gray-100 bg-gray-50/95 backdrop-blur-md">
       <div className="container mx-auto px-6 sm:px-8 md:px-10 lg:max-w-6xl lg:px-12 min-[1280px]:max-w-[1400px] min-[1280px]:px-16 min-[1536px]:max-w-[1600px] min-[1536px]:px-20 min-[1920px]:max-w-[1800px] min-[1920px]:px-24">
         <div className="flex h-16 items-center justify-between sm:h-[72px] md:h-20">
-          {/* Logo (left) */}
+          {/* Logo (left) – always scroll to top of home when clicked */}
           <div className="flex items-center gap-6 sm:gap-8 lg:gap-10 min-[1280px]:gap-8 min-[1536px]:gap-10">
-            <Link to="/" className="flex shrink-0 items-center gap-2">
+            <Link
+              to="/"
+              className="flex shrink-0 items-center gap-2"
+              onClick={(e) => {
+                if (location.pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+            >
               <img
                 src="/assets/images/favicon/favicon.svg"
                 alt="CareMatch AI"
