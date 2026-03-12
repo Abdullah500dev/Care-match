@@ -253,7 +253,7 @@ export default function IntakeSearch() {
           }}
         >
           {/* Left: image in separate fixed-height div so form content changes don't move the picture */}
-          <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 lg:h-[36rem] overflow-hidden rounded-l-2xl">
+          <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 overflow-hidden rounded-l-2xl">
             <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
               <img
                 src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
