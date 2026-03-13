@@ -10,10 +10,15 @@ const FACILITIES = [
   { matchPercent: 95, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 92, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 86, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 84, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 82, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 80, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 78, imageSrc: "/assets/images/imgForFindCare.svg" },
 ];
 
 const CareExplorer = () => {
   const [view, setView] = useState("listing");
+  const [layout, setLayout] = useState("single");
 
   return (
     <>
@@ -26,7 +31,7 @@ const CareExplorer = () => {
           backgroundPosition: "145% 100%, center",
         }}
       >
-        <CareExplorerBar view={view} onViewChange={setView} />
+        <CareExplorerBar view={view} onViewChange={setView} layout={layout} onLayoutChange={setLayout} />
 
         {/* How we matched - bordered card; responsive */}
         <div className="w-full max-w-7xl mx-auto px-3 pt-4 pb-2 sm:px-4 sm:pt-5 md:px-6">
@@ -58,9 +63,24 @@ const CareExplorer = () => {
           </div>
 
           {view === "listing" ? (
-            <div className="flex-1 min-w-0 w-full max-w-5xl space-y-4">
-              {FACILITIES.slice(0, 3).map((f) => (
-                <FacilityCard key={f.matchPercent} matchPercent={f.matchPercent} imageSrc={f.imageSrc} />
+            <div
+              className={`flex-1 min-w-0 w-full max-w-5xl ${
+                layout === "single"
+                  ? "space-y-4"
+                  : layout === "two"
+                    ? "grid grid-cols-1 md:grid-cols-2 gap-4"
+                    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+              }`}
+            >
+              {FACILITIES.map((f) => (
+                <div key={f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
+                  <FacilityCard
+                    matchPercent={f.matchPercent}
+                    imageSrc={f.imageSrc}
+                    compact={layout !== "single"}
+                    gridView={layout === "grid"}
+                  />
+                </div>
               ))}
             </div>
           ) : (

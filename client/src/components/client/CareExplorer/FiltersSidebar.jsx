@@ -23,6 +23,7 @@ const amenities = [
 
 const FiltersSidebar = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [maxMiles, setMaxMiles] = useState("");
   const [budgetMin, setBudgetMin] = useState(1000);
   const [budgetMax, setBudgetMax] = useState(4500);
 
@@ -47,6 +48,16 @@ const FiltersSidebar = () => {
             </button>
           )}
         </div>
+        <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
+        <Input
+          id="maxDistance"
+          type="text"
+          inputMode="numeric"
+          placeholder="Max distance (miles)"
+          value={maxMiles}
+          onChange={(e) => setMaxMiles(e.target.value)}
+          className="h-10 rounded-lg border-[#E2E8F0] mb-4"
+        />
         <p className="text-xs text-[#20252c] font-bold mb-2">Monthly Budget</p>
         <BudgetRangeSlider
           budgetMin={budgetMin}
@@ -115,6 +126,12 @@ const FiltersSidebar = () => {
         </div>
         <button
           type="button"
+          onClick={() => {
+            setSearchQuery("");
+            setMaxMiles("");
+            setBudgetMin(1000);
+            setBudgetMax(4500);
+          }}
           className="mt-5 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
         >
           Reset All Filters

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef } from "react";
+import { Suspense, lazy, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ChevronUp } from "lucide-react";
@@ -46,11 +46,94 @@ import TopBar from "../components/client/TopBar";
 import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 
+const SCROLL_SHOW_THRESHOLD = 80;
+
 const Layout = ({ children }) => {
   const location = useLocation();
   const isDashboardRoute = location.pathname.startsWith("/dashboard");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
+  const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
+  const [galleryInView, setGalleryInView] = useState(false);
+  const [simpleProcessInView, setSimpleProcessInView] = useState(false);
+  const [assistedLivingInView, setAssistedLivingInView] = useState(false);
+  const [whyCareMatchInView, setWhyCareMatchInView] = useState(false);
+  const [successStoriesInView, setSuccessStoriesInView] = useState(false);
+  const [startYourSearchInView, setStartYourSearchInView] = useState(false);
+
+  // Show button when user has scrolled down, or when on home and key sections are in view
+  const showScrollToTop =
+    scrollPastThreshold ||
+    (isHomePage &&
+      (galleryInView ||
+        simpleProcessInView ||
+        assistedLivingInView ||
+        whyCareMatchInView ||
+        successStoriesInView ||
+        startYourSearchInView));
+
+  useEffect(() => {
+    if (isDashboardRoute) return;
+    let ticking = false;
+    const checkScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y =
+          typeof window.scrollY !== "undefined"
+            ? window.scrollY
+            : document.documentElement.scrollTop ?? document.body.scrollTop ?? 0;
+        setScrollPastThreshold(y > SCROLL_SHOW_THRESHOLD);
+        ticking = false;
+      });
+    };
+    checkScroll();
+    const initialCheck = setTimeout(checkScroll, 100);
+    window.addEventListener("scroll", checkScroll, { passive: true });
+    window.addEventListener("resize", checkScroll, { passive: true });
+    return () => {
+      clearTimeout(initialCheck);
+      window.removeEventListener("scroll", checkScroll);
+      window.removeEventListener("resize", checkScroll);
+    };
+  }, [isDashboardRoute]);
+
+  // When on home, show button when key sections are in view
+  useEffect(() => {
+    if (!isHomePage || isDashboardRoute) return;
+    const galleryEl = document.getElementById("gallery-cards-section");
+    const simpleProcessEl = document.getElementById("simple-process-section");
+    const assistedLivingEl = document.getElementById("assisted-living-section");
+    const whyCareMatchEl = document.getElementById("why-care-match-section");
+    const successStoriesEl = document.getElementById("success-stories-section");
+    const startYourSearchEl = document.getElementById("start-your-search-section");
+    const hasAny =
+      galleryEl || simpleProcessEl || assistedLivingEl || whyCareMatchEl || successStoriesEl || startYourSearchEl;
+    if (!hasAny) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.target.id === "gallery-cards-section") setGalleryInView(entry.isIntersecting);
+          if (entry.target.id === "simple-process-section") setSimpleProcessInView(entry.isIntersecting);
+          if (entry.target.id === "assisted-living-section") setAssistedLivingInView(entry.isIntersecting);
+          if (entry.target.id === "why-care-match-section") setWhyCareMatchInView(entry.isIntersecting);
+          if (entry.target.id === "success-stories-section") setSuccessStoriesInView(entry.isIntersecting);
+          if (entry.target.id === "start-your-search-section") setStartYourSearchInView(entry.isIntersecting);
+        });
+      },
+      { threshold: 0.1, rootMargin: "0px" }
+    );
+
+    if (galleryEl) observer.observe(galleryEl);
+    if (simpleProcessEl) observer.observe(simpleProcessEl);
+    if (assistedLivingEl) observer.observe(assistedLivingEl);
+    if (whyCareMatchEl) observer.observe(whyCareMatchEl);
+    if (successStoriesEl) observer.observe(successStoriesEl);
+    if (startYourSearchEl) observer.observe(startYourSearchEl);
+
+    return () => observer.disconnect();
+  }, [isHomePage, isDashboardRoute]);
 
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -69,8 +152,9 @@ const Layout = ({ children }) => {
       </div>
       {children}
       {!isDashboardRoute && <Footer />}
-      {/* Scroll to top - home page only, rendered via portal to body */}
-      {isHomePage &&
+      {/* Scroll to top - all client pages, visible after scrolling down */}
+      {!isDashboardRoute &&
+        showScrollToTop &&
         createPortal(
           <button
             type="button"

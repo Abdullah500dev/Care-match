@@ -1,7 +1,7 @@
 import React from "react";
-import { List, Map, Send, ChevronDown, Heart } from "lucide-react";
+import { List, Map, Send, Heart, LayoutList, Columns2, LayoutGrid } from "lucide-react";
 
-const CareExplorerBar = ({ view = "listing", onViewChange }) => {
+const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", onLayoutChange }) => {
   const isListing = view === "listing";
   const isMapView = view === "map";
 
@@ -41,6 +41,34 @@ const CareExplorerBar = ({ view = "listing", onViewChange }) => {
               <Map className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="whitespace-nowrap">Map View</span>
             </button>
           </div>
+          {isListing && (
+            <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#E2E8F0] p-0.5 sm:p-1">
+              <button
+                type="button"
+                onClick={() => onLayoutChange?.("single")}
+                title="Single column"
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "single" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+              >
+                <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onLayoutChange?.("two")}
+                title="Two columns"
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "two" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+              >
+                <Columns2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onLayoutChange?.("grid")}
+                title="Grid (4 columns)"
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "grid" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              </button>
+            </div>
+          )}
           <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#F1F5F9] p-0.5 sm:p-1">
             <button
               type="button"

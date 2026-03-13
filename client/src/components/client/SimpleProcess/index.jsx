@@ -77,6 +77,7 @@ export default function SimpleProcess() {
 
   return (
     <section
+      id="simple-process-section"
       ref={sectionRef}
       className="relative w-full overflow-hidden py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28"
       style={{ backgroundColor: "#142A54" }}

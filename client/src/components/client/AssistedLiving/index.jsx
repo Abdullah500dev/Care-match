@@ -27,6 +27,7 @@ const FEATURE_BUTTONS = [
 export default function AssistedLiving() {
   return (
     <section
+      id="assisted-living-section"
       className="relative w-full overflow-hidden py-10 min-[574px]:pt-20 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28"
       style={{
         background:
