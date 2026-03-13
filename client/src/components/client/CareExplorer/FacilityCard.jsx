@@ -94,31 +94,51 @@ const FacilityCard = ({
           </div>
         </div>
 
-        {/* Features */}
-        <div
-          className={`overflow-hidden ${compact ? "mt-2 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5" : "mt-3 sm:mt-4 rounded-2xl sm:rounded-3xl px-3 py-2.5 sm:px-4 sm:py-3"}`}
-          style={{
-            background: "#F8FAFC80",
-            borderRadius: "16px",
-          }}
-        >
-          <p className={`font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5 ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
-            <Sparkles className={`text-[#155DFC] shrink-0 ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} />
-            WHY THIS FITS
-          </p>
+        {/* Features – hide in grid view so compact cards match the simpler design */}
+        {!gridView && (
           <div
-            className={`grid gap-y-1 ${gridView ? "mt-1.5 grid-cols-1" : compact ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3" : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"}`}
+            className={`overflow-hidden ${compact ? "mt-2 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5" : "mt-3 sm:mt-4 rounded-2xl sm:rounded-3xl px-3 py-2.5 sm:px-4 sm:py-3"}`}
+            style={{
+              background: "#F8FAFC80",
+              borderRadius: "16px",
+            }}
           >
-            {features.map((feature, i) => (
-              <div key={i} className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"}`}>
-                <span className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
-                  <CheckCircle2 className={`shrink-0 text-[#155DFC] ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} strokeWidth={2} />
-                </span>
-                <span className={gridView ? "truncate" : "break-words"}>{feature}</span>
-              </div>
-            ))}
+            <p className={`font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5 ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
+              <Sparkles className={`text-[#155DFC] shrink-0 ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} />
+              WHY THIS FITS
+            </p>
+            <div
+              className={`grid gap-y-1 ${
+                compact
+                  ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3"
+                  : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"
+              }`}
+            >
+              {features.map((feature, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${
+                    compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"
+                  }`}
+                >
+                  <span
+                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${
+                      compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
+                    }`}
+                  >
+                    <CheckCircle2
+                      className={`shrink-0 text-[#155DFC] ${
+                        compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
+                      }`}
+                      strokeWidth={2}
+                    />
+                  </span>
+                  <span className="break-words">{feature}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Buttons - full width on mobile, flex on larger */}
         <div className={`flex flex-col sm:flex-row flex-wrap ${compact ? "mt-2 gap-2 sm:gap-3" : "mt-4 sm:mt-5 gap-3 sm:gap-4"}`}>
