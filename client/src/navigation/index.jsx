@@ -14,6 +14,8 @@ import Contact from "../pages/client/Contact";
 import Profile from "../pages/client/Profile";
 import IntakeSearch from "../pages/client/IntakeSearch";
 import CareExplorer from "../pages/client/CareExplorer";
+import Privacy from "../pages/client/Privacy";
+import Terms from "../pages/client/Terms";
 import NotFound from "../pages/common/NotFound";
 
 // Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
@@ -137,6 +139,7 @@ const Layout = ({ children }) => {
 
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
     document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
     document.body.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -145,7 +148,7 @@ const Layout = ({ children }) => {
 
   return (
     <>
-      <div ref={topAnchorRef} aria-hidden="true" />
+      <div id="page-top" ref={topAnchorRef} aria-hidden="true" />
       <div className="sticky top-0 z-50 w-full">
         <TopBar />
         {!isDashboardRoute && <Header />}
@@ -184,6 +187,8 @@ export default function Navigation() {
               <Route path="/profile" element={<Profile />} />
               <Route path="/find-care" element={<IntakeSearch />} />
               <Route path="/care-explorer" element={<CareExplorer />} />
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />

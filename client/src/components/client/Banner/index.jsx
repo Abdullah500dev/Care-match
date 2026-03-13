@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import SearchBar from "../SearchBar";
 
-const BANNER_VIDEO = "/assets/images/bgVidAnnimationHeroSec.mp4";
+const BANNER_VIDEO = "/assets/images/newHeroVidTesting.mp4";
 
 const BANNER_HEADING = "Meet Carrie – \nYour senior healthcare AI advisor";
 const TYPE_SPEED_MS = 70;
