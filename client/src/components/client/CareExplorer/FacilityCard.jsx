@@ -20,10 +20,11 @@ const FacilityCard = ({
   ],
   imageSrc = DEFAULT_IMAGE,
   compact = false,
+  gridView = false,
 }) => {
   return (
     <div
-      className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "flex-col" : "flex-col sm:flex-row"}`}
+      className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "min-w-0 flex-col" : "flex-col sm:flex-row"}`}
       style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
     >
       {/* Image Section - compact: always on top ~45–50%; listing: side-by-side on sm+ */}
@@ -59,23 +60,30 @@ const FacilityCard = ({
 
       {/* Content Section - ~2/3 width */}
       <div className={`flex flex-1 flex-col justify-between bg-white min-w-0 ${compact ? "px-3 py-2.5 sm:px-4 sm:py-3" : "px-4 py-4 sm:px-6 sm:py-5"}`}>
-        {/* Top row - stacks on small screens */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+        {/* Top row - grid view: always stack so name gets full width; otherwise compact/two use default */}
+        <div className={`flex gap-2 sm:gap-3 ${gridView ? "flex-col" : "flex-col sm:flex-row sm:items-start sm:justify-between"}`}>
           <div className="min-w-0">
             <p className={`font-bold tracking-widest text-[#155DFC] uppercase truncate max-w-full ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
               {category}
             </p>
-            <h3 className={`mt-0.5 font-bold text-[#132329] break-words ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"}`}>{name}</h3>
+            <h3
+              className={`mt-0.5 font-bold text-[#132329] ${gridView ? "truncate" : "break-words"} ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"}`}
+              title={name}
+            >
+              {name}
+            </h3>
             <div className={`flex flex-wrap items-center gap-1.5 ${compact ? "mt-1 text-[10px] sm:text-xs" : "mt-1.5 gap-2 text-xs sm:text-sm"}`}>
               <div className="flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-[#FEFCE8]/55 px-2 py-0.5">
                 <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
                 <span className="font-semibold text-[#132329]">{rating}</span>
               </div>
-              <span className="text-[#64748b]">{reviewCount} family reviews</span>
+              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{reviewCount} family reviews</span>
             </div>
           </div>
-          {/* Monthly Investment - light grey box */}
-          <div className={`flex-shrink-0 rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] text-left sm:text-right w-fit sm:w-auto ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}>
+          {/* Monthly Investment - grid view: full width so it doesn't steal space from name */}
+          <div
+            className={`rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] ${gridView ? "w-full shrink-0 text-left" : "flex-shrink-0 text-left sm:text-right w-fit sm:w-auto"} ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}
+          >
             <p className="text-[10px] font-bold tracking-wider text-[#64748b] uppercase">
               MONTHLY INVESTMENT
             </p>
@@ -98,13 +106,15 @@ const FacilityCard = ({
             <Sparkles className={`text-[#155DFC] shrink-0 ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} />
             WHY THIS FITS
           </p>
-          <div className={`grid gap-y-1 ${compact ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3" : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"}`}>
+          <div
+            className={`grid gap-y-1 ${gridView ? "mt-1.5 grid-cols-1" : compact ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3" : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"}`}
+          >
             {features.map((feature, i) => (
               <div key={i} className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"}`}>
                 <span className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"}`}>
                   <CheckCircle2 className={`shrink-0 text-[#155DFC] ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} strokeWidth={2} />
                 </span>
-                <span className="break-words">{feature}</span>
+                <span className={gridView ? "truncate" : "break-words"}>{feature}</span>
               </div>
             ))}
           </div>

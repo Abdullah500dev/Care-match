@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import SearchBar from "../SearchBar";
 
 const BANNER_VIDEO = "/assets/images/bgVidAnnimationHeroSec.mp4";
 
-const BANNER_HEADING = "Meet carrie – \nYour senior healthcare AI advisor";
+const BANNER_HEADING = "Meet Carrie – \nYour senior healthcare AI advisor";
 const TYPE_SPEED_MS = 70;
 const CURSOR_BLINK_MS = 530;
 
 export default function Banner() {
+  const videoRef = useRef(null);
   const [displayedLength, setDisplayedLength] = useState(0);
   const [showCursor, setShowCursor] = useState(true);
 
@@ -35,15 +36,24 @@ export default function Banner() {
 
   return (
     <section className="relative w-full min-h-[420px] overflow-hidden sm:min-h-[480px] md:min-h-[520px] lg:min-h-[560px]">
-      {/* Video background – muted, no audio, loop */}
+      {/* Video background – muted, seamless loop via onEnded to avoid pause */}
       <video
+        ref={videoRef}
         src={BANNER_VIDEO}
         autoPlay
         loop
         muted
         playsInline
+        preload="auto"
         aria-hidden
         className="pointer-events-none absolute inset-0 z-0 h-full w-full object-cover object-center"
+        onEnded={() => {
+          const el = videoRef.current;
+          if (el) {
+            el.currentTime = 0;
+            el.play();
+          }
+        }}
       />
       {/* Subtle gradient – only fades to white at very bottom so image shows through */}
       <div

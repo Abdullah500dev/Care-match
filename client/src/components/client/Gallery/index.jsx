@@ -172,6 +172,7 @@ export default function Gallery() {
 
   return (
     <section
+      id="gallery-cards-section"
       ref={sectionRef}
       className="bg-white py-8 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24"
     >

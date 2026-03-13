@@ -44,7 +44,7 @@ const TESTIMONIALS = [
 
 export default function SuccessStories() {
   return (
-    <section className="relative w-full overflow-hidden bg-white py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-20 min-[1920px]:py-24">
+    <section id="success-stories-section" className="relative w-full overflow-hidden bg-white py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-20 min-[1920px]:py-24">
       <div className="container relative z-10 mx-auto min-w-0 px-4 sm:px-6 md:px-8 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
         {/* Header */}
         <div className="mx-auto max-w-3xl text-center">

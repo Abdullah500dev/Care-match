@@ -28,6 +28,7 @@ function SparkleIcon({ className = "" }) {
 export default function StartYourSearch() {
   return (
     <section
+      id="start-your-search-section"
       className="relative w-full overflow-hidden py-10 sm:py-16 md:py-20 lg:py-24 min-[1280px]:py-28 bg-cover bg-center bg-no-repeat"
       style={{
         backgroundImage: "linear-gradient(180deg, rgba(0,207,244,0.85) 0%, rgba(0,184,220,0.9) 100%), url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
