@@ -18,6 +18,14 @@ export default function Header() {
     { label: "Contact", path: "/contact", isScroll: false },
   ];
 
+  const scrollToTop = () => {
+    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
+    document.documentElement?.scrollTo({ top: 0, behavior: "smooth" });
+    document.body?.scrollTo?.({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleNavClick = (e, item) => {
     if (item.isScroll) {
       e.preventDefault();
@@ -48,7 +56,7 @@ export default function Header() {
               onClick={(e) => {
                 if (location.pathname === "/") {
                   e.preventDefault();
-                  window.scrollTo({ top: 0, behavior: "smooth" });
+                  scrollToTop();
                 }
               }}
             >
