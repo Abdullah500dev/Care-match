@@ -48,89 +48,37 @@ import TopBar from "../components/client/TopBar";
 import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 
-const SCROLL_SHOW_THRESHOLD = 80;
-
 const Layout = ({ children }) => {
   const location = useLocation();
   const isDashboardRoute = location.pathname.startsWith("/dashboard");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
-  const [galleryInView, setGalleryInView] = useState(false);
-  const [simpleProcessInView, setSimpleProcessInView] = useState(false);
-  const [assistedLivingInView, setAssistedLivingInView] = useState(false);
-  const [whyCareMatchInView, setWhyCareMatchInView] = useState(false);
-  const [successStoriesInView, setSuccessStoriesInView] = useState(false);
-  const [startYourSearchInView, setStartYourSearchInView] = useState(false);
 
-  // Show button when top has scrolled out of view (all pages) or when on home and key sections are in view
-  const showScrollToTop =
-    !isDashboardRoute &&
-    (scrollPastThreshold ||
-      (isHomePage &&
-        (galleryInView ||
-          simpleProcessInView ||
-          assistedLivingInView ||
-          whyCareMatchInView ||
-          successStoriesInView ||
-          startYourSearchInView)));
+  // Button only when user has scrolled past the trigger (never on hero).
+  const showScrollToTop = !isDashboardRoute && scrollPastThreshold;
 
-  // Same approach as home: use Intersection Observer on #page-top for ALL client pages. When top scrolls out of view, show button.
+  // On home: trigger is below "Find the Facilities"; use bottom rootMargin so button stays hidden when trigger is just below fold.
   useEffect(() => {
     if (isDashboardRoute) return;
-    const topEl = document.getElementById("page-top");
-    if (!topEl) return;
+    const triggerId = isHomePage ? "scroll-to-top-trigger" : "page-top";
+    const el = document.getElementById(triggerId);
+    if (!el) return;
 
+    const rootMargin = isHomePage ? "0px 0px 40% 0px" : "0px";
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.target.id === "page-top") {
+          if (entry.target.id === triggerId) {
             setScrollPastThreshold(!entry.isIntersecting);
           }
         });
       },
-      { threshold: 0, rootMargin: "0px" }
+      { threshold: 0, rootMargin }
     );
-    observer.observe(topEl);
+    observer.observe(el);
     return () => observer.disconnect();
-  }, [location.pathname, isDashboardRoute]);
-
-  // When on home, also show button when key sections are in view (so it can show before scrolling)
-  useEffect(() => {
-    if (!isHomePage || isDashboardRoute) return;
-    const galleryEl = document.getElementById("gallery-cards-section");
-    const simpleProcessEl = document.getElementById("simple-process-section");
-    const assistedLivingEl = document.getElementById("assisted-living-section");
-    const whyCareMatchEl = document.getElementById("why-care-match-section");
-    const successStoriesEl = document.getElementById("success-stories-section");
-    const startYourSearchEl = document.getElementById("start-your-search-section");
-    const hasAny =
-      galleryEl || simpleProcessEl || assistedLivingEl || whyCareMatchEl || successStoriesEl || startYourSearchEl;
-    if (!hasAny) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.target.id === "gallery-cards-section") setGalleryInView(entry.isIntersecting);
-          if (entry.target.id === "simple-process-section") setSimpleProcessInView(entry.isIntersecting);
-          if (entry.target.id === "assisted-living-section") setAssistedLivingInView(entry.isIntersecting);
-          if (entry.target.id === "why-care-match-section") setWhyCareMatchInView(entry.isIntersecting);
-          if (entry.target.id === "success-stories-section") setSuccessStoriesInView(entry.isIntersecting);
-          if (entry.target.id === "start-your-search-section") setStartYourSearchInView(entry.isIntersecting);
-        });
-      },
-      { threshold: 0.1, rootMargin: "0px" }
-    );
-
-    if (galleryEl) observer.observe(galleryEl);
-    if (simpleProcessEl) observer.observe(simpleProcessEl);
-    if (assistedLivingEl) observer.observe(assistedLivingEl);
-    if (whyCareMatchEl) observer.observe(whyCareMatchEl);
-    if (successStoriesEl) observer.observe(successStoriesEl);
-    if (startYourSearchEl) observer.observe(startYourSearchEl);
-
-    return () => observer.disconnect();
-  }, [isHomePage, isDashboardRoute]);
+  }, [location.pathname, isDashboardRoute, isHomePage]);
 
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });

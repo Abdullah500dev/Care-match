@@ -58,12 +58,6 @@ export default function StartYourSearch() {
             <SparkleIcon />
             Try AI Assistant - Carrie
           </Link>
-          <Link
-            to="/care-explorer"
-            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-2 border-white bg-white/10 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-white/20 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
-          >
-            Care Explorer
-          </Link>
           <input
             type="text"
             placeholder="Enter your location"
