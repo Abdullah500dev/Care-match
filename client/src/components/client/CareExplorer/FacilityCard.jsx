@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, CheckCircle2, ArrowRight, MapPin, Sparkles } from "lucide-react";
+import { Heart, Star, ArrowRight, MapPin, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=280&fit=crop";
@@ -22,6 +22,63 @@ const FacilityCard = ({
   compact = false,
   gridView = false,
 }) => {
+  // Dedicated, simplified card for grid view (4-per-row) – matches provided design
+  if (gridView) {
+    return (
+      <div
+        className="w-full max-w-full sm:max-w-[400px] mx-auto overflow-hidden rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_4px_24px_rgba(15,23,42,0.08)]"
+      >
+        {/* Image Section */}
+        <div className="relative">
+          <img
+            src={imageSrc || DEFAULT_IMAGE}
+            alt={name}
+            className="w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] object-cover"
+          />
+          {/* Match Badge */}
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/70 text-white backdrop-blur-sm px-3 py-1.5 text-xs font-semibold">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4]" />
+            {matchPercent}% Personalized Match
+          </div>
+        </div>
+
+        {/* Content Section */}
+        <div className="px-2.5 pt-2.5 pb-2 sm:px-3 sm:pt-3 sm:pb-2">
+          <p className="mb-0.5 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: "#155DFC" }}>
+            {category}
+          </p>
+          <h3 className="mb-1.5 sm:mb-2 text-[13px] min-[400px]:text-[14px] sm:text-[15px] font-semibold tracking-tight text-[#132329]">
+            {name}
+          </h3>
+
+          <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
+            Monthly Investment
+          </p>
+          <p className="text-[13px] sm:text-sm font-semibold text-[#132329] tabular-nums">
+            {priceRange}
+          </p>
+
+          {/* Buttons */}
+          <div className="mt-2 sm:mt-2.5 flex gap-2 sm:gap-2.5">
+            <Link
+              to="/contact"
+              className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
+            >
+              Explore
+            </Link>
+            <button
+              type="button"
+              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
+            >
+              Request a Tour
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default full card (listing + two-column)
   return (
     <div
       className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "min-w-0 flex-col" : "flex-col sm:flex-row"}`}
@@ -63,7 +120,7 @@ const FacilityCard = ({
         {/* Top row - grid view: always stack so name gets full width; otherwise compact/two use default */}
         <div className={`flex gap-2 sm:gap-3 ${gridView ? "flex-col" : "flex-col sm:flex-row sm:items-start sm:justify-between"}`}>
           <div className="min-w-0">
-            <p className={`font-bold tracking-widest text-[#155DFC] uppercase truncate max-w-full ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
+            <p className={`font-bold tracking-widest uppercase truncate max-w-full ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`} style={{ color: "#155DFC" }}>
               {category}
             </p>
             <h3
@@ -73,7 +130,7 @@ const FacilityCard = ({
               {name}
             </h3>
             <div className={`flex flex-wrap items-center gap-1.5 ${compact ? "mt-1 text-[10px] sm:text-xs" : "mt-1.5 gap-2 text-xs sm:text-sm"}`}>
-              <div className="flex items-center gap-1 rounded-full border border-[#E2E8F0] bg-[#FEFCE8]/55 px-2 py-0.5">
+              <div className="flex items-center gap-1 rounded-full bg-[#FEFCE8]/55 px-2 py-0.5">
                 <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
                 <span className="font-semibold text-[#132329]">{rating}</span>
               </div>
@@ -101,6 +158,8 @@ const FacilityCard = ({
             style={{
               background: "#F8FAFC80",
               borderRadius: "16px",
+              border: "1px solid #F1F5F9",
+              borderTop: "1px solid #F1F5F9",
             }}
           >
             <p className={`font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5 ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
@@ -122,15 +181,17 @@ const FacilityCard = ({
                   }`}
                 >
                   <span
-                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${
+                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden ${
                       compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
                     }`}
                   >
-                    <CheckCircle2
-                      className={`shrink-0 text-[#155DFC] ${
+                    <img
+                      src="/assets/images/blueTick.svg"
+                      alt=""
+                      aria-hidden
+                      className={`shrink-0 object-contain ${
                         compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
                       }`}
-                      strokeWidth={2}
                     />
                   </span>
                   <span className="break-words">{feature}</span>

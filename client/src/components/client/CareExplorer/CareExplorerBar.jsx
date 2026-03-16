@@ -10,7 +10,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
       className="border-b border-[#E2E8F0] bg-white"
       style={{ background: "linear-gradient(to bottom, #fff 0%, #f8fafc 100%)" }}
     >
-      <div className="container mx-auto px-3 sm:px-6 md:px-8 lg:max-w-6xl lg:px-12 min-[1280px]:max-w-[1400px] min-[1280px]:px-16 min-[1536px]:max-w-[1600px] min-[1536px]:px-20 min-[1920px]:max-w-[1800px] min-[1920px]:px-12 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 py-3 min-w-0 overflow-x-hidden">
+      <div className="container mx-auto px-2 sm:px-6 md:px-8 lg:max-w-6xl lg:px-12 min-[1280px]:max-w-[1400px] min-[1280px]:px-16 min-[1536px]:max-w-[1600px] min-[1536px]:px-20 min-[1920px]:max-w-[1800px] min-[1920px]:px-12 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3 py-2.5 sm:py-3 min-w-0 overflow-x-hidden">
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 min-w-0">
           <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-full bg-[#00CFF4] text-white">
             <Send className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -24,7 +24,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-6 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-6 shrink-0 min-w-0 overflow-x-auto overflow-y-hidden py-0.5 sm:py-0">
           <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#E2E8F0] p-0.5 sm:p-1">
             <button
               type="button"

@@ -9,11 +9,15 @@ const FACILITIES = [
   { matchPercent: 98, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 95, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 92, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 90, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 88, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 86, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 84, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 82, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 80, imageSrc: "/assets/images/imgForFindCare.svg" },
   { matchPercent: 78, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 76, imageSrc: "/assets/images/imgForFindCare.svg" },
+  { matchPercent: 74, imageSrc: "/assets/images/imgForFindCare.svg" },
 ];
 
 const CareExplorer = () => {
@@ -24,7 +28,7 @@ const CareExplorer = () => {
     <>
       <SEO title="Care Explorer - CareMatch AI" />
       <div
-        className="min-h-screen bg-no-repeat overflow-x-hidden"
+        className="min-w-0 bg-no-repeat overflow-x-hidden"
         style={{
           backgroundImage: "url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
           backgroundSize: "55% 70%, cover",
@@ -34,7 +38,7 @@ const CareExplorer = () => {
         <CareExplorerBar view={view} onViewChange={setView} layout={layout} onLayoutChange={setLayout} />
 
         {/* How we matched - bordered card; responsive */}
-        <div className="w-full max-w-7xl mx-auto px-3 pt-4 pb-2 sm:px-4 sm:pt-5 md:px-6">
+        <div className="w-full max-w-7xl mx-auto px-2 pt-3 pb-2 sm:px-4 sm:pt-4 sm:pb-2 md:px-6 md:pt-5">
           <div className="flex flex-col md:flex-row items-start md:items-stretch gap-3 md:gap-8 p-3 sm:p-4 bg-white rounded-lg border border-[#E2E8F0] shadow-sm min-w-0">
             <div className="flex flex-col gap-1 shrink-0 py-1 pl-0 sm:pl-2">
               <div className="flex items-center gap-2">
@@ -56,23 +60,28 @@ const CareExplorer = () => {
           </div>
         </div>
 
-        {/* Main content - sidebar + listing or map view */}
-        <div className="w-full max-w-7xl mx-auto px-3 py-4 flex flex-col lg:flex-row gap-4 sm:px-4 sm:gap-5 min-w-0">
-          <div className="w-full lg:w-72 flex-shrink-0 min-w-0">
+        {/* Main content - sidebar + listing or map view; responsive padding and gap */}
+        <div className="w-full max-w-7xl mx-auto px-2 pt-3 pb-8 flex flex-col lg:flex-row gap-3 sm:px-4 sm:pt-4 sm:pb-10 sm:gap-5 min-w-0 min-[1280px]:pb-12 min-[1920px]:pb-16">
+          <div className="w-full lg:w-72 flex-shrink-0 min-w-0 max-w-full">
             <FiltersSidebar />
           </div>
 
           {view === "listing" ? (
             <div
-              className={`flex-1 min-w-0 w-full max-w-5xl ${
+              className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${
                 layout === "single"
-                  ? "space-y-4"
+                  ? "space-y-3 sm:space-y-4"
                   : layout === "two"
-                    ? "grid grid-cols-1 md:grid-cols-2 gap-4"
-                    : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
+                    ? "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"
+                    : "grid grid-cols-1 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
               }`}
             >
-              {FACILITIES.map((f) => (
+              {(layout === "single"
+                ? FACILITIES.slice(0, 3)
+                : layout === "two"
+                  ? FACILITIES.slice(0, 4)
+                  : FACILITIES.slice(0, 12)
+              ).map((f) => (
                 <div key={f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
                   <FacilityCard
                     matchPercent={f.matchPercent}
@@ -85,8 +94,8 @@ const CareExplorer = () => {
             </div>
           ) : (
             /* Map view: same template, 2x2 grid of cards (no map) */
-            <div className="flex-1 min-w-0 w-full max-w-5xl">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
+              <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
                 {FACILITIES.map((f) => (
                   <FacilityCard
                     key={f.matchPercent}
