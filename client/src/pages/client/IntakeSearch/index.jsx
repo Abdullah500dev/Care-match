@@ -504,7 +504,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
-          Where&apos;are they{" "}
+          Where are they{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
