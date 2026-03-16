@@ -642,14 +642,14 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
           Any preferred{" "}
           <span
-            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-1"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             location
           </span>{" "}
           &{" "}
           <span
-            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="italic underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-1"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             budget
@@ -788,7 +788,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
           Do they have other{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-1"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             special needs
