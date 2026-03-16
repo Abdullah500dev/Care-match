@@ -14,6 +14,10 @@ const BUDGET_SLIDER_MIN = 2000;
 const BUDGET_SLIDER_MAX = 15000;
 const BUDGET_SLIDER_STEP = 500;
 
+const MILES_SLIDER_MIN = 5;
+const MILES_SLIDER_MAX = 100;
+const MILES_SLIDER_STEP = 5;
+
 const TOTAL_STEPS = 9;
 
 const WHO_OPTIONS = [
@@ -123,6 +127,7 @@ const defaultFormData = {
   urgency: "",
   amenities: [],
   maxMiles: "",
+  maxTravelMiles: 25,
   visitFrequency: "",
   lifestyle: "",
   specialNeeds: "",
@@ -396,14 +401,14 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center">
-          What is your{" "}
+          What&apos;s the{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-            parent&apos;s
-          </span>{" "}
-          age?
+           age?
+          </span>
+          
         </h1>
         <div className="grid grid-cols-2 gap-4 sm:gap-5 mb-6">
           {AGE_OPTIONS.map(({ id, label, Icon }) => {
@@ -454,7 +459,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-            care assist?
+            care assistance?
           </span>
         </h1>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
@@ -499,7 +504,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
-          Where&apos;s your loved one{" "}
+          Where&apos;are they{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
@@ -548,12 +553,12 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
-          How is your loved one&apos;s{" "}
+        What is their mobility{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-            mobility?
+           status?
           </span>
         </h1>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
@@ -598,12 +603,12 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
-          Tell us more about your{" "}
+        What else are you{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-            loved one!
+           looking for?
           </span>
         </h1>
         <p className="text-[#64748b] mb-6 text-center">Select all that apply.</p>
@@ -664,21 +669,29 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="maxDistance" className="text-[#334155] font-bold">Max distance (miles)</Label>
-            <Input
-              id="maxDistance"
-              type="text"
-              inputMode="numeric"
-              placeholder="e.g. 25"
-              value={formData.maxMiles}
-              onChange={(e) => update("maxMiles", e.target.value)}
-              className="rounded-xl border-[#e2e8f0] h-12 "
+            <div className="flex items-center justify-between">
+              <Label className="text-[#334155] font-bold">How far are you willing to travel?</Label>
+              <span className="text-sm font-semibold text-[#00CFF4]">
+                {formData.maxTravelMiles >= MILES_SLIDER_MAX ? `${MILES_SLIDER_MAX}+ mi` : `${formData.maxTravelMiles} mi`}
+              </span>
+            </div>
+            <Slider
+              value={[formData.maxTravelMiles ?? MILES_SLIDER_MIN]}
+              min={MILES_SLIDER_MIN}
+              max={MILES_SLIDER_MAX}
+              step={MILES_SLIDER_STEP}
+              onValueChange={(v) => update("maxTravelMiles", Array.isArray(v) && v[0] != null ? v[0] : MILES_SLIDER_MIN)}
+              className="py-4"
             />
+            <div className="flex justify-between text-xs text-[#64748b] -mt-2">
+              <span>{MILES_SLIDER_MIN} mi</span>
+              <span>{MILES_SLIDER_MAX}+ mi</span>
+            </div>
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-[#334155] font-bold">How far are you willing to travel?  </Label>
-              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} - {formatBudget(budgetMax)}</span>
+              <Label className="text-[#334155] font-bold">What is your monthly budget?</Label>
+              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}</span>
             </div>
             <BudgetRangeSlider
               budgetMin={budgetMin}
@@ -696,7 +709,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             </div>
           </div>
           <div className="rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] px-4 py-3 text-sm text-[#64748b]">
-            <strong className="text-[#334155]">Important:</strong> Most assisted living facilities range from $3,500–$7,000/month is typically $5,000–$9,000/month.
+            <strong className="text-[#334155]">Important:</strong> Most assisted living facilities range from $3,500–$7,000/month; memory care is typically $5,000–$9,000/month.
           </div>
         </div>
       </>
@@ -713,7 +726,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
           What&apos;s the{" "}
           <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent"
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-0.5"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
             level of care

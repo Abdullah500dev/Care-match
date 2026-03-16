@@ -36,10 +36,18 @@ const FacilityCard = ({
             className="w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] object-cover"
           />
           {/* Match Badge */}
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/70 text-white backdrop-blur-sm px-3 py-1.5 text-xs font-semibold">
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/70 text-white backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold">
             <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4]" />
             {matchPercent}% Personalized Match
           </div>
+          {/* Heart - save to favorites */}
+          <button
+            type="button"
+            className="absolute right-3 top-3 flex items-center justify-center rounded-full border border-white/60 bg-white/70 backdrop-blur-sm hover:bg-white/90 transition-colors h-8 w-8"
+            aria-label="Save to favorites"
+          >
+            <Heart className="text-[#132329] stroke-[2] h-4 w-4" />
+          </button>
         </div>
 
         {/* Content Section */}
@@ -88,7 +96,7 @@ const FacilityCard = ({
       <div className={`relative w-full flex-shrink-0 ${compact ? "aspect-[4/3] min-h-[180px]" : "sm:w-[33.333%] min-h-[180px] min-[400px]:min-h-[200px] sm:min-h-[220px]"}`}>
         <img src={imageSrc} alt={name} className="h-full w-full object-cover" />
         {/* Match Badge - dark semi-transparent oval */}
-        <div className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 text-white backdrop-blur-sm font-bold ${compact ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-xs"}`}>
+        <div className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 text-white backdrop-blur-sm font-bold ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[11px] sm:text-xs"}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" />
           {matchPercent}% Personalized Match
         </div>

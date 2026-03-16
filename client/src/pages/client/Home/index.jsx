@@ -32,11 +32,14 @@ export default function Home() {
     <Fragment>
       <SEO title="Home" />
       <div className="content-container flex w-full min-h-screen flex-col bg-[#F9FAFB]">
+      
         <Banner />
 
-        <AnimateOnScroll>
+       
           <Gallery />
-        </AnimateOnScroll>
+      
+        {/* Scroll-to-top button appears only after user scrolls past the Gallery */}
+        <div id="scroll-to-top-trigger" className="h-px w-full shrink-0" aria-hidden="true" />
 
         <AnimateOnScroll>
           <SimpleProcess />

@@ -8,7 +8,7 @@ const TEXT_MUTED = "text-white/70";
 
 export default function Footer() {
   const resourcesLinks = [
-    { label: "Care Guides", path: "/care-guides" },
+    { label: "Care Guides", path: "/care-explorer" },
     { label: "Cost Calculator", path: "/cost-calculator" },
     { label: "Blog", path: "/blog" },
     { label: "FAQs", path: "/faqs" },

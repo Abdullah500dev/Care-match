@@ -48,89 +48,64 @@ import TopBar from "../components/client/TopBar";
 import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 
-const SCROLL_SHOW_THRESHOLD = 80;
-
 const Layout = ({ children }) => {
   const location = useLocation();
   const isDashboardRoute = location.pathname.startsWith("/dashboard");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
-  const [galleryInView, setGalleryInView] = useState(false);
-  const [simpleProcessInView, setSimpleProcessInView] = useState(false);
-  const [assistedLivingInView, setAssistedLivingInView] = useState(false);
-  const [whyCareMatchInView, setWhyCareMatchInView] = useState(false);
-  const [successStoriesInView, setSuccessStoriesInView] = useState(false);
-  const [startYourSearchInView, setStartYourSearchInView] = useState(false);
 
-  // Show button when top has scrolled out of view (all pages) or when on home and key sections are in view
-  const showScrollToTop =
-    !isDashboardRoute &&
-    (scrollPastThreshold ||
-      (isHomePage &&
-        (galleryInView ||
-          simpleProcessInView ||
-          assistedLivingInView ||
-          whyCareMatchInView ||
-          successStoriesInView ||
-          startYourSearchInView)));
+  // Button only when user has scrolled past the trigger (never on hero).
+  const showScrollToTop = !isDashboardRoute && scrollPastThreshold;
 
-  // Same approach as home: use Intersection Observer on #page-top for ALL client pages. When top scrolls out of view, show button.
+  // On home: trigger is below hero; use bottom rootMargin so button stays hidden when trigger is just below fold.
+  // Defer observer setup on home so #scroll-to-top-trigger (rendered by Home) exists in the DOM; reset state when landing on home.
   useEffect(() => {
     if (isDashboardRoute) return;
-    const topEl = document.getElementById("page-top");
-    if (!topEl) return;
+    if (isHomePage) setScrollPastThreshold(false);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.target.id === "page-top") {
-            setScrollPastThreshold(!entry.isIntersecting);
-          }
-        });
-      },
-      { threshold: 0, rootMargin: "0px" }
-    );
-    observer.observe(topEl);
-    return () => observer.disconnect();
-  }, [location.pathname, isDashboardRoute]);
+    const triggerId = isHomePage ? "scroll-to-top-trigger" : "page-top";
 
-  // When on home, also show button when key sections are in view (so it can show before scrolling)
-  useEffect(() => {
-    if (!isHomePage || isDashboardRoute) return;
-    const galleryEl = document.getElementById("gallery-cards-section");
-    const simpleProcessEl = document.getElementById("simple-process-section");
-    const assistedLivingEl = document.getElementById("assisted-living-section");
-    const whyCareMatchEl = document.getElementById("why-care-match-section");
-    const successStoriesEl = document.getElementById("success-stories-section");
-    const startYourSearchEl = document.getElementById("start-your-search-section");
-    const hasAny =
-      galleryEl || simpleProcessEl || assistedLivingEl || whyCareMatchEl || successStoriesEl || startYourSearchEl;
-    if (!hasAny) return;
+    const setupObserver = () => {
+      const el = document.getElementById(triggerId);
+      if (!el) return null;
+      // Larger bottom margin on home so the button only shows after scrolling well past the Gallery (trigger must be above viewport).
+      const rootMargin = isHomePage ? "0px 0px 100% 0px" : "0px";
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.target.id !== triggerId) return;
+            // On home: once user scrolls past the trigger, keep the button visible (don't hide when trigger re-enters view).
+            if (isHomePage) {
+              if (!entry.isIntersecting) setScrollPastThreshold(true);
+            } else {
+              setScrollPastThreshold(!entry.isIntersecting);
+            }
+          });
+        },
+        { threshold: 0, rootMargin }
+      );
+      observer.observe(el);
+      return observer;
+    };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.target.id === "gallery-cards-section") setGalleryInView(entry.isIntersecting);
-          if (entry.target.id === "simple-process-section") setSimpleProcessInView(entry.isIntersecting);
-          if (entry.target.id === "assisted-living-section") setAssistedLivingInView(entry.isIntersecting);
-          if (entry.target.id === "why-care-match-section") setWhyCareMatchInView(entry.isIntersecting);
-          if (entry.target.id === "success-stories-section") setSuccessStoriesInView(entry.isIntersecting);
-          if (entry.target.id === "start-your-search-section") setStartYourSearchInView(entry.isIntersecting);
-        });
-      },
-      { threshold: 0.1, rootMargin: "0px" }
-    );
-
-    if (galleryEl) observer.observe(galleryEl);
-    if (simpleProcessEl) observer.observe(simpleProcessEl);
-    if (assistedLivingEl) observer.observe(assistedLivingEl);
-    if (whyCareMatchEl) observer.observe(whyCareMatchEl);
-    if (successStoriesEl) observer.observe(successStoriesEl);
-    if (startYourSearchEl) observer.observe(startYourSearchEl);
-
-    return () => observer.disconnect();
-  }, [isHomePage, isDashboardRoute]);
+    let observer = null;
+    let retryId = null;
+    if (isHomePage) {
+      const trySetup = () => {
+        observer = setupObserver();
+        if (!observer) retryId = setTimeout(trySetup, 80);
+      };
+      const t = setTimeout(trySetup, 0);
+      return () => {
+        clearTimeout(t);
+        if (retryId) clearTimeout(retryId);
+        observer?.disconnect();
+      };
+    }
+    observer = setupObserver();
+    return () => observer?.disconnect();
+  }, [location.pathname, isDashboardRoute, isHomePage]);
 
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
