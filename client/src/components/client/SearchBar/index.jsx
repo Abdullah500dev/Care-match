@@ -1,14 +1,39 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Mic } from "lucide-react";
+import { ChevronDown, ArrowRight, Mic } from "lucide-react";
 
 export default function SearchBar() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const [hasVoiceInput, setHasVoiceInput] = useState(false);
 
   const handleSearch = () => {
     navigate("/find-care");
   };
+
+  const handleMicClick = () => {
+    // Placeholder for actual recording logic.
+    // Toggle recording state and, when stopping, mark that we have voice input
+    // so the send button becomes visible.
+    setIsRecording((prev) => {
+      const next = !prev;
+      if (prev && !next) {
+        setHasVoiceInput(true);
+      }
+      return next;
+    });
+  };
+
+  const handleChange = (e) => {
+    const value = e.target.value;
+    setQuery(value);
+    if (value.trim().length > 0) {
+      setHasVoiceInput(false);
+    }
+  };
+
+  const showSendButton = query.trim().length > 0 || hasVoiceInput;
 
   return (
     <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl">
@@ -29,7 +54,7 @@ export default function SearchBar() {
               placeholder="Try: 'Looking for memory care in Los Angeles under $6000/month'"
               className="min-w-0 flex-1 rounded-lg bg-transparent text-[#132329] placeholder:italic placeholder:text-[#0000004D] focus:outline-none text-sm placeholder:text-base sm:text-base sm:placeholder:text-lg min-[1280px]:text-base min-[1280px]:placeholder:text-base min-[1536px]:text-lg min-[1536px]:placeholder:text-lg"
             />
-            <Mic className="h-4 w-4 shrink-0 text-[#132329] sm:h-5 sm:w-5 min-[1280px]:h-4 min-[1280px]:w-4 min-[1536px]:h-5 min-[1536px]:w-5" strokeWidth={2} aria-hidden />
+            {/* <Mic className="h-4 w-4 shrink-0 text-[#132329] sm:h-5 sm:w-5 min-[1280px]:h-4 min-[1280px]:w-4 min-[1536px]:h-5 min-[1536px]:w-5" strokeWidth={2} aria-hidden /> */}
           </div>
 
           <div className="mt-2 flex items-center justify-end gap-2">
@@ -37,13 +62,28 @@ export default function SearchBar() {
               <span className="whitespace-nowrap">Carrie – AI Advisor</span>
             </button>
 
-            <button
-              className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
-              aria-label="Search"
-              onClick={handleSearch}
-            >
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-            </button>
+            {showSendButton ? (
+              <button
+                className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
+                aria-label="Send"
+                onClick={handleSearch}
+              >
+                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={`flex items-center justify-center rounded-lg px-3 py-3.5 text-[#132329] sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5 ${
+                  isRecording
+                    ? "bg-[#FEE2E2] text-[#B91C1C] shadow-[0_0_0_3px_rgba(239,68,68,0.35)] mic-recording-pulse"
+                    : "bg-[#E2E8F0] hover:bg-[#CBD5F1]"
+                }`}
+                aria-label={isRecording ? "Stop recording" : "Start voice input"}
+                onClick={handleMicClick}
+              >
+                <Mic className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -72,6 +112,25 @@ export default function SearchBar() {
           50% {
             background-position: 100% 50%;
           }
+        }
+
+        @keyframes micPulse {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+          }
+          70% {
+            transform: scale(1.04);
+            box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+          }
+        }
+
+        .mic-recording-pulse {
+          animation: micPulse 1.3s ease-out infinite;
         }
       `}</style>
     </div>

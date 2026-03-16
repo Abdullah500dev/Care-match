@@ -696,7 +696,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             </div>
           </div>
           <div className="rounded-xl bg-[#F1F5F9] border border-[#E2E8F0] px-4 py-3 text-sm text-[#64748b]">
-            <strong className="text-[#334155]">Important:</strong> Most assisted living facilities range from $3,500–$7,000/monthimage.png is typically $5,000–$9,000/month.
+            <strong className="text-[#334155]">Important:</strong> Most assisted living facilities range from $3,500–$7,000/month is typically $5,000–$9,000/month.
           </div>
         </div>
       </>
