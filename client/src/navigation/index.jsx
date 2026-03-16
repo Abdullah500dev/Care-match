@@ -75,7 +75,6 @@ const Layout = ({ children }) => {
         startYourSearchInView));
 
   useEffect(() => {
-    if (isDashboardRoute) return;
     let ticking = false;
     const checkScroll = () => {
       if (ticking) return;
@@ -98,7 +97,7 @@ const Layout = ({ children }) => {
       window.removeEventListener("scroll", checkScroll);
       window.removeEventListener("resize", checkScroll);
     };
-  }, [isDashboardRoute]);
+  }, []);
 
   // When on home, show button when key sections are in view
   useEffect(() => {
@@ -155,9 +154,8 @@ const Layout = ({ children }) => {
       </div>
       {children}
       {!isDashboardRoute && <Footer />}
-      {/* Scroll to top - all client pages, visible after scrolling down */}
-      {!isDashboardRoute &&
-        showScrollToTop &&
+      {/* Scroll to top - visible across the entire site */}
+      {showScrollToTop &&
         createPortal(
           <button
             type="button"

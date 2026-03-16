@@ -4,22 +4,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { BudgetRangeSlider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 
-const careTypes = [
-  "Assisted Living",
-  "Memory Care",
-  "Independent Living",
-  "Skilled Nursing",
-];
+const careTypes = ["Assisted Living"];
 
 const availability = ["Immediate", "Within 30 Days", "Future Planning"];
 
-const amenities = [
-  "24/7 Care",
-  "Private Rooms",
-  "Therapy Services",
-  "Memory Programs",
-  "Pet Friendly",
-];
+const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
 
 const FiltersSidebar = () => {
   const [searchQuery, setSearchQuery] = useState("");
