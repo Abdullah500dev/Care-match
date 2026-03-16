@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, CheckCircle2, ArrowRight, MapPin, Sparkles } from "lucide-react";
+import { Heart, Star, ArrowRight, MapPin, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=280&fit=crop";
@@ -179,15 +179,17 @@ const FacilityCard = ({
                   }`}
                 >
                   <span
-                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden rounded-full ${
+                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden ${
                       compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
                     }`}
                   >
-                    <CheckCircle2
-                      className={`shrink-0 text-[#155DFC] ${
+                    <img
+                      src="/assets/images/blueTick.svg"
+                      alt=""
+                      aria-hidden
+                      className={`shrink-0 object-contain ${
                         compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
                       }`}
-                      strokeWidth={2}
                     />
                   </span>
                   <span className="break-words">{feature}</span>
