@@ -63,43 +63,39 @@ const Layout = ({ children }) => {
   const [successStoriesInView, setSuccessStoriesInView] = useState(false);
   const [startYourSearchInView, setStartYourSearchInView] = useState(false);
 
-  // Show button when user has scrolled down, or when on home and key sections are in view
+  // Show button when top has scrolled out of view (all pages) or when on home and key sections are in view
   const showScrollToTop =
-    scrollPastThreshold ||
-    (isHomePage &&
-      (galleryInView ||
-        simpleProcessInView ||
-        assistedLivingInView ||
-        whyCareMatchInView ||
-        successStoriesInView ||
-        startYourSearchInView));
+    !isDashboardRoute &&
+    (scrollPastThreshold ||
+      (isHomePage &&
+        (galleryInView ||
+          simpleProcessInView ||
+          assistedLivingInView ||
+          whyCareMatchInView ||
+          successStoriesInView ||
+          startYourSearchInView)));
 
+  // Same approach as home: use Intersection Observer on #page-top for ALL client pages. When top scrolls out of view, show button.
   useEffect(() => {
-    let ticking = false;
-    const checkScroll = () => {
-      if (ticking) return;
-      ticking = true;
-      requestAnimationFrame(() => {
-        const y =
-          typeof window.scrollY !== "undefined"
-            ? window.scrollY
-            : document.documentElement.scrollTop ?? document.body.scrollTop ?? 0;
-        setScrollPastThreshold(y > SCROLL_SHOW_THRESHOLD);
-        ticking = false;
-      });
-    };
-    checkScroll();
-    const initialCheck = setTimeout(checkScroll, 100);
-    window.addEventListener("scroll", checkScroll, { passive: true });
-    window.addEventListener("resize", checkScroll, { passive: true });
-    return () => {
-      clearTimeout(initialCheck);
-      window.removeEventListener("scroll", checkScroll);
-      window.removeEventListener("resize", checkScroll);
-    };
-  }, []);
+    if (isDashboardRoute) return;
+    const topEl = document.getElementById("page-top");
+    if (!topEl) return;
 
-  // When on home, show button when key sections are in view
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.target.id === "page-top") {
+            setScrollPastThreshold(!entry.isIntersecting);
+          }
+        });
+      },
+      { threshold: 0, rootMargin: "0px" }
+    );
+    observer.observe(topEl);
+    return () => observer.disconnect();
+  }, [location.pathname, isDashboardRoute]);
+
+  // When on home, also show button when key sections are in view (so it can show before scrolling)
   useEffect(() => {
     if (!isHomePage || isDashboardRoute) return;
     const galleryEl = document.getElementById("gallery-cards-section");

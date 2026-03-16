@@ -22,6 +22,63 @@ const FacilityCard = ({
   compact = false,
   gridView = false,
 }) => {
+  // Dedicated, simplified card for grid view (4-per-row) – matches provided design
+  if (gridView) {
+    return (
+      <div
+        className="w-full max-w-full sm:max-w-[400px] mx-auto overflow-hidden rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_4px_24px_rgba(15,23,42,0.08)]"
+      >
+        {/* Image Section */}
+        <div className="relative">
+          <img
+            src={imageSrc || DEFAULT_IMAGE}
+            alt={name}
+            className="w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] object-cover"
+          />
+          {/* Match Badge */}
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/70 text-white backdrop-blur-sm px-3 py-1.5 text-xs font-semibold">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4]" />
+            {matchPercent}% Personalized Match
+          </div>
+        </div>
+
+        {/* Content Section */}
+        <div className="px-2.5 pt-2.5 pb-2 sm:px-3 sm:pt-3 sm:pb-2">
+          <p className="mb-0.5 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-semibold tracking-[0.18em] uppercase text-[#155DFC]">
+            {category}
+          </p>
+          <h3 className="mb-1.5 sm:mb-2 text-[13px] min-[400px]:text-[14px] sm:text-[15px] font-semibold tracking-tight text-[#132329]">
+            {name}
+          </h3>
+
+          <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
+            Monthly Investment
+          </p>
+          <p className="text-[13px] sm:text-sm font-semibold text-[#132329] tabular-nums">
+            {priceRange}
+          </p>
+
+          {/* Buttons */}
+          <div className="mt-2 sm:mt-2.5 flex gap-2 sm:gap-2.5">
+            <Link
+              to="/contact"
+              className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
+            >
+              Explore
+            </Link>
+            <button
+              type="button"
+              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
+            >
+              Request a Tour
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Default full card (listing + two-column)
   return (
     <div
       className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "min-w-0 flex-col" : "flex-col sm:flex-row"}`}
