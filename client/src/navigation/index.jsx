@@ -58,26 +58,53 @@ const Layout = ({ children }) => {
   // Button only when user has scrolled past the trigger (never on hero).
   const showScrollToTop = !isDashboardRoute && scrollPastThreshold;
 
-  // On home: trigger is below "Find the Facilities"; use bottom rootMargin so button stays hidden when trigger is just below fold.
+  // On home: trigger is below hero; use bottom rootMargin so button stays hidden when trigger is just below fold.
+  // Defer observer setup on home so #scroll-to-top-trigger (rendered by Home) exists in the DOM; reset state when landing on home.
   useEffect(() => {
     if (isDashboardRoute) return;
-    const triggerId = isHomePage ? "scroll-to-top-trigger" : "page-top";
-    const el = document.getElementById(triggerId);
-    if (!el) return;
+    if (isHomePage) setScrollPastThreshold(false);
 
-    const rootMargin = isHomePage ? "0px 0px 40% 0px" : "0px";
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.target.id === triggerId) {
-            setScrollPastThreshold(!entry.isIntersecting);
-          }
-        });
-      },
-      { threshold: 0, rootMargin }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
+    const triggerId = isHomePage ? "scroll-to-top-trigger" : "page-top";
+
+    const setupObserver = () => {
+      const el = document.getElementById(triggerId);
+      if (!el) return null;
+      // Larger bottom margin on home so the button only shows after scrolling well past the Gallery (trigger must be above viewport).
+      const rootMargin = isHomePage ? "0px 0px 100% 0px" : "0px";
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.target.id !== triggerId) return;
+            // On home: once user scrolls past the trigger, keep the button visible (don't hide when trigger re-enters view).
+            if (isHomePage) {
+              if (!entry.isIntersecting) setScrollPastThreshold(true);
+            } else {
+              setScrollPastThreshold(!entry.isIntersecting);
+            }
+          });
+        },
+        { threshold: 0, rootMargin }
+      );
+      observer.observe(el);
+      return observer;
+    };
+
+    let observer = null;
+    let retryId = null;
+    if (isHomePage) {
+      const trySetup = () => {
+        observer = setupObserver();
+        if (!observer) retryId = setTimeout(trySetup, 80);
+      };
+      const t = setTimeout(trySetup, 0);
+      return () => {
+        clearTimeout(t);
+        if (retryId) clearTimeout(retryId);
+        observer?.disconnect();
+      };
+    }
+    observer = setupObserver();
+    return () => observer?.disconnect();
   }, [location.pathname, isDashboardRoute, isHomePage]);
 
   const scrollToTop = () => {

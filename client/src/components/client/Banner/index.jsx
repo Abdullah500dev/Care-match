@@ -129,8 +129,6 @@ export default function Banner() {
         <div className="mt-6 w-full max-w-4xl px-2 sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1536px]:mt-10">
           <SearchBar />
         </div>
-        {/* Sentinel below "Verified Communities" + "Find the Facilities": scroll-to-top stays hidden until past here */}
-        <div id="scroll-to-top-trigger" className="h-px w-full shrink-0 opacity-0 pointer-events-none" aria-hidden="true" />
       </div>
     </section>
   );
