@@ -11,9 +11,9 @@ export default function Header() {
   const { isAuthenticated, userData } = useSelector(getUser);
 
   const menuItems = [
-    { label: "How it Works", target: "how-it-works", isScroll: true },
-    { label: "Client Types", target: "care-types", isScroll: true },
-    { label: "Why Us", target: "why-us", isScroll: true },
+    // { label: "How it Works", target: "how-it-works", isScroll: true },
+    // { label: "Client Types", target: "care-types", isScroll: true },
+    { label: "Why Us", path: "/why-us", isScroll: false },
     { label: "Resources", target: "resources", isScroll: true },
     { label: "Contact", path: "/contact", isScroll: false },
   ];

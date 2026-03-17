@@ -1,5 +1,17 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { TiltCard } from "@/components/ui/tilt-card";
+
+function SparkleIcon({ className = "" }) {
+  return (
+    <img
+      src="/assets/images/ai-assistant.svg"
+      alt=""
+      aria-hidden
+      className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${className}`}
+    />
+  );
+}
 
 /** Turquoise double-loop / infinity style icon for the image block; sized/inset so it stays inside the image on smaller screens (< 1920px) */
 function LoopIcon({ className = "" }) {
@@ -78,26 +90,46 @@ export default function AssistedLiving() {
             <LoopIcon />
           </div>
 
-          {/* Dark card: natural (shorter) height, vertically centered, overlapping image */}
-          <TiltCard className="mt-4 sm:mt-6 lg:absolute lg:right-0 lg:top-1/2 lg:mt-0 lg:w-[59%] lg:-translate-y-1/2" innerClassName="rounded-xl bg-[#1A202C] p-4 shadow-xl sm:rounded-2xl sm:p-6 md:p-8 lg:rounded-2xl lg:p-8 min-[1280px]:p-10 min-[1920px]:p-12 h-full">
-            <p className="text-left text-sm leading-relaxed text-white sm:text-base md:text-lg min-[1920px]:text-xl">
-              Our network focuses exclusively on providing the highest quality
-              assisted living. From daily activity support to specialized
-              medical management, we ensure every resident thrives in a
-              supportive community.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3 md:gap-4 min-[1920px]:mt-8">
-              {FEATURE_BUTTONS.map(({ label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-[#1A202C] transition hover:bg-gray-50 sm:px-4 sm:py-2.5 sm:text-sm md:px-5 md:py-3 md:text-base min-[1920px]:w-[30%] min-[1920px]:flex-none"
-                >
-                  {label}
-                </button>
-              ))}
+          {/* Right: dark card + CTA buttons below it */}
+          <div className="mt-4 flex flex-col gap-4 sm:mt-6 lg:absolute lg:right-0 lg:top-1/2 lg:mt-0 lg:w-[59%] lg:-translate-y-1/2 lg:gap-6">
+            <TiltCard className="w-full" innerClassName="rounded-xl bg-[#1A202C] p-4 shadow-xl sm:rounded-2xl sm:p-6 md:p-8 lg:rounded-2xl lg:p-8 min-[1280px]:p-10 min-[1920px]:p-12">
+              <p className="text-left text-sm leading-relaxed text-white sm:text-base md:text-lg min-[1920px]:text-xl">
+                Our network focuses exclusively on providing the highest quality
+                assisted living. From daily activity support to specialized
+                medical management, we ensure every resident thrives in a
+                supportive community.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3 md:gap-4 min-[1920px]:mt-8">
+                {FEATURE_BUTTONS.map(({ label }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-[#1A202C] transition hover:bg-gray-50 sm:px-4 sm:py-2.5 sm:text-sm md:px-5 md:py-3 md:text-base min-[1920px]:w-[30%] min-[1920px]:flex-none"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </TiltCard>
+            {/* CTA buttons below the card — Try AI Assistant & Find Facilities */}
+            <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
+              <Link
+                to="/find-care"
+                className="inline-flex min-h-[40px] w-fit shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold transition hover:bg-white/95 sm:px-5 sm:py-3 sm:text-base"
+                style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
+              >
+                <SparkleIcon />
+                Try AI Assistant - Carrie
+              </Link>
+              <Link
+                to="/care-explorer"
+                className="inline-flex min-h-[40px] w-fit shrink-0 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-semibold text-[#132329] transition hover:bg-[#F8FAFC] sm:px-5 sm:py-3 sm:text-base"
+                style={{ boxShadow: "0px 4px 6px -1px #0000001A" }}
+              >
+                Find Facilities
+              </Link>
             </div>
-          </TiltCard>
+          </div>
         </div>
       </div>
     </section>

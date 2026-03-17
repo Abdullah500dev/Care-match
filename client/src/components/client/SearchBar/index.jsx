@@ -100,7 +100,7 @@ export default function SearchBar() {
           className="rounded-xl px-5 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 sm:px-6 sm:py-4 sm:text-base"
           style={{ backgroundColor: "#00ccf4" }}
         >
-          Find the Facilities
+          Find Facilities
         </button>
       </div>
 

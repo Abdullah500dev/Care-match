@@ -23,9 +23,9 @@ export default function DashboardHeader({ onMenuClick }) {
             <Menu className="h-6 w-6" />
           </button>
           <Link
-            to="/dashboard"
+            to="/"
             className="flex items-center gap-2 text-slate-900 hover:opacity-90 transition-opacity"
-            aria-label="CareMatch AI – go to home"
+            aria-label="CareMatch AI – go to main website"
           >
             <img
               src="/assets/images/favicon/favicon.svg"
