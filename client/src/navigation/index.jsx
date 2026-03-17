@@ -16,6 +16,8 @@ import IntakeSearch from "../pages/client/IntakeSearch";
 import CareExplorer from "../pages/client/CareExplorer";
 import Privacy from "../pages/client/Privacy";
 import Terms from "../pages/client/Terms";
+import FAQ from "../pages/client/FAQ";
+import WhyUs from "../pages/client/WhyUs";
 import NotFound from "../pages/common/NotFound";
 
 // Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
@@ -158,6 +160,8 @@ export default function Navigation() {
               <Route path="/care-explorer" element={<CareExplorer />} />
               <Route path="/privacy" element={<Privacy />} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/faqs" element={<FAQ />} />
+              <Route path="/why-us" element={<WhyUs />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />
