@@ -79,10 +79,14 @@ export default function SimpleProcess() {
     <section
       id="simple-process-section"
       ref={sectionRef}
-      className="relative w-full overflow-hidden py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28"
-      style={{ backgroundColor: "#142A54" }}
+      className="relative w-full overflow-hidden py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28 bg-cover bg-center bg-no-repeat"
+      style={{
+        backgroundImage: "linear-gradient(180deg, rgba(20, 42, 84, 0.85) 0%, rgba(20, 42, 84, 0.75) 100%), url(/assets/images/Background.jpg)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
     >
-      <div className="container mx-auto min-w-0 px-4 sm:px-6 md:px-8 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
+      <div className="container relative z-10 mx-auto min-w-0 px-4 sm:px-6 md:px-8 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
         {/* Tag + title + subtitle */}
         <div className="mx-auto max-w-3xl text-center">
           <span
