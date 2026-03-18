@@ -12,6 +12,7 @@ Backend API for **CareMatch AI**. A comprehensive Node.js authentication and use
 - **📚 API Documentation** - Interactive Swagger UI documentation
 - **🛡️ Security** - Password hashing, input validation, error handling
 - **📧 Email Integration** - Nodemailer for transactional emails
+
 - **🗄️ MongoDB** - Scalable database with Mongoose ODM
 
 ## 🚀 Quick Start
