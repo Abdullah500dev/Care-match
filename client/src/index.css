@@ -229,3 +229,22 @@
     background-position: 100% 50%;
   }
 }
+
+/* SimpleProcess — "Your Journey To Better Care" cards */
+@keyframes journey-card-shine {
+  0% {
+    box-shadow: 0 12px 40px -12px rgba(0, 201, 240, 0.45);
+  }
+  50% {
+    box-shadow: 0 18px 50px -10px rgba(0, 207, 244, 0.55);
+  }
+  100% {
+    box-shadow: 0 12px 40px -12px rgba(0, 201, 240, 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .journey-card-animated {
+    animation: journey-card-shine 4s ease-in-out infinite;
+  }
+}

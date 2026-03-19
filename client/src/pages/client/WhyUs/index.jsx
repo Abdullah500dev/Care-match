@@ -1,29 +1,63 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
+import AnimateOnScroll from "../../../components/common/AnimateOnScroll";
 
 const SECTION_CLASS = "mb-10 last:mb-0";
 const TITLE_CLASS = "text-xl font-bold text-[#132329] mb-3";
 const SUBTITLE_CLASS = "text-lg font-semibold text-[#0f172a] mb-2";
 const PARA_CLASS = "text-[#64748b] text-sm sm:text-base leading-relaxed mb-3 last:mb-0";
 
-// Unsplash images (free to use). Replace with your own assets when ready.
+function imgSrc(file) {
+  const base = import.meta.env.BASE_URL || "/";
+  const path = `assets/images/${file}`;
+  return base.endsWith("/") ? `${base}${path}` : `${base}/${path}`;
+}
+
+// Why Us imagery — order matches page sections top to bottom
 const WHY_US_IMAGES = {
-  overwhelmedCaregiver: "https://images.unsplash.com/photo-1545235617-9465d2a55698?w=800&q=80",
-  carrieInAction: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=800&q=80",
-  networkMap: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=80",
-  advisor: "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&q=80",
-  peaceOfMind: "https://images.unsplash.com/photo-1609220136736-443140cffec6?w=800&q=80",
+  section1: imgSrc("1.webp"),
+  section2: imgSrc("2.webp"),
+  section3: imgSrc("3.webp"),
+  section4: imgSrc("4.webp"),
+  section5: imgSrc("5.webp"),
 };
 
-function SectionImage({ src, alt, short = false, className = "" }) {
+function SparkleIcon({ className = "" }) {
   return (
-    <div className={`overflow-hidden rounded-xl shadow-md ${short ? "h-[275px] sm:h-[320px]" : ""} ${className}`}>
-      <img
-        src={src}
-        alt={alt}
-        className={`h-full w-full object-cover ${short ? "" : "min-h-[200px] sm:min-h-[260px]"}`}
-      />
+    <img
+      src="/assets/images/ai-assistant.svg"
+      alt=""
+      aria-hidden
+      className={`h-5 w-5 shrink-0 sm:h-6 sm:w-6 ${className}`}
+    />
+  );
+}
+
+function SectionImage({ src, alt, className = "" }) {
+  const [failed, setFailed] = useState(false);
+
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-xl shadow-md ring-1 ring-black/5 bg-[#E8EEF4] ${className}`}
+      style={{ aspectRatio: "16 / 9" }}
+    >
+      {failed ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-[#E2E8F0] px-4 text-center text-sm text-[#64748b]">
+          Image could not be loaded. Check that <code className="text-xs">public/assets/images/</code> includes this file.
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          width={1600}
+          height={900}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover object-center block"
+          onError={() => setFailed(true)}
+        />
+      )}
     </div>
   );
 }
@@ -63,7 +97,12 @@ export default function WhyUs() {
                 <br />
                 We’ve replaced the search with a simple, intuitive conversation.
               </p>
-              <SectionImage src={WHY_US_IMAGES.overwhelmedCaregiver} alt="A concerned caregiver looking at a laptop. Soft, natural lighting." short className="mt-6" />
+              <AnimateOnScroll offsetY={32} durationMs={520} rootMargin="0px 0px -60px 0px" className="mt-6">
+                <SectionImage
+                  src={WHY_US_IMAGES.section1}
+                  alt="A couple reviewing information together on a smartphone outdoors."
+                />
+              </AnimateOnScroll>
             </section>
 
             {/* Meet Carrie */}
@@ -95,7 +134,12 @@ export default function WhyUs() {
                   </span>
                 </li>
               </ul>
-              <SectionImage src={WHY_US_IMAGES.carrieInAction} alt="Person using technology for care search—clean, modern interface." short className="mt-6" />
+              <AnimateOnScroll offsetY={32} durationMs={520} rootMargin="0px 0px -60px 0px" className="mt-6">
+                <SectionImage
+                  src={WHY_US_IMAGES.section2}
+                  alt="A caregiver hands a blanket to a senior seated on a sofa; supportive in-home care."
+                />
+              </AnimateOnScroll>
             </section>
 
             {/* Triple-Verified Database */}
@@ -121,7 +165,12 @@ export default function WhyUs() {
                   <p className={PARA_CLASS}>Up-to-date pricing and room availability—so you never waste time on unavailable options.</p>
                 </li>
               </ul>
-              <SectionImage src={WHY_US_IMAGES.networkMap} alt="Data and network visualization representing nationwide coverage." short className="mt-6" />
+              <AnimateOnScroll offsetY={32} durationMs={520} rootMargin="0px 0px -60px 0px" className="mt-6">
+                <SectionImage
+                  src={WHY_US_IMAGES.section3}
+                  alt="A senior couple using a laptop together at home."
+                />
+              </AnimateOnScroll>
             </section>
 
             {/* 50 Years of Human Wisdom */}
@@ -136,7 +185,12 @@ export default function WhyUs() {
               <p className={PARA_CLASS}>
                 We let AI handle the data, so our human experts can focus on what matters most—guidance, empathy, and support.
               </p>
-              <SectionImage src={WHY_US_IMAGES.advisor} alt="Care professional offering warm, reassuring support to a senior." short className="mt-6" />
+              <AnimateOnScroll offsetY={32} durationMs={520} rootMargin="0px 0px -60px 0px" className="mt-6">
+                <SectionImage
+                  src={WHY_US_IMAGES.section4}
+                  alt="Human hand reaching toward a glowing digital network—technology guided by care."
+                />
+              </AnimateOnScroll>
             </section>
 
             {/* No-Cost Commitment */}
@@ -154,7 +208,12 @@ export default function WhyUs() {
                 <li><span className="font-semibold text-[#132329]">No Pressure, No Bias</span> — Recommendations are based on your needs, not commissions.</li>
                 <li><span className="font-semibold text-[#132329]">End-to-End Support</span> — We help schedule tours and guide you on what to look for.</li>
               </ul>
-              <SectionImage src={WHY_US_IMAGES.peaceOfMind} alt="A senior enjoying a comfortable, peaceful environment." short className="mt-6" />
+              <AnimateOnScroll offsetY={32} durationMs={520} rootMargin="0px 0px -60px 0px" className="mt-6">
+                <SectionImage
+                  src={WHY_US_IMAGES.section5}
+                  alt="A family member brings food to a loved one resting comfortably at home."
+                />
+              </AnimateOnScroll>
             </section>
 
             {/* CTA */}
@@ -166,19 +225,21 @@ export default function WhyUs() {
               <p className="text-[#64748b] text-sm sm:text-base max-w-2xl mx-auto mb-8">
                 Whether you’re just beginning your search or need immediate help, CareMatch AI is here to guide you every step of the way.
               </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                 <Link
                   to="/find-care"
-                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:px-8 sm:py-4 sm:text-base"
-                  style={{ boxShadow: "0px 4px 14px rgba(0, 207, 244, 0.4)" }}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-2 border-[#00CFF4] bg-white px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#F0FBFF] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                  style={{ boxShadow: "0px 8px 20px -6px rgba(0, 207, 244, 0.25)" }}
                 >
-                  Start Chatting with Carrie
+                  <SparkleIcon />
+                  Try AI Assistant - Carrie
                 </Link>
                 <Link
-                  to="/contact"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border-2 border-[#00CFF4] bg-white px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#F0FBFF] sm:px-8 sm:py-4 sm:text-base"
+                  to="/find-care"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                  style={{ backgroundColor: "#00ccf4" }}
                 >
-                  Call a Care Expert
+                  Find Facilities
                 </Link>
               </div>
             </section>

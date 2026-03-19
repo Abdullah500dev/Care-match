@@ -81,7 +81,7 @@ export default function SimpleProcess() {
       ref={sectionRef}
       className="relative w-full overflow-hidden py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24 min-[1920px]:py-28 bg-cover bg-center bg-no-repeat"
       style={{
-        backgroundImage: "linear-gradient(180deg, rgba(20, 42, 84, 0.85) 0%, rgba(20, 42, 84, 0.75) 100%), url(/assets/images/Background.jpg)",
+        backgroundImage: `url(${import.meta.env.BASE_URL}assets/images/Background-Plain.jpg)`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }}
