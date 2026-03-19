@@ -227,17 +227,16 @@ export default function WhyUs() {
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                 <Link
-                  to="/find-care"
+                  to="/#search-bar"
                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                   style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
                 >
-                  Start Chatting with Carrie
-                </Link>
+                  Carrie – AI Advisor                </Link>
                 <Link
-                  to="/#search-bar"
-                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                  to="/find-care"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                 >
-                  Call a Care Expert
+                  Find Facilities
                 </Link>
               </div>
             </section>

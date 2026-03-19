@@ -118,27 +118,34 @@ export default function AssistedLiving() {
             </TiltCard>
             {/* CTA buttons below the card — Try AI Assistant & Find Facilities */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-                <Link
-                  to="/find-care"
-                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
-                  style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
-                >
-                  Start Chatting with Carrie
-                </Link>
-                <Link
-  to="/#search-bar"
-  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+              <Link
+                onClick={() => {
+                  if (location.pathname === "/" && location.hash === "#search-bar") {
+                    const el = document.getElementById("search-bar");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+                to="/#search-bar"
 
-  onClick={() => {
-    if (location.pathname === "/" && location.hash === "#search-bar") {
-      const el = document.getElementById("search-bar");
-      if (el) el.scrollIntoView({ behavior: "smooth" });
-    }
-  }}
->
-  Call a Care Expert
-</Link>
-              </div>
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
+              >
+                Carrie – AI Advisor
+              </Link>
+              <Link
+                to="/find-care"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+
+                onClick={() => {
+                  if (location.pathname === "/" && location.hash === "#search-bar") {
+                    const el = document.getElementById("search-bar");
+                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                  }
+                }}
+              >
+                Find Facilities
+              </Link>
+            </div>
           </div>
         </div>
       </div>

@@ -51,12 +51,19 @@ export default function StartYourSearch() {
         {/* Button + input group */}
         <div className="mt-6 flex w-full max-w-full flex-col items-stretch gap-3 sm:mt-10 sm:max-w-none sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
           <Link
-            to="/find-care"
+           onClick={() => {
+            if (location.pathname === "/" && location.hash === "#search-bar") {
+              const el = document.getElementById("search-bar");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }
+          }}
+            to="/#search-bar"
             className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-semibold transition hover:bg-white/95 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
             style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
           >
+           
             <SparkleIcon />
-            Try AI Assistant - Carrie
+            Carrie – AI Advisor
           </Link>
           <input
             type="text"
