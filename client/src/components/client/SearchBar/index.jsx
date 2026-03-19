@@ -36,7 +36,7 @@ export default function SearchBar() {
   const showSendButton = query.trim().length > 0 || hasVoiceInput;
 
   return (
-    <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl">
+    <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl" id="search-bar">
       <div
         className="rounded-2xl p-[2px] shadow-sm min-[1280px]:rounded-3xl"
         style={{

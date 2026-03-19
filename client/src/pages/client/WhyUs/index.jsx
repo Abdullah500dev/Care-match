@@ -228,18 +228,16 @@ export default function WhyUs() {
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                 <Link
                   to="/find-care"
-                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border-2 border-[#00CFF4] bg-white px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#F0FBFF] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
-                  style={{ boxShadow: "0px 8px 20px -6px rgba(0, 207, 244, 0.25)" }}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                  style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
                 >
-                  <SparkleIcon />
-                  Try AI Assistant - Carrie
+                  Start Chatting with Carrie
                 </Link>
                 <Link
-                  to="/find-care"
-                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold text-white transition hover:opacity-90 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
-                  style={{ backgroundColor: "#00ccf4" }}
+                  to="/#search-bar"
+                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                 >
-                  Find Facilities
+                  Call a Care Expert
                 </Link>
               </div>
             </section>

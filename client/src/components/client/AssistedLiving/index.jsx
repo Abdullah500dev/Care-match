@@ -2,6 +2,10 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { TiltCard } from "@/components/ui/tilt-card";
 
+
+import { useLocation } from "react-router-dom";
+
+
 function SparkleIcon({ className = "" }) {
   return (
     <img
@@ -37,6 +41,7 @@ const FEATURE_BUTTONS = [
 ];
 
 export default function AssistedLiving() {
+  const location = useLocation();
   return (
     <section
       id="assisted-living-section"
@@ -112,23 +117,28 @@ export default function AssistedLiving() {
               </div>
             </TiltCard>
             {/* CTA buttons below the card — Try AI Assistant & Find Facilities */}
-            <div className="flex flex-col items-center gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
-              <Link
-                to="/find-care"
-                className="inline-flex min-h-[40px] w-fit shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold transition hover:bg-white/95 sm:px-5 sm:py-3 sm:text-base"
-                style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
-              >
-                <SparkleIcon />
-                Try AI Assistant - Carrie
-              </Link>
-              <Link
-                to="/care-explorer"
-                className="inline-flex min-h-[40px] w-fit shrink-0 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white px-4 py-2.5 text-sm font-semibold text-[#132329] transition hover:bg-[#F8FAFC] sm:px-5 sm:py-3 sm:text-base"
-                style={{ boxShadow: "0px 4px 6px -1px #0000001A" }}
-              >
-                Find Facilities
-              </Link>
-            </div>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                <Link
+                  to="/find-care"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                  style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
+                >
+                  Start Chatting with Carrie
+                </Link>
+                <Link
+  to="/#search-bar"
+  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+
+  onClick={() => {
+    if (location.pathname === "/" && location.hash === "#search-bar") {
+      const el = document.getElementById("search-bar");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
+  }}
+>
+  Call a Care Expert
+</Link>
+              </div>
           </div>
         </div>
       </div>
