@@ -8,6 +8,7 @@ const CARD_STAGGER_MS = 100;
 const CARD_DURATION_MS = 500;
 const TYPEWRITER_PAUSE_BEFORE_RESTART_MS = 2500;
 const MOBILE_SWIPE_ANIM_MS = 220;
+const MOBILE_AUTO_SLIDE_MS = 3500;
 
 const STEPS = [
   {
@@ -63,6 +64,16 @@ export default function SimpleProcess() {
       if (swipeTimeoutRef.current) clearTimeout(swipeTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!sectionInView) return;
+
+    const intervalId = setInterval(() => {
+      goToAdjacentCard(1);
+    }, MOBILE_AUTO_SLIDE_MS);
+
+    return () => clearInterval(intervalId);
+  }, [sectionInView, mobileSwipePhase]);
 
   // Cards + typewriter: run every time section enters view, reset when it leaves
   useEffect(() => {
@@ -157,7 +168,7 @@ export default function SimpleProcess() {
         {/* Mobile: one card at a time with infinite swipe */}
         <div className="mt-6 md:hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <div
-            className="h-full"
+            className="h-[170px] sm:h-[185px]"
             style={{
               opacity:
                 cardsVisible && mobileSwipePhase === "idle"
@@ -180,7 +191,7 @@ export default function SimpleProcess() {
           >
             <TiltCard
               className="h-full"
-              innerClassName="flex min-w-0 flex-col rounded-xl p-4 h-full"
+              innerClassName="flex min-w-0 h-full flex-col rounded-xl p-4"
               innerStyle={{ backgroundColor: "#00C9F0" }}
             >
               <div>
@@ -192,6 +203,17 @@ export default function SimpleProcess() {
                 </p>
               </div>
             </TiltCard>
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5">
+            {STEPS.map((_, idx) => (
+              <span
+                key={idx}
+                className={`h-1.5 rounded-full transition-all ${
+                  mobileCardIndex === idx ? "w-5 bg-[#00CFF4]" : "w-1.5 bg-white/60"
+                }`}
+                aria-hidden
+              />
+            ))}
           </div>
         </div>
 

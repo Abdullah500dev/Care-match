@@ -19,7 +19,7 @@ const FiltersSidebar = () => {
   return (
     <aside className="w-full flex flex-col gap-3 sm:gap-5 min-w-0 max-w-full">
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
-        <h3 className="font-semibold text-sm text-[#364153] mb-3">Filters</h3>
+        <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-3">Filters</h3>
         <div className="relative mb-4">
           <Input
             placeholder="Define your search..."

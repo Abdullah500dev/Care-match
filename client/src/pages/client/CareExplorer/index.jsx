@@ -100,7 +100,7 @@ const CareExplorer = () => {
                 layout === "single"
                   ? "space-y-3 sm:space-y-4"
                   : layout === "two"
-                    ? "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"
+                    ? "grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
                     : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
               }`}
             >

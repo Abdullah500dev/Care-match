@@ -200,7 +200,7 @@ export default function Header() {
                     </span>
                   </Link>
                 ) : (
-                  <div className="flex items-center gap-4 px-1">
+                  <div className="flex items-center gap-1.5 px-1">
                     <Link
                       to="/register"
                       className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
@@ -208,8 +208,9 @@ export default function Header() {
                     >
                       Sign-in
                     </Link>
+                    <span className="text-[#364153]">/</span>
                     <Link
-                      to="/login"
+                      to="/signin"
                       className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >

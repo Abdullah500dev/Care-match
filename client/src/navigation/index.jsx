@@ -166,6 +166,8 @@ export default function Navigation() {
               <Route path="/faqs" element={<FAQ />} />
               <Route path="/why-us" element={<WhyUs />} />
               <Route path="/Signin" element={<Signin />} />
+              <Route path="/signin" element={<Signin />} />
+              <Route path="/login" element={<Signin />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />

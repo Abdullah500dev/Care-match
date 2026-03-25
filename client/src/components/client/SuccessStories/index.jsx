@@ -1,6 +1,9 @@
 import React, { useRef, useState } from "react";
 import { TiltCard } from "@/components/ui/tilt-card";
 
+const MOBILE_SWIPE_ANIM_MS = 180;
+const MOBILE_AUTO_SLIDE_MS = 3500;
+
 /** Five filled yellow stars for rating */
 function StarRating() {
   return (
@@ -62,7 +65,7 @@ export default function SuccessStories() {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => setMobileSwipePhase("idle"));
       });
-    }, 180);
+    }, MOBILE_SWIPE_ANIM_MS);
   };
 
   const handleTouchStart = (e) => {
@@ -86,6 +89,14 @@ export default function SuccessStories() {
       if (swipeTimeoutRef.current) clearTimeout(swipeTimeoutRef.current);
     };
   }, []);
+
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      goToAdjacentReview(1);
+    }, MOBILE_AUTO_SLIDE_MS);
+
+    return () => clearInterval(intervalId);
+  }, [mobileSwipePhase]);
 
   return (
     <section id="success-stories-section" className="relative w-full overflow-hidden bg-white py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-20 min-[1920px]:py-24">
@@ -112,6 +123,7 @@ export default function SuccessStories() {
         {/* Mobile: swipe horizontally through reviews */}
         <div className="mt-6 md:hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
           <div
+            className="h-[170px] sm:h-[185px]"
             style={{
               opacity: mobileSwipePhase === "idle" ? 1 : 0,
               transform:
@@ -120,7 +132,7 @@ export default function SuccessStories() {
                   : mobileSwipePhase === "enter"
                   ? `translateX(${mobileSwipeDirection > 0 ? "18px" : "-18px"})`
                   : "translateX(0)",
-              transition: "opacity 180ms ease-out, transform 180ms ease-out",
+              transition: `opacity ${MOBILE_SWIPE_ANIM_MS}ms ease-out, transform ${MOBILE_SWIPE_ANIM_MS}ms ease-out`,
             }}
           >
             <TiltCard
@@ -139,6 +151,17 @@ export default function SuccessStories() {
                 </p>
               </div>
             </TiltCard>
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5">
+            {TESTIMONIALS.map((_, idx) => (
+              <span
+                key={idx}
+                className={`h-1.5 rounded-full transition-all ${
+                  mobileReviewIndex === idx ? "w-5 bg-[#00CFF4]" : "w-1.5 bg-[#94A3B8]"
+                }`}
+                aria-hidden
+              />
+            ))}
           </div>
         </div>
 
