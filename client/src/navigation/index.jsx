@@ -19,6 +19,7 @@ import Terms from "../pages/client/Terms";
 import FAQ from "../pages/client/FAQ";
 import WhyUs from "../pages/client/WhyUs";
 import NotFound from "../pages/common/NotFound";
+import Signin from "../pages/auth/Signin";
 
 // Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
 const lazyWithRetry = (importFn) =>
@@ -162,6 +163,7 @@ export default function Navigation() {
               <Route path="/terms" element={<Terms />} />
               <Route path="/faqs" element={<FAQ />} />
               <Route path="/why-us" element={<WhyUs />} />
+              <Route path="/Signin" element={<Signin />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />
