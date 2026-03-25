@@ -178,7 +178,7 @@ export default function Contact() {
                 {/* Send Message Button */}
                 <Button
                   type="submit"
-                  className="h-12 w-4/12 rounded-xl bg-[#0F172B] px-6 font-bold text-lg text-white "
+                  className="h-12 md:w-4/12 rounded-xl bg-[#0F172B] px-6 font-bold text-lg text-white "
                 >
                   Send Message
                   <Send className="ml-2 h-4 w-4" aria-hidden />
@@ -192,6 +192,13 @@ export default function Contact() {
                     className="text-[#2B7FFF] font-medium text-sm hover:text-[#2B7FFF]"
                   >
                     Privacy Policy
+                  </Link>
+                  {" "}and{" "}
+                  <Link
+                    to="/terms"
+                    className="text-[#2B7FFF] font-medium text-sm hover:text-[#2B7FFF]"
+                  >
+                    Terms of Service
                   </Link>
                   . We never share your contact info without consent.
                 </p>

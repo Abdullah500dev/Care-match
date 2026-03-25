@@ -176,14 +176,7 @@ export default function Header() {
                   </Link>
                 )
               )}
-              <div className="mt-2 flex flex-col gap-3 border-t border-gray-100 pt-4">
-                <Link
-                  to="/dashboard"
-                  className="inline-flex justify-center rounded-full bg-[#00B8DB] px-5 py-2.5 text-sm font-medium text-white"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  For Providers
-                </Link>
+              <div className="md:mt-2 flex flex-col gap-3 border-t border-gray-100 md:pt-4">
                 {isAuthenticated && userData ? (
                   <Link
                     to="/profile"
@@ -215,6 +208,13 @@ export default function Header() {
                     </Link>
                   </div>
                 )}
+                <Link
+                  to="/dashboard"
+                  className="mt-1 inline-flex justify-center rounded-full bg-[#00B8DB] px-5 py-2.5 text-sm font-medium text-white"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  For Providers
+                </Link>
               </div>
             </div>
           </div>

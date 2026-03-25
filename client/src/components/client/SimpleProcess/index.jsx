@@ -7,6 +7,7 @@ const CURSOR_BLINK_MS = 520;
 const CARD_STAGGER_MS = 100;
 const CARD_DURATION_MS = 500;
 const TYPEWRITER_PAUSE_BEFORE_RESTART_MS = 2500;
+const MOBILE_SWIPE_ANIM_MS = 220;
 
 const STEPS = [
   {
@@ -31,6 +32,11 @@ export default function SimpleProcess() {
   const [showCursor, setShowCursor] = useState(true);
   const [cardsVisible, setCardsVisible] = useState(false);
   const [sectionInView, setSectionInView] = useState(false);
+  const [mobileCardIndex, setMobileCardIndex] = useState(0);
+  const [mobileSwipePhase, setMobileSwipePhase] = useState("idle");
+  const [mobileSwipeDirection, setMobileSwipeDirection] = useState(1);
+  const touchStartXRef = useRef(0);
+  const swipeTimeoutRef = useRef(null);
   const sectionRef = useRef(null);
 
   // Typewriter for heading (runs only when section is in view)
@@ -50,6 +56,12 @@ export default function SimpleProcess() {
   useEffect(() => {
     const t = setInterval(() => setShowCursor((c) => !c), CURSOR_BLINK_MS);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (swipeTimeoutRef.current) clearTimeout(swipeTimeoutRef.current);
+    };
   }, []);
 
   // Cards + typewriter: run every time section enters view, reset when it leaves
@@ -74,6 +86,38 @@ export default function SimpleProcess() {
   }, []);
 
   const headingComplete = headingLength >= HEADING_TEXT.length;
+
+  const goToAdjacentCard = (direction) => {
+    if (mobileSwipePhase !== "idle") return;
+
+    setMobileSwipeDirection(direction);
+    setMobileSwipePhase("exit");
+
+    swipeTimeoutRef.current = setTimeout(() => {
+      setMobileCardIndex((prev) => (prev + direction + STEPS.length) % STEPS.length);
+      setMobileSwipePhase("enter");
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setMobileSwipePhase("idle");
+        });
+      });
+    }, MOBILE_SWIPE_ANIM_MS);
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartXRef.current = e.changedTouches[0]?.clientX ?? 0;
+  };
+
+  const handleTouchEnd = (e) => {
+    const endX = e.changedTouches[0]?.clientX ?? 0;
+    const deltaX = endX - touchStartXRef.current;
+    const SWIPE_THRESHOLD = 40;
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+    if (deltaX < 0) goToAdjacentCard(1);
+    else goToAdjacentCard(-1);
+  };
 
   return (
     <section
@@ -110,8 +154,49 @@ export default function SimpleProcess() {
           </p>
         </div>
 
-        {/* Process cards: 1 col mobile, 2 cols at md/lg (1024), 3 cols from 1280 */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:mt-8 sm:gap-6 md:grid-cols-2 md:gap-6 lg:mt-10 lg:gap-6 min-[1280px]:mt-14 min-[1280px]:grid-cols-3 min-[1280px]:gap-10">
+        {/* Mobile: one card at a time with infinite swipe */}
+        <div className="mt-6 md:hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <div
+            className="h-full"
+            style={{
+              opacity:
+                cardsVisible && mobileSwipePhase === "idle"
+                  ? 1
+                  : cardsVisible
+                  ? 0
+                  : 0,
+              transform: cardsVisible
+                ? mobileSwipePhase === "exit"
+                  ? `translateX(${mobileSwipeDirection > 0 ? "-20px" : "20px"})`
+                  : mobileSwipePhase === "enter"
+                  ? `translateX(${mobileSwipeDirection > 0 ? "20px" : "-20px"})`
+                  : "translateX(0)"
+                : "translateY(24px)",
+              transition:
+                mobileSwipePhase === "idle" && cardsVisible
+                  ? `opacity ${MOBILE_SWIPE_ANIM_MS}ms ease-out, transform ${MOBILE_SWIPE_ANIM_MS}ms ease-out`
+                  : `opacity ${MOBILE_SWIPE_ANIM_MS}ms ease-out, transform ${MOBILE_SWIPE_ANIM_MS}ms ease-out`,
+            }}
+          >
+            <TiltCard
+              className="h-full"
+              innerClassName="flex min-w-0 flex-col rounded-xl p-4 h-full"
+              innerStyle={{ backgroundColor: "#00C9F0" }}
+            >
+              <div>
+                <h3 className="text-base font-bold text-white">
+                  {STEPS[mobileCardIndex].title}
+                </h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-white">
+                  {STEPS[mobileCardIndex].description}
+                </p>
+              </div>
+            </TiltCard>
+          </div>
+        </div>
+
+        {/* Process cards: md+ existing grid layout */}
+        <div className="hidden md:grid mt-6 grid-cols-1 gap-4 sm:mt-8 sm:gap-6 md:grid-cols-2 md:gap-6 lg:mt-10 lg:gap-6 min-[1280px]:mt-14 min-[1280px]:grid-cols-3 min-[1280px]:gap-10">
           {STEPS.map((step, index) => (
             <div
               key={step.title}
