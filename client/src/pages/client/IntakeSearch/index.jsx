@@ -147,7 +147,7 @@ export default function IntakeSearch() {
     if (!isFindingMatches) return;
     const t = setTimeout(() => {
       console.log("Search criteria:", formData);
-      // navigate("/care-explorer");
+      navigate("/care-explorer");
     }, FINDING_MATCHES_DURATION_MS);
     return () => clearTimeout(t);
   }, [isFindingMatches, navigate]);
