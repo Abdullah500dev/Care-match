@@ -170,6 +170,42 @@ export default function Gallery() {
     transitionDelay: visible ? `${index * STAGGER_MS}ms` : "0ms",
   });
 
+  const renderGalleryItem = (itemIndex) => {
+    const mobileCardHeight = "h-[35vh]";
+
+    if (itemIndex === 0) return <div className={mobileCardHeight}><FlipStatCard {...statCards[0]} /></div>;
+    if (itemIndex === 1) return <div className={mobileCardHeight}><FlipStatCard {...statCards[1]} /></div>;
+    if (itemIndex === 2) {
+      return (
+        <div className={`${mobileCardHeight} overflow-hidden rounded-xl shadow-md sm:rounded-2xl`}>
+          <TiltCard className="h-full" innerClassName="overflow-hidden rounded-xl h-full w-full">
+            <img
+              src={imageCards[0].src}
+              alt={imageCards[0].alt}
+              className="h-full w-full object-cover"
+              style={{ objectPosition: "10% 40%" }}
+            />
+          </TiltCard>
+        </div>
+      );
+    }
+    if (itemIndex === 3) return <div className={mobileCardHeight}><FlipStatCard {...statCards[2]} /></div>;
+    if (itemIndex === 4) {
+      return (
+        <div className={`${mobileCardHeight} overflow-hidden rounded-xl shadow-md sm:rounded-2xl`}>
+          <TiltCard className="h-full" innerClassName="overflow-hidden rounded-xl h-full w-full">
+            <img
+              src={imageCards[1].src}
+              alt={imageCards[1].alt}
+              className="h-full w-full object-cover"
+            />
+          </TiltCard>
+        </div>
+      );
+    }
+    return <div className={mobileCardHeight}><FlipStatCard {...statCards[3]} /></div>;
+  };
+
   return (
     <section
       id="gallery-cards-section"
@@ -177,7 +213,22 @@ export default function Gallery() {
       className="bg-white py-8 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-24"
     >
       <div className="container mx-auto px-4 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
-        <div className="grid grid-cols-1 gap-2.5 sm:gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-[1.2fr_1.4fr_1.2fr_1.2fr] lg:grid-rows-[1fr_1fr] lg:gap-4 min-[1280px]:gap-5">
+        <div className="lg:hidden">
+          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className={`w-full shrink-0 snap-start space-y-2.5 sm:space-y-3 md:space-y-4 ${baseClass} ${visible ? visibleClass : hiddenClass}`} style={getStyle(0)}>
+              {renderGalleryItem(0)}
+              {renderGalleryItem(1)}
+              {renderGalleryItem(2)}
+            </div>
+            <div className={`w-full shrink-0 snap-start space-y-2.5 sm:space-y-3 md:space-y-4 ${baseClass} ${visible ? visibleClass : hiddenClass}`} style={getStyle(3)}>
+              {renderGalleryItem(3)}
+              {renderGalleryItem(4)}
+              {renderGalleryItem(5)}
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden lg:grid grid-cols-1 gap-2.5 sm:gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-[1.2fr_1.4fr_1.2fr_1.2fr] lg:grid-rows-[1fr_1fr] lg:gap-4 min-[1280px]:gap-5">
           {/* Left col: cyan (row 1) */}
           <div
             className={`lg:row-start-1 lg:col-start-1 lg:min-h-0 lg:h-full ${baseClass} ${visible ? visibleClass : hiddenClass}`}
