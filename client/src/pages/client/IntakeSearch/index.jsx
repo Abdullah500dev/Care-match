@@ -147,7 +147,7 @@ export default function IntakeSearch() {
     if (!isFindingMatches) return;
     const t = setTimeout(() => {
       console.log("Search criteria:", formData);
-      navigate("/care-explorer");
+      // navigate("/care-explorer");
     }, FINDING_MATCHES_DURATION_MS);
     return () => clearTimeout(t);
   }, [isFindingMatches, navigate]);
@@ -197,19 +197,19 @@ export default function IntakeSearch() {
           >
             {/* Icon cluster: central star + 4 surrounding icons */}
             <div className="relative flex justify-center items-center mb-8 h-28">
-              <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4]">
+              <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] transform scale-100 animate-pulse">
                 <Sparkles className="h-10 w-10" />
-              </div>
-              <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+              </div>   
+              <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <Users className="h-5 w-5" />
               </div>
-              <div className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+              <div className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <User className="h-5 w-5" />
               </div>
-              <div className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+              <div className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <Activity className="h-5 w-5" />
               </div>
-              <div className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4]">
+              <div className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <Heart className="h-5 w-5" />
               </div>
             </div>
@@ -271,7 +271,7 @@ export default function IntakeSearch() {
 
           {/* Right: form content (can grow independently) */}
           <div className="flex-1 flex flex-col lg:min-w-0 min-h-0">
-        <Progress value={progressPercent} className="h-1.5 w-full bg-[#e2e8f0] [&>div]:!bg-[#0ea5e9]" />
+            <Progress value={progressPercent} className="h-1.5 w-full bg-[#e2e8f0] [&>div]:!bg-[#0ea5e9]" />
 
             <CardShell
               step={step}
@@ -352,12 +352,12 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center w-full">
           Who is in need of a{" "}
-            <span
+          <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent  pr-4"
-          style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
-        >
-          senior care?
-        </span>
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            senior care?
+          </span>
         </h1>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
           {WHO_OPTIONS.map(({ id, label, desc, Icon }) => {
@@ -406,9 +406,9 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-           age?
+            age?
           </span>
-          
+
         </h1>
         <div className="grid grid-cols-2 gap-4 sm:gap-5 mb-6">
           {AGE_OPTIONS.map(({ id, label, Icon }) => {
@@ -553,12 +553,12 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-6 text-center pr-3">
-        What is their mobility{" "}
+          What is their mobility{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-           status?
+            status?
           </span>
         </h1>
         <div className="grid grid-cols-2 gap-4 sm:gap-5">
@@ -603,12 +603,12 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
-        What else are you{" "}
+          What else are you{" "}
           <span
             className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-4"
             style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
           >
-           looking for?
+            looking for?
           </span>
         </h1>
         <p className="text-[#64748b] mb-6 text-center">Select all that apply.</p>
