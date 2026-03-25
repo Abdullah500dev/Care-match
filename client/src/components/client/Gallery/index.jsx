@@ -146,7 +146,9 @@ function ImageCard({ src, alt, className = "", aspectSquare = false, fillHeight 
 
 export default function Gallery() {
   const [visible, setVisible] = useState(false);
+  const [mobileSlideIndex, setMobileSlideIndex] = useState(0);
   const sectionRef = useRef(null);
+  const mobileCarouselRef = useRef(null);
 
   useEffect(() => {
     const el = sectionRef.current;
@@ -206,6 +208,14 @@ export default function Gallery() {
     return <div className={mobileCardHeight}><FlipStatCard {...statCards[3]} /></div>;
   };
 
+  const handleMobileCarouselScroll = (e) => {
+    const el = e.currentTarget;
+    const slideWidth = el.clientWidth;
+    if (!slideWidth) return;
+    const index = Math.round(el.scrollLeft / slideWidth);
+    setMobileSlideIndex(index);
+  };
+
   return (
     <section
       id="gallery-cards-section"
@@ -214,7 +224,11 @@ export default function Gallery() {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
         <div className="lg:hidden">
-          <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div
+            ref={mobileCarouselRef}
+            onScroll={handleMobileCarouselScroll}
+            className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             <div className={`w-full shrink-0 snap-start space-y-2.5 sm:space-y-3 md:space-y-4 ${baseClass} ${visible ? visibleClass : hiddenClass}`} style={getStyle(0)}>
               {renderGalleryItem(0)}
               {renderGalleryItem(1)}
@@ -225,6 +239,17 @@ export default function Gallery() {
               {renderGalleryItem(4)}
               {renderGalleryItem(5)}
             </div>
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-1.5">
+            {[0, 1].map((idx) => (
+              <span
+                key={idx}
+                className={`h-1.5 rounded-full transition-all ${
+                  mobileSlideIndex === idx ? "w-5 bg-[#00CFF4]" : "w-1.5 bg-[#94A3B8]"
+                }`}
+                aria-hidden
+              />
+            ))}
           </div>
         </div>
 

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function Contact() {
   useEffect(() => {
@@ -19,15 +20,53 @@ export default function Contact() {
     subject: "",
     message: "",
   });
+  const [errors, setErrors] = useState({});
+
+  const validateForm = (values) => {
+    const nextErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^[+]?[\d\s().-]{7,20}$/;
+
+    if (!values.fullName.trim()) nextErrors.fullName = "Full name is required.";
+    if (!values.email.trim()) nextErrors.email = "Email is required.";
+    else if (!emailRegex.test(values.email.trim())) nextErrors.email = "Enter a valid email address.";
+
+    if (values.phone.trim() && !phoneRegex.test(values.phone.trim())) {
+      nextErrors.phone = "Enter a valid phone number.";
+    }
+
+    if (!values.subject.trim()) nextErrors.subject = "Subject is required.";
+    if (!values.message.trim()) nextErrors.message = "Message is required.";
+
+    return nextErrors;
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Handle form submission
+    const nextErrors = validateForm(form);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+    toast.success("Message sent successfully.");
+    setForm({
+      fullName: "",
+      email: "",
+      phone: "",
+      subject: "",
+      message: "",
+    });
+    setErrors({});
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      const updated = { ...prev, [name]: value };
+      if (errors[name]) {
+        const nextErrors = validateForm(updated);
+        setErrors((prevErrors) => ({ ...prevErrors, [name]: nextErrors[name] }));
+      }
+      return updated;
+    });
   };
 
   const inputStyle = {
@@ -96,6 +135,9 @@ export default function Contact() {
                       style={inputStyle}
                       className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#132329]"
                     />
+                    {errors.fullName && (
+                      <p className="text-xs text-red-500">{errors.fullName}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label
@@ -114,6 +156,9 @@ export default function Contact() {
                       style={inputStyle}
                       className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#132329]"
                     />
+                    {errors.email && (
+                      <p className="text-xs text-red-500">{errors.email}</p>
+                    )}
                   </div>
                 </div>
 
@@ -135,6 +180,9 @@ export default function Contact() {
                       style={inputStyle}
                       className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#132329]"
                     />
+                    {errors.phone && (
+                      <p className="text-xs text-red-500">{errors.phone}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label
@@ -152,6 +200,9 @@ export default function Contact() {
                       style={inputStyle}
                       className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#132329]"
                     />
+                    {errors.subject && (
+                      <p className="text-xs text-red-500">{errors.subject}</p>
+                    )}
                   </div>
                 </div>
 
@@ -173,6 +224,9 @@ export default function Contact() {
                     style={inputStyle}
                     className="min-h-[120px] rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] placeholder:italic outline-none focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#132329]"
                   />
+                  {errors.message && (
+                    <p className="text-xs text-red-500">{errors.message}</p>
+                  )}
                 </div>
 
                 {/* Send Message Button */}

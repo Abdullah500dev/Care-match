@@ -106,8 +106,10 @@
 
 /* Sonner toast height override - Tailwind classes don't override Sonner's defaults */
 [data-sonner-toast] {
-  min-height: 96px !important;
-  border-radius: 24px !important;
+  min-height: 56px !important;
+  border-radius: 16px !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
 }
 
 /* ========== 404 page animations (theme: CareMatch #00CFF4, #132329, #0A122C) ========== */
