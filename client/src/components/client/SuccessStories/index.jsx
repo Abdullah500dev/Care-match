@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import { TiltCard } from "@/components/ui/tilt-card";
 
 /** Five filled yellow stars for rating */
@@ -43,6 +43,50 @@ const TESTIMONIALS = [
 ];
 
 export default function SuccessStories() {
+  const [mobileReviewIndex, setMobileReviewIndex] = useState(0);
+  const [mobileSwipePhase, setMobileSwipePhase] = useState("idle");
+  const [mobileSwipeDirection, setMobileSwipeDirection] = useState(1);
+  const touchStartXRef = useRef(0);
+  const swipeTimeoutRef = useRef(null);
+
+  const goToAdjacentReview = (direction) => {
+    if (mobileSwipePhase !== "idle") return;
+
+    setMobileSwipeDirection(direction);
+    setMobileSwipePhase("exit");
+
+    if (swipeTimeoutRef.current) clearTimeout(swipeTimeoutRef.current);
+    swipeTimeoutRef.current = setTimeout(() => {
+      setMobileReviewIndex((prev) => (prev + direction + TESTIMONIALS.length) % TESTIMONIALS.length);
+      setMobileSwipePhase("enter");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setMobileSwipePhase("idle"));
+      });
+    }, 180);
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartXRef.current = e.changedTouches[0]?.clientX ?? 0;
+  };
+
+  const handleTouchEnd = (e) => {
+    const endX = e.changedTouches[0]?.clientX ?? 0;
+    const deltaX = endX - touchStartXRef.current;
+    const SWIPE_THRESHOLD = 40;
+
+    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
+    if (deltaX < 0) goToAdjacentReview(1);
+    else goToAdjacentReview(-1);
+  };
+
+  const activeReview = TESTIMONIALS[mobileReviewIndex];
+
+  React.useEffect(() => {
+    return () => {
+      if (swipeTimeoutRef.current) clearTimeout(swipeTimeoutRef.current);
+    };
+  }, []);
+
   return (
     <section id="success-stories-section" className="relative w-full overflow-hidden bg-white py-10 sm:py-12 md:py-16 lg:py-20 min-[1280px]:py-20 min-[1920px]:py-24">
       <div className="container relative z-10 mx-auto min-w-0 px-4 sm:px-6 md:px-8 lg:max-w-6xl lg:px-8 min-[1280px]:max-w-[1400px] min-[1280px]:px-10 min-[1536px]:max-w-[1600px] min-[1536px]:px-12 min-[1920px]:max-w-[1800px] min-[1920px]:px-14">
@@ -65,8 +109,41 @@ export default function SuccessStories() {
           </div>
         </div>
 
-        {/* Testimonial cards: 1 col mobile, 2 cols at md/lg (1024), 3 cols from 1280 */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:mt-8 sm:gap-6 md:grid-cols-2 md:gap-6 lg:mt-10 lg:gap-6 min-[1280px]:mt-14 min-[1280px]:grid-cols-3 min-[1280px]:gap-10 min-[1920px]:gap-10">
+        {/* Mobile: swipe horizontally through reviews */}
+        <div className="mt-6 md:hidden" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <div
+            style={{
+              opacity: mobileSwipePhase === "idle" ? 1 : 0,
+              transform:
+                mobileSwipePhase === "exit"
+                  ? `translateX(${mobileSwipeDirection > 0 ? "-18px" : "18px"})`
+                  : mobileSwipePhase === "enter"
+                  ? `translateX(${mobileSwipeDirection > 0 ? "18px" : "-18px"})`
+                  : "translateX(0)",
+              transition: "opacity 180ms ease-out, transform 180ms ease-out",
+            }}
+          >
+            <TiltCard
+              className="h-full"
+              innerClassName="flex min-w-0 flex-col rounded-xl bg-[#F9F9F9] border border-[#0000000D] p-4 h-full"
+            >
+              <p className="flex-1 text-sm leading-relaxed text-[#101828]">
+                &ldquo;{activeReview.quote}&rdquo;
+              </p>
+              <div className="mt-3">
+                <p className="text-base font-semibold text-[#101828]">
+                  {activeReview.name}
+                </p>
+                <p className="mt-0.5 text-xs text-[#10182880]">
+                  {activeReview.relationship} - {activeReview.location}
+                </p>
+              </div>
+            </TiltCard>
+          </div>
+        </div>
+
+        {/* Desktop/tablet grid (unchanged) */}
+        <div className="hidden md:grid mt-6 grid-cols-1 gap-4 sm:mt-8 sm:gap-6 md:grid-cols-2 md:gap-6 lg:mt-10 lg:gap-6 min-[1280px]:mt-14 min-[1280px]:grid-cols-3 min-[1280px]:gap-10 min-[1920px]:gap-10">
           {TESTIMONIALS.map(({ quote, name, relationship, location }) => (
             <TiltCard
               key={name}
