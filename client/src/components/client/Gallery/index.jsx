@@ -3,6 +3,7 @@ import { TiltCard } from "@/components/ui/tilt-card";
 
 const STAGGER_MS = 80;
 const DURATION_MS = 550;
+const MOBILE_AUTO_SWIPE_MS = 3500;
 
 const statCards = [
   {
@@ -149,6 +150,7 @@ export default function Gallery() {
   const [mobileSlideIndex, setMobileSlideIndex] = useState(0);
   const sectionRef = useRef(null);
   const mobileCarouselRef = useRef(null);
+  const MOBILE_SLIDE_COUNT = 2;
 
   useEffect(() => {
     const el = sectionRef.current;
@@ -215,6 +217,18 @@ export default function Gallery() {
     const index = Math.round(el.scrollLeft / slideWidth);
     setMobileSlideIndex(index);
   };
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const nextIndex = (mobileSlideIndex + 1) % MOBILE_SLIDE_COUNT;
+      const el = mobileCarouselRef.current;
+      if (!el) return;
+      el.scrollTo({ left: nextIndex * el.clientWidth, behavior: "smooth" });
+      setMobileSlideIndex(nextIndex);
+    }, MOBILE_AUTO_SWIPE_MS);
+
+    return () => clearInterval(intervalId);
+  }, [mobileSlideIndex]);
 
   return (
     <section
