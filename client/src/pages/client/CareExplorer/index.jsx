@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Info } from "lucide-react";
+import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
@@ -23,6 +23,11 @@ const FACILITIES = [
 const CareExplorer = () => {
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
+  const [scope, setScope] = useState("all");
+  const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
+
+  const scopedFacilities =
+    scope === "saved" ? FACILITIES.filter((_, idx) => idx % 2 === 0) : FACILITIES;
 
   return (
     <>
@@ -35,7 +40,14 @@ const CareExplorer = () => {
           backgroundPosition: "145% 100%, center",
         }}
       >
-        <CareExplorerBar view={view} onViewChange={setView} layout={layout} onLayoutChange={setLayout} />
+        <CareExplorerBar
+          view={view}
+          onViewChange={setView}
+          layout={layout}
+          onLayoutChange={setLayout}
+          scope={scope}
+          onScopeChange={setScope}
+        />
 
         {/* How we matched - bordered card; responsive */}
         <div className="w-full max-w-7xl mx-auto px-2 pt-3 pb-2 sm:px-4 sm:pt-4 sm:pb-2 md:px-6 md:pt-5">
@@ -63,7 +75,23 @@ const CareExplorer = () => {
         {/* Main content - sidebar + listing or map view; responsive padding and gap */}
         <div className="w-full max-w-7xl mx-auto px-2 pt-3 pb-8 flex flex-col lg:flex-row gap-3 sm:px-4 sm:pt-4 sm:pb-10 sm:gap-5 min-w-0 min-[1280px]:pb-12 min-[1920px]:pb-16">
           <div className="w-full lg:w-72 flex-shrink-0 min-w-0 max-w-full">
-            <FiltersSidebar />
+            <div className="lg:hidden rounded-xl border border-[#F7F4EF] bg-white px-3 py-2.5">
+              <button
+                type="button"
+                onClick={() => setMobileFiltersCollapsed((prev) => !prev)}
+                className="flex w-full items-center justify-between text-sm font-semibold text-[#364153]"
+              >
+                <span>Filters</span>
+                {mobileFiltersCollapsed ? (
+                  <ChevronDown className="h-4 w-4 text-[#64748b]" />
+                ) : (
+                  <ChevronUp className="h-4 w-4 text-[#64748b]" />
+                )}
+              </button>
+            </div>
+            <div className={mobileFiltersCollapsed ? "hidden lg:block" : "block"}>
+              <FiltersSidebar />
+            </div>
           </div>
 
           {view === "listing" ? (
@@ -73,14 +101,14 @@ const CareExplorer = () => {
                   ? "space-y-3 sm:space-y-4"
                   : layout === "two"
                     ? "grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4"
-                    : "grid grid-cols-1 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
+                    : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
               }`}
             >
               {(layout === "single"
-                ? FACILITIES.slice(0, 3)
+                ? scopedFacilities.slice(0, 3)
                 : layout === "two"
-                  ? FACILITIES.slice(0, 4)
-                  : FACILITIES.slice(0, 12)
+                  ? scopedFacilities.slice(0, 4)
+                  : scopedFacilities.slice(0, 12)
               ).map((f) => (
                 <div key={f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
                   <FacilityCard
@@ -96,7 +124,7 @@ const CareExplorer = () => {
             /* Map view: same template, 2x2 grid of cards (no map) */
             <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
               <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
-                {FACILITIES.map((f) => (
+                {scopedFacilities.map((f) => (
                   <FacilityCard
                     key={f.matchPercent}
                     matchPercent={f.matchPercent}

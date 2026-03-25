@@ -1,9 +1,18 @@
 import React from "react";
 import { List, Map, Send, Heart, LayoutList, Columns2, LayoutGrid } from "lucide-react";
 
-const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", onLayoutChange }) => {
+const CareExplorerBar = ({
+  view = "listing",
+  onViewChange,
+  layout = "single",
+  onLayoutChange,
+  scope = "all",
+  onScopeChange,
+}) => {
   const isListing = view === "listing";
   const isMapView = view === "map";
+  const isAllScope = scope === "all";
+  const isSavedScope = scope === "saved";
 
   return (
     <div
@@ -24,7 +33,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-6 shrink-0 min-w-0 overflow-x-auto overflow-y-hidden py-0.5 sm:py-0">
+        <div className="justify-center md:justify-start flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-6 shrink-0 min-w-0 overflow-x-auto overflow-y-hidden py-0.5 sm:py-0">
           <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#E2E8F0] p-0.5 sm:p-1">
             <button
               type="button"
@@ -47,6 +56,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
                 type="button"
                 onClick={() => onLayoutChange?.("single")}
                 title="Single column"
+                aria-label="Single column layout"
                 className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "single" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
               >
                 <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
@@ -55,6 +65,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
                 type="button"
                 onClick={() => onLayoutChange?.("two")}
                 title="Two columns"
+                aria-label="Two column layout"
                 className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "two" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
               >
                 <Columns2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
@@ -63,6 +74,7 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
                 type="button"
                 onClick={() => onLayoutChange?.("grid")}
                 title="Grid (4 columns)"
+                aria-label="Grid layout"
                 className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "grid" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
               >
                 <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
@@ -72,14 +84,24 @@ const CareExplorerBar = ({ view = "listing", onViewChange, layout = "single", on
           <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#F1F5F9] p-0.5 sm:p-1">
             <button
               type="button"
-              className="px-4 py-2 sm:px-6 text-xs sm:text-sm bg-[#00CFF4] text-white font-bold rounded-full hover:bg-[#00b8d8] transition-colors min-h-[36px] sm:min-h-0"
+              onClick={() => onScopeChange?.("all")}
+              className={`px-4 py-2 sm:px-6 text-xs sm:text-sm font-bold rounded-full transition-colors min-h-[36px] sm:min-h-0 ${
+                isAllScope
+                  ? "bg-[#00CFF4] text-white hover:bg-[#00b8d8]"
+                  : "text-[#64748b] hover:text-[#132329]"
+              }`}
               style={{ boxShadow: "0 3px 6px rgba(0, 0, 0, 0.25)" }}
             >
               All
             </button>
             <button
               type="button"
-              className="px-4 py-2 sm:px-6 text-xs sm:text-sm text-[#64748b] font-bold flex items-center gap-1.5 sm:gap-2 hover:text-[#132329] transition-colors min-h-[36px] sm:min-h-0"
+              onClick={() => onScopeChange?.("saved")}
+              className={`px-4 py-2 sm:px-6 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-colors min-h-[36px] sm:min-h-0 ${
+                isSavedScope
+                  ? "bg-white text-[#132329] rounded-full shadow-sm"
+                  : "text-[#64748b] hover:text-[#132329]"
+              }`}
             >
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="whitespace-nowrap">Saved</span>
             </button>
