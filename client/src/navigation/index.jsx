@@ -12,6 +12,7 @@ import Page1 from "../pages/client/Page1";
 import Page2 from "../pages/client/Page2";
 import Contact from "../pages/client/Contact";
 import Profile from "../pages/client/Profile";
+import Register from "../pages/client/Register";
 import IntakeSearch from "../pages/client/IntakeSearch";
 import CareExplorer from "../pages/client/CareExplorer";
 import Privacy from "../pages/client/Privacy";
@@ -157,6 +158,7 @@ export default function Navigation() {
               <Route path="/page_2" element={<Page2 />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/profile" element={<Profile />} />
+              <Route path="/register" element={<Register />} />
               <Route path="/find-care" element={<IntakeSearch />} />
               <Route path="/care-explorer" element={<CareExplorer />} />
               <Route path="/privacy" element={<Privacy />} />

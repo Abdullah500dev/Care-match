@@ -1,7 +1,8 @@
 import React from 'react'
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 
-function Signin({ onSwitch }) {
+function Signin() {
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
 
     const onSubmit = (data) => {
@@ -37,7 +38,7 @@ function Signin({ onSwitch }) {
                 </button>
 
                 <p className="text-sm text-center mt-4">
-                    Don’t have an account? <a href="#" className="underline text-[#00b8db]" onClick={onSwitch}>Sign Up</a>
+                    Don’t have an account? <Link to="/register" className="underline text-[#00b8db]">Sign Up</Link>
                 </p>
             </form>
         </div>

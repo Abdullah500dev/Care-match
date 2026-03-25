@@ -127,14 +127,21 @@ export default function AssistedLiving() {
                 }}
                 to="/#search-bar"
 
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#00b8d8] sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                 style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
               >
+                <img
+                  src="/assets/images/ai-matching.svg"
+                  alt=""
+                  aria-hidden
+                  className="h-5 w-5 sm:h-6 sm:w-6 md:h-7 md:w-7"
+                />
                 Carrie – AI Advisor
               </Link>
               <Link
                 to="/find-care"
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl border-2 border-[#00CFF4] bg-transparent px-6 py-3 text-sm font-semibold text-[#00CFF4] transition hover:bg-[#00CFF4]/5 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition  sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+                style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
 
                 onClick={() => {
                   if (location.pathname === "/" && location.hash === "#search-bar") {
