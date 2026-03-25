@@ -65,12 +65,13 @@ export default function StartYourSearch() {
             <SparkleIcon />
             Carrie – AI Advisor
           </Link>
-          <input
-            type="text"
-            placeholder="Enter your location"
-            className="min-h-[44px] w-full min-w-0 rounded-xl border-0 bg-white px-4 py-3.5 text-sm text-gray-900 placeholder-gray-500 shadow-sm sm:w-56 sm:max-w-[280px] sm:px-6 sm:py-4 sm:text-base md:w-64 lg:w-72"
-            aria-label="Enter your location"
-          />
+          <Link
+            to="/find-care"
+            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-white px-5 py-3.5 text-sm font-semibold transition hover:bg-white/95 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
+            style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
+          >
+            Find Facilities
+          </Link>
         </div>
 
         {/* Footnotes — check icons commented out */}
