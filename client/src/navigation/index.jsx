@@ -1,6 +1,7 @@
 import { Suspense, lazy, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { ChevronUp } from "lucide-react";
 
 import ScrollToTop from "../utils/scroll-top";
@@ -53,6 +54,20 @@ import Header from "../components/client/Header";
 import TopBar from "../components/client/TopBar";
 import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
+import { getUser } from "../store/auth/authSlice";
+
+const RequireAuth = ({ children }) => {
+  const { isAuthenticated, token } = useSelector(getUser);
+  const location = useLocation();
+  const persistedToken = localStorage.getItem("access_token");
+  const canAccessDashboard = Boolean(isAuthenticated && (token || persistedToken));
+
+  if (!canAccessDashboard) {
+    return <Navigate to="/signin" replace state={{ from: location }} />;
+  }
+
+  return children;
+};
 
 const Layout = ({ children }) => {
   const location = useLocation();
@@ -174,7 +189,14 @@ export default function Navigation() {
               <Route path="/api/auth/reset-password" element={<ResetPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
 
-              <Route path="/dashboard/*" element={<DashboardLayout />}>
+              <Route
+                path="/dashboard/*"
+                element={
+                  <RequireAuth>
+                    <DashboardLayout />
+                  </RequireAuth>
+                }
+              >
                 <Route index element={<DashboardHome />} />
                 <Route path="residents" element={<DashboardResidents />} />
                 <Route path="communities" element={<DashboardCommunities />} />
