@@ -1,8 +1,15 @@
 import React from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { toast } from "sonner";
+
+import { authServices, clearPersistedAuthTokens } from "../../../services/authServices";
+import { clearUser } from "../../../store/auth/authSlice";
 
 export default function DashboardTopBar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const getTitle = () => {
     if (location.pathname.startsWith("/dashboard/residents")) return "Residents";
@@ -10,6 +17,19 @@ export default function DashboardTopBar() {
     if (location.pathname.startsWith("/dashboard/messages")) return "Messages";
     if (location.pathname.startsWith("/dashboard/settings")) return "Settings";
     return "Overview";
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authServices.logout();
+    } catch {
+      // even if request fails, clear local session to avoid a stuck UI
+    } finally {
+      clearPersistedAuthTokens();
+      dispatch(clearUser());
+      toast.success("Signed out.");
+      navigate("/signin");
+    }
   };
 
   return (
@@ -26,7 +46,11 @@ export default function DashboardTopBar() {
         <div className="hidden text-xs text-slate-500 sm:block">
           Logged in as <span className="font-medium text-slate-900">Admin</span>
         </div>
-        <button className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 md:px-4 md:py-2 md:text-sm">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-slate-800 md:px-4 md:py-2 md:text-sm"
+        >
           Sign out
         </button>
       </div>

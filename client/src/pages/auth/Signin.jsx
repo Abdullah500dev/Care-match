@@ -1,12 +1,35 @@
-import React from 'react'
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { authServices, persistAuthTokens } from "../../services/authServices";
+import { setUser } from "../../store/auth/authSlice";
+import { Eye, EyeOff } from "lucide-react";
 
 function Signin() {
+    const dispatch = useDispatch();
+    const navigate = useNavigate();
+    const [showPassword, setShowPassword] = useState(false);
     const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
 
-    const onSubmit = (data) => {
-        console.log("Form submitted:", data);
+    const onSubmit = async (data) => {
+        try {
+            const response = await authServices.login(data);
+            const payload = response?.data || {};
+
+            const accessToken = payload?.accessToken;
+            const refreshToken = payload?.refreshToken;
+            const user = payload?.user;
+
+            persistAuthTokens({ accessToken, refreshToken });
+            dispatch(setUser({ user, token: accessToken, tokenExpire: null }));
+
+            toast.success("Signed in successfully.");
+            navigate("/dashboard");
+        } catch (error) {
+            toast.error(error?.response?.data?.message || "Unable to sign in.");
+        }
     }
 
     return (
@@ -23,14 +46,34 @@ function Signin() {
                     <label className="block text-sm font-medium mb-1">Email</label>
                     <input type="email" placeholder="Email" {...register("email", { required: "Email required" })}
                         className={`w-full px-4 py-2 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${errors.email ? "ring-2 ring-red-400" : ""}`} />
-                    {errors.email && <p className="text-red-300 text-sm mt-1">{errors.email.message}</p>}
+                    {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>}
                 </div>
 
                 <div className="mb-6">
                     <label className="block text-sm font-medium mb-1">Password</label>
-                    <input type="password" placeholder="Password" {...register("password", { required: "Password required" })}
-                        className={`w-full px-4 py-2 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${errors.password ? "ring-2 ring-red-400" : ""}`} />
-                    {errors.password && <p className="text-red-300 text-sm mt-1">{errors.password.message}</p>}
+                    <div className="relative">
+                        <input
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Password"
+                            {...register("password", { required: "Password required" })}
+                            className={`w-full px-4 py-2 pr-11 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${errors.password ? "ring-2 ring-red-400" : ""}`}
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowPassword((v) => !v)}
+                            className="absolute inset-y-0 right-0 flex items-center justify-center px-3 text-slate-600 hover:text-slate-900"
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                        </button>
+                    </div>
+                    {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>}
+                </div>
+
+                <div className="mb-6 text-right">
+                    <Link to="/forgot-password" className="text-sm underline text-[#00b8db]">
+                        Forgot password?
+                    </Link>
                 </div>
 
                 <button type="submit" disabled={isSubmitting} className="w-full bg-[#00b8db] text-white   py-2 rounded-md">
@@ -45,4 +88,4 @@ function Signin() {
     );
 }
 
-export default Signin
+export default Signin;

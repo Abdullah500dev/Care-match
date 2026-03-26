@@ -1,5 +1,7 @@
 import React, { useEffect } from "react";
 import { NavLink } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Users,
@@ -9,7 +11,12 @@ import {
   BarChart2,
   Settings,
   X,
+  LogOut,
 } from "lucide-react";
+import { toast } from "sonner";
+
+import { authServices, clearPersistedAuthTokens } from "../../../services/authServices";
+import { clearUser } from "../../../store/auth/authSlice";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -22,6 +29,23 @@ const NAV_ITEMS = [
 ];
 
 function NavContent({ onNavClick }) {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      await authServices.logout();
+    } catch {
+      // ignore - still clear local session
+    } finally {
+      clearPersistedAuthTokens();
+      dispatch(clearUser());
+      toast.success("Signed out.");
+      onNavClick?.();
+      navigate("/signin");
+    }
+  };
+
   return (
     <nav className="flex w-full flex-1 flex-col space-y-1 px-[10%] text-base">
       {NAV_ITEMS.map(({ to, label, icon: Icon, exact }) => (
@@ -65,6 +89,19 @@ function NavContent({ onNavClick }) {
           )}
         </NavLink>
       ))}
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="group flex w-full items-center gap-3 rounded-lg py-2.5 font-bold transition-colors hover:bg-red-50 hover:text-red-700"
+      >
+        <span className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5 text-slate-500 group-hover:text-red-700">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white transition-colors group-hover:border-red-200 group-hover:bg-red-50 group-hover:text-red-700">
+            <LogOut className="h-4 w-4 text-slate-400 group-hover:text-red-600" />
+          </span>
+          <span>Sign out</span>
+        </span>
+      </button>
     </nav>
   );
 }
