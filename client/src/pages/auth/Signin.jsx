@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useForm } from "react-hook-form";
-import { toast } from "sonner";
 import { authServices, persistAuthTokens } from "../../services/authServices";
 import { setUser } from "../../store/auth/authSlice";
 import { Eye, EyeOff } from "lucide-react";
+import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 
 function Signin() {
     const dispatch = useDispatch();
@@ -25,10 +25,13 @@ function Signin() {
             persistAuthTokens({ accessToken, refreshToken });
             dispatch(setUser({ user, token: accessToken, tokenExpire: null }));
 
-            toast.success("Signed in successfully.");
+            toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
             navigate("/dashboard");
         } catch (error) {
-            toast.error(error?.response?.data?.message || "Unable to sign in.");
+            toastAuthError(error, {
+              fallbackTitle: "Sign in failed",
+              fallbackDescription: "Please check your details and try again.",
+            });
         }
     }
 
