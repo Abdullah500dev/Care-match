@@ -42,11 +42,11 @@ const router = express.Router();
  *             properties:
  *               name:
  *                 type: string
- *                 example: "Ahsan"
+ *                 example: "Saad"
  *               email:
  *                 type: string
  *                 format: email
- *                 example: "ahsan.dev.404@gmail.com"
+ *                 example: "saad.dev.404@gmail.com"
  *               password:
  *                 type: string
  *                 example: "123Admin"
@@ -54,8 +54,8 @@ const router = express.Router();
  *                 type: string
  *                 example: "123Admin"
  *           example:
- *             name: "Ahsan"
- *             email: "ahsan.dev.404@gmail.com"
+ *             name: "Saad"
+ *             email: "saad.dev.404@gmail.com"
  *             password: "123Admin"
  *             confirmPassword: "123Admin"
  *     responses:
@@ -71,7 +71,7 @@ const router = express.Router();
  *                   example: true
  *                 message:
  *                   type: string
- *                   example: "Please check your email: ahsan.dev.404@gmail.com for your 6-digit verification code to activate your account!"
+ *                   example: "Please check your email: saad.dev.404@gmail.com for your 6-digit verification code to activate your account!"
  *       400:
  *         description: Bad request - validation error
  *         content:
@@ -107,7 +107,7 @@ router.post("/register", registerValidation, register);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: "ahsan.dev.404@gmail.com"
+ *                 example: "saad.dev.404@gmail.com"
  *               code:
  *                 type: string
  *                 minLength: 6
@@ -166,12 +166,12 @@ router.post("/activate-user", verifyActivationValidation, activateUser);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: "ahsan.dev.404@gmail.com"
+ *                 example: "saad.dev.404@gmail.com"
  *               password:
  *                 type: string
  *                 example: "123Admin"
  *           example:
- *             email: "ahsan.dev.404@gmail.com"
+ *             email: "saad.dev.404@gmail.com"
  *             password: "123Admin"
  *     responses:
  *       200:
@@ -195,10 +195,10 @@ router.post("/activate-user", verifyActivationValidation, activateUser);
  *                       example: "64f8a1b2c3d4e5f6a7b8c9d0"
  *                     name:
  *                       type: string
- *                       example: "Ahsan"
+ *                       example: "Saad"
  *                     email:
  *                       type: string
- *                       example: "ahsan.dev.404@gmail.com"
+ *                       example: "saad.dev.404@gmail.com"
  *                     is_verified:
  *                       type: boolean
  *                       example: true
@@ -364,9 +364,9 @@ router.get("/refresh-token", updateAccessToken);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: "ahsan.dev.404@gmail.com"
+ *                 example: "saad.dev.404@gmail.com"
  *           example:
- *             email: "ahsan.dev.404@gmail.com"
+ *             email: "saad.dev.404@gmail.com"
  *     responses:
  *       200:
  *         description: Verification code sent successfully
@@ -428,10 +428,10 @@ router.post("/request/token/new", resendVerificationToken);
  *                       example: "64f8a1b2c3d4e5f6a7b8c9d0"
  *                     name:
  *                       type: string
- *                       example: "Ahsan"
+ *                       example: "Saad"
  *                     email:
  *                       type: string
- *                       example: "ahsan.dev.404@gmail.com"
+ *                       example: "saad.dev.404@gmail.com"
  *                     is_verified:
  *                       type: boolean
  *                       example: true
@@ -474,9 +474,9 @@ router.get("/me", isAutheticated, getUserInfo);
  *             properties:
  *               name:
  *                 type: string
- *                 example: "Ahsan"
+ *                 example: "Saad"
  *           example:
- *             name: "Ahsan"
+ *             name: "Saad"
  *     responses:
  *       200:
  *         description: User information updated successfully
@@ -499,10 +499,10 @@ router.get("/me", isAutheticated, getUserInfo);
  *                       example: "64f8a1b2c3d4e5f6a7b8c9d0"
  *                     name:
  *                       type: string
- *                       example: "Ahsan"
+ *                       example: "Saad"
  *                     email:
  *                       type: string
- *                       example: "ahsan.dev.404@gmail.com"
+ *                       example: "saad.dev.404@gmail.com"
  *                     is_verified:
  *                       type: boolean
  *                       example: true
@@ -643,9 +643,9 @@ router.put("/update-user-password", isAutheticated, updatePassword);
  *               email:
  *                 type: string
  *                 format: email
- *                 example: "ahsan.dev.404@gmail.com"
+ *                 example: "saad.dev.404@gmail.com"
  *           example:
- *             email: "ahsan.dev.404@gmail.com"
+ *             email: "saad.dev.404@gmail.com"
  *     responses:
  *       200:
  *         description: Password reset email sent successfully

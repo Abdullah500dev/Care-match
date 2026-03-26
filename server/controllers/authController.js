@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 
 import catchAsyncError from "../middleware/catchAsyncErrors.js";
 import sendMail from "../utils/sendMail.js";
+import { greetingNameForEmail } from "../utils/greetingNameForEmail.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
@@ -48,7 +49,7 @@ export const register = catchAsyncError(async (req, res, next) => {
         subject: "Activate your account – your verification code",
         template: "activation-mail.ejs",
         data: {
-          user: { name: user.name },
+          user: { name: greetingNameForEmail(user) },
           verificationCode,
           expiresInMinutes: 15,
         },
@@ -316,7 +317,7 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
         subject: "Password Reset Link",
         template: "reset-password.ejs",
         data: {
-          user: { name: user.name },
+          user: { name: greetingNameForEmail(user) },
           resetLink: resetLink,
         },
       });
@@ -412,7 +413,7 @@ export const resendVerificationToken = catchAsyncError(
           subject: "Activate your account – your verification code",
           template: "activation-mail.ejs",
           data: {
-            user: { name: user.name },
+            user: { name: greetingNameForEmail(user) },
             verificationCode,
             expiresInMinutes: 15,
           },

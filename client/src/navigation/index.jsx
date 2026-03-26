@@ -21,6 +21,8 @@ import FAQ from "../pages/client/FAQ";
 import WhyUs from "../pages/client/WhyUs";
 import NotFound from "../pages/common/NotFound";
 import Signin from "../pages/auth/Signin";
+import ForgotPassword from "../pages/auth/ForgotPassword";
+import ResetPassword from "../pages/auth/ResetPassword";
 
 // Retry wrapper for lazy imports - reloads page on chunk fetch failure (stale cache)
 const lazyWithRetry = (importFn) =>
@@ -168,6 +170,9 @@ export default function Navigation() {
               <Route path="/Signin" element={<Signin />} />
               <Route path="/signin" element={<Signin />} />
               <Route path="/login" element={<Signin />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/api/auth/reset-password" element={<ResetPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               <Route path="/dashboard/*" element={<DashboardLayout />}>
                 <Route index element={<DashboardHome />} />

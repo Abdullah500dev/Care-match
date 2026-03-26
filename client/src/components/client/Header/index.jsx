@@ -1,13 +1,38 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useSelector } from "react-redux";
-import { Menu, X, User, Search } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import {
+  Menu,
+  X,
+  User,
+  Search,
+  LogOut,
+  ChevronDown,
+  LayoutDashboard,
+  Users,
+  Building2,
+  CalendarDays,
+  MessageSquareText,
+  BarChart3,
+  Settings,
+} from "lucide-react";
 import { getUser } from "@/store/auth/authSlice.js";
+import { toast } from "sonner";
+import { authServices, clearPersistedAuthTokens } from "../../../services/authServices";
+import { clearUser } from "../../../store/auth/authSlice";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
   const { isAuthenticated, userData } = useSelector(getUser);
 
   const menuItems = [
@@ -41,6 +66,20 @@ export default function Header() {
       } else {
         navigate("/", { state: { scrollTo: item.target } });
       }
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authServices.logout();
+    } catch {
+      // ignore - still clear local session
+    } finally {
+      clearPersistedAuthTokens();
+      dispatch(clearUser());
+      toast.success("Signed out.");
+      setIsMenuOpen(false);
+      navigate("/signin");
     }
   };
 
@@ -106,19 +145,79 @@ export default function Header() {
               aria-hidden
             />
             {isAuthenticated && userData ? (
-              <Link
-                to="/profile"
-                className="flex items-center gap-2 text-[#364153] transition-colors hover:text-[#364153]"
-                aria-label="Profile"
-              >
-                <Search className="h-4 w-4 text-[#364153] md:h-5 md:w-5" />
-                <span className="flex h-8 w-8 items-center justify-center rounded-full md:h-8 md:w-8 min-[1024px]:h-8 min-[1024px]:w-8 min-[1280px]:h-8 min-[1280px]:w-8 min-[1536px]:h-9 min-[1536px]:w-9">
-                  <User className="h-4 w-4 text-[#364153] md:h-5 md:w-5 min-[1280px]:h-4 min-[1536px]:h-5 min-[1536px]:w-5" />
-                </span>
-                <span className="font-medium text-[#364153] text-sm md:text-base min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base">
-                  {userData.name || "Profile"}
-                </span>
-              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-[#364153] transition-colors hover:bg-slate-50 hover:text-[#132329]"
+                    aria-label="Open account menu"
+                  >
+                    <Search className="h-4 w-4 text-[#364153]" />
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full">
+                      <User className="h-4 w-4 text-[#364153]" />
+                    </span>
+                    <span className="max-w-[140px] truncate">
+                      {userData.name || "Account"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 text-[#364153]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard" className="flex items-center gap-2">
+                      <LayoutDashboard className="h-4 w-4" />
+                      Overview
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/residents" className="flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Leads
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/communities" className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Facilities
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/calendar" className="flex items-center gap-2">
+                      <CalendarDays className="h-4 w-4" />
+                      Calendar
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/messages" className="flex items-center gap-2">
+                      <MessageSquareText className="h-4 w-4" />
+                      Messages
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/analytics" className="flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4" />
+                      Analytics
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/dashboard/settings" className="flex items-center gap-2">
+                      <Settings className="h-4 w-4" />
+                      Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-red-600 focus:text-red-600"
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      handleLogout();
+                    }}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             ) : (
               <div className="flex items-center gap-3">
                 {/* <Link
@@ -187,18 +286,67 @@ export default function Header() {
               )}
               <div className="md:mt-2 flex flex-col gap-3 border-t border-gray-100 md:pt-4">
                 {isAuthenticated && userData ? (
-                  <Link
-                    to="/profile"
-                    className="flex items-center gap-2 px-1"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-100">
-                      <User className="h-5 w-5 text-gray-600" />
-                    </span>
-                    <span className="font-medium text-gray-700 text-sm sm:text-base">
-                      {userData.name || "Profile"}
-                    </span>
-                  </Link>
+                  <>
+                    <div className="px-1 text-sm font-semibold text-slate-900">
+                      {userData.name || "Account"}
+                    </div>
+                    <Link
+                      to="/dashboard"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Overview
+                    </Link>
+                    <Link
+                      to="/dashboard/residents"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Leads
+                    </Link>
+                    <Link
+                      to="/dashboard/communities"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Facilities
+                    </Link>
+                    <Link
+                      to="/dashboard/calendar"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Calendar
+                    </Link>
+                    <Link
+                      to="/dashboard/messages"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Messages
+                    </Link>
+                    <Link
+                      to="/dashboard/analytics"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Analytics
+                    </Link>
+                    <Link
+                      to="/dashboard/settings"
+                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                      onClick={() => setIsMenuOpen(false)}
+                    >
+                      Settings
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="mt-1 inline-flex justify-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white"
+                    >
+                      Sign out
+                    </button>
+                  </>
                 ) : (
                   <div className="flex items-center gap-1.5 px-1">
                     <Link
@@ -206,7 +354,7 @@ export default function Header() {
                       className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      Sign-in
+                      Signup
                     </Link>
                     <span className="text-[#364153]">/</span>
                     <Link
