@@ -18,6 +18,12 @@ export const getAuthToken = () => localStorage.getItem("access_token");
 apiClient.interceptors.request.use((config) => {
   const token = getAuthToken();
   if (token) config.headers["access-token"] = token;
+
+  // Let browser set multipart boundary for FormData requests.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
+
   return config;
 });
 
