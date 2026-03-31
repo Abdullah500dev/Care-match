@@ -41,6 +41,14 @@ Backend API for **CareMatch AI**. A comprehensive Node.js authentication and use
 3. **Environment Setup**
    Create a `.env` file in the root directory:
 
+   Optional default admin seeding (created automatically on startup if missing):
+
+   ```env
+   DEFAULT_ADMIN_NAME=Super Admin
+   DEFAULT_ADMIN_EMAIL=admin@carematch.ai
+   DEFAULT_ADMIN_PASSWORD=Admin1234
+   ```
+
 4. **Start the server**
 
    ```bash

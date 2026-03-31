@@ -1,34 +1,384 @@
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MapPin, Star } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { MapPin, Plus, Star, X } from "lucide-react";
+import { toast } from "sonner";
+import { apiClient } from "@/services/api";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+} from "@/components/ui/carousel";
 
-const FACILITIES_DATA = [
-  {
-    id: 1,
-    type: "Assisted Living",
-    rating: "4.9",
-    name: "Sunrise Villa Senior Living",
-    location: "Los Angeles, CA",
-    units: "120",
-    occupancy: "92%",
-    activeLeads: "24",
-    image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop",
-  },
-  {
-    id: 2,
-    type: "Memory Care",
-    rating: "4.7",
-    name: "Golden Years Memory",
-    location: "Los Angeles, CA",
-    units: "45",
-    occupancy: "85%",
-    activeLeads: "24",
-    image: "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?w=400&h=220&fit=crop",
-  },
-];
+const PLACEHOLDER_IMAGE =
+  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
+
+function resolveSingleImageUrl(path) {
+  if (!path) return PLACEHOLDER_IMAGE;
+  if (path.startsWith("http")) return path;
+  const base = import.meta.env.VITE_REACT_APP_API_BASE_URL || "";
+  const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+function getFacilityImageUrls(images) {
+  if (!Array.isArray(images) || images.length === 0) {
+    return [PLACEHOLDER_IMAGE];
+  }
+  return images.map((p) => resolveSingleImageUrl(p));
+}
+
+/** Formats phone as you type: US (XXX) XXX-XXXX; +1 (…) when 11 digits start with 1; +intl when leading + or longer numbers. */
+function formatPhoneInput(value) {
+  const raw = String(value || "");
+  const hasPlus = raw.trim().startsWith("+");
+  const digits = raw.replace(/\D/g, "").slice(0, 15);
+  if (!digits) return hasPlus ? "+" : "";
+
+  // NANP 11 digits without leading + (e.g. pasted 12065550123)
+  if (digits.length === 11 && digits[0] === "1" && !hasPlus) {
+    const d = digits.slice(1);
+    return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+  }
+
+  if (hasPlus || digits.length > 10) {
+    return "+" + digits.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
+  }
+
+  const d = digits.slice(0, 10);
+  if (d.length <= 3) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** Formats pricing: $4,500, optional range $4,500 - $6,800, optional /month. */
+function formatPricingInput(value) {
+  const raw = String(value || "");
+  const monthly = /\/\s*month\s*$/i.test(raw.trim());
+  const withoutMonthly = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
+  const nums = withoutMonthly.match(/\d+/g);
+  if (!nums || nums.length === 0) return monthly ? "" : raw;
+
+  const fmt = (n) => {
+    const num = Number.parseInt(n, 10);
+    if (Number.isNaN(num)) return n;
+    return `$${num.toLocaleString("en-US")}`;
+  };
+
+  if (nums.length === 1) return fmt(nums[0]) + (monthly ? "/month" : "");
+  return `${fmt(nums[0])} - ${fmt(nums[1])}` + (monthly ? "/month" : "");
+}
+
+function FacilityImageSlider({ images, name }) {
+  const urls = getFacilityImageUrls(images);
+  const [api, setApi] = useState(null);
+  const [current, setCurrent] = useState(0);
+
+  useEffect(() => {
+    if (!api) return;
+    setCurrent(api.selectedScrollSnap());
+    const onSelect = () => setCurrent(api.selectedScrollSnap());
+    api.on("select", onSelect);
+    return () => api.off("select", onSelect);
+  }, [api]);
+
+  return (
+    <Carousel
+      className="w-full overflow-hidden rounded-t-[28px]"
+      setApi={setApi}
+      opts={{ align: "start", loop: urls.length > 1 }}
+    >
+      <CarouselContent className="-ml-0">
+        {urls.map((src, index) => (
+          <CarouselItem key={`${src}-${index}`} className="basis-full pl-0">
+            <div className="relative aspect-[400/220] w-full overflow-hidden bg-slate-200">
+              <img
+                src={src}
+                alt={`${name} — image ${index + 1}`}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+      {urls.length > 1 && (
+        <div
+          className="absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 gap-1.5"
+          role="tablist"
+          aria-label="Slide indicators"
+        >
+          {urls.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Go to slide ${i + 1}`}
+              aria-current={i === current}
+              className={`h-1.5 rounded-full transition-all ${
+                i === current ? "w-6 bg-white" : "w-1.5 bg-white/50"
+              }`}
+              onClick={() => api?.scrollTo(i)}
+            />
+          ))}
+        </div>
+      )}
+    </Carousel>
+  );
+}
 
 export default function Communities() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [keptImagePaths, setKeptImagePaths] = useState([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    address: "",
+    services: [],
+    amenities: [],
+    careLevels: [],
+    pricing: "",
+  });
+  const [tagDrafts, setTagDrafts] = useState({
+    services: "",
+    amenities: "",
+    careLevels: "",
+  });
+  const [facilities, setFacilities] = useState([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
+
+  const fetchFacilities = useCallback(async () => {
+    setListLoading(true);
+    setListError("");
+    try {
+      const { data } = await apiClient.get("/api/facilities");
+      setFacilities(data?.facilities || []);
+    } catch (error) {
+      setListError(
+        error?.response?.data?.message || "Could not load facilities. Sign in as admin and try again."
+      );
+      setFacilities([]);
+    } finally {
+      setListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchFacilities();
+  }, [fetchFacilities]);
+
+  const handleInput = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setKeptImagePaths([]);
+    setForm({
+      name: "",
+      email: "",
+      phone: "",
+      address: "",
+      services: [],
+      amenities: [],
+      careLevels: [],
+      pricing: "",
+    });
+    setTagDrafts({
+      services: "",
+      amenities: "",
+      careLevels: "",
+    });
+    setSelectedImages([]);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setModalOpen(true);
+  };
+
+  const openManageFacility = (facility) => {
+    setEditingId(facility._id);
+    setForm({
+      name: facility.name || "",
+      email: facility.email || "",
+      phone: facility.phone || "",
+      address: facility.address || "",
+      services: Array.isArray(facility.services) ? [...facility.services] : [],
+      amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
+      careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
+      pricing: facility.pricing || "",
+    });
+    setTagDrafts({ services: "", amenities: "", careLevels: "" });
+    setKeptImagePaths([...(facility.images || [])]);
+    setSelectedImages([]);
+    setModalOpen(true);
+  };
+
+  const handleImageSelect = (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const imageFiles = files.filter((file) => file.type?.startsWith("image/"));
+    const rejectedCount = files.length - imageFiles.length;
+
+    if (rejectedCount > 0) {
+      toast.error("Only image files are allowed", {
+        description: "PDF, folders, and other file types are blocked.",
+      });
+    }
+
+    if (!imageFiles.length) {
+      event.target.value = "";
+      return;
+    }
+
+    const maxFiles = 8 - keptImagePaths.length;
+    setSelectedImages((prev) => [...prev, ...imageFiles].slice(0, Math.max(0, maxFiles)));
+    event.target.value = "";
+  };
+
+  const removeImage = (indexToRemove) => {
+    setSelectedImages((prev) => prev.filter((_, index) => index !== indexToRemove));
+  };
+
+  const addTags = (field, rawValue) => {
+    const parsedValues = rawValue
+      .split(/[\n,]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!parsedValues.length) return;
+
+    setForm((prev) => {
+      const existing = new Set(prev[field].map((v) => v.toLowerCase()));
+      const next = [...prev[field]];
+      parsedValues.forEach((item) => {
+        if (!existing.has(item.toLowerCase())) {
+          existing.add(item.toLowerCase());
+          next.push(item);
+        }
+      });
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const removeTag = (field, indexToRemove) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, index) => index !== indexToRemove),
+    }));
+  };
+
+  const handleTagInputKeyDown = (field, event) => {
+    if (event.key !== "Enter" && event.key !== ",") return;
+    event.preventDefault();
+    const value = tagDrafts[field];
+    addTags(field, value);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleTagInputBlur = (field) => {
+    const value = tagDrafts[field];
+    if (!value.trim()) return;
+    addTags(field, value);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleSubmitFacility = async (e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+
+    try {
+      const payload = new FormData();
+      payload.append("name", form.name);
+      payload.append("email", form.email);
+      payload.append("phone", form.phone);
+      payload.append("address", form.address);
+      payload.append("pricing", form.pricing);
+      form.services.forEach((service) => payload.append("services", service));
+      form.amenities.forEach((amenity) => payload.append("amenities", amenity));
+      form.careLevels.forEach((careLevel) => payload.append("care_levels", careLevel));
+      selectedImages.forEach((file) => payload.append("images", file));
+
+      if (editingId) {
+        payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
+        await apiClient.put(`/api/facilities/${editingId}`, payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Facility updated", {
+          description: "Changes have been saved.",
+        });
+      } else {
+        await apiClient.post("/api/facilities", payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        toast.success("Facility created", {
+          description: "Credentials and reset-password link sent to facility email.",
+        });
+      }
+
+      setModalOpen(false);
+      resetForm();
+      fetchFacilities();
+    } catch (error) {
+      toast.error(editingId ? "Unable to update facility" : "Unable to create facility", {
+        description:
+          error?.response?.data?.message || "Please check fields and try again.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteFacility = async () => {
+    if (!editingId) return;
+    setIsDeleting(true);
+    try {
+      await apiClient.delete(`/api/facilities/${editingId}`);
+      toast.success("Facility deleted", {
+        description: "The facility and its login have been removed.",
+      });
+      setDeleteDialogOpen(false);
+      setModalOpen(false);
+      resetForm();
+      fetchFacilities();
+    } catch (error) {
+      toast.error("Unable to delete facility", {
+        description: error?.response?.data?.message || "Please try again.",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const removeKeptImage = (path) => {
+    setKeptImagePaths((prev) => prev.filter((p) => p !== path));
+  };
+
   return (
     <div
       className="mx-auto w-full min-w-0 max-w-5xl space-y-6"
@@ -50,108 +400,454 @@ export default function Communities() {
             Manage your facilities and track performance.
           </p>
         </div>
+        <div className="mt-3 sm:mt-0">
+          <Button
+            type="button"
+            onClick={openCreateModal}
+            className="flex items-center gap-2 rounded-xl bg-[#00B8DB] px-4 py-2.5 font-semibold text-white hover:bg-[#00B8DB]/90"
+          >
+            <Plus className="h-4 w-4" />
+            New Facility
+          </Button>
+        </div>
       </div>
 
       {/* Facility cards grid */}
-      <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
-        {FACILITIES_DATA.map((facility) => (
-          <Card
-            key={facility.id}
-            className="min-w-0 overflow-hidden rounded-[28px] border-slate-200 bg-white shadow-sm"
-          >
-            {/* Image section with overlays - name & location on picture */}
-            <div className="relative aspect-[400/220] w-full overflow-hidden rounded-t-[28px] bg-slate-200">
-              <img
-                src={facility.image}
-                alt={facility.name}
-                className="h-full w-full object-cover"
-              />
-              {/* Gradient overlay so text is readable */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-              {/* Type + Rating pills - top left, side by side */}
-              <div className="absolute left-3 top-3 flex items-center gap-2">
-                <span
-                  className="rounded-full px-3 py-1 text-xs font-medium text-white"
-                  style={{ backgroundColor: "#00B8DB" }}
-                >
-                  {facility.type}
-                </span>
-                <span className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-sm">
-                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                  {facility.rating}
-                </span>
+      {listError && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {listError}
+        </p>
+      )}
+      {listLoading ? (
+        <p className="text-center text-sm text-slate-500">Loading facilities…</p>
+      ) : facilities.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-500">
+          No facilities yet. Click <span className="font-semibold text-slate-700">New Facility</span> to add one.
+        </p>
+      ) : (
+        <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
+          {facilities.map((facility) => {
+            const typeLabel =
+              (facility.care_levels && facility.care_levels[0]) ||
+              (facility.services && facility.services[0]) ||
+              "Facility";
+            return (
+              <Card
+                key={facility._id}
+                className="min-w-0 overflow-hidden rounded-[28px] border-slate-200 bg-white shadow-sm"
+              >
+                <div className="relative w-full overflow-hidden rounded-t-[28px] bg-slate-200">
+                  <FacilityImageSlider images={facility.images} name={facility.name} />
+                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap items-center gap-2">
+                    <span
+                      className="rounded-full px-3 py-1 text-xs font-medium text-white"
+                      style={{ backgroundColor: "#00B8DB" }}
+                    >
+                      {typeLabel}
+                    </span>
+                    {facility.pricing ? (
+                      <span className="rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
+                        {facility.pricing}
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-sm">
+                        <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                        New
+                      </span>
+                    )}
+                  </div>
+                  <div className="pointer-events-none absolute bottom-3 left-3 right-3 text-white">
+                    <h3 className="text-lg font-bold drop-shadow-md sm:text-xl">
+                      {facility.name}
+                    </h3>
+                    <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/95 drop-shadow-md">
+                      <MapPin className="h-4 w-4 shrink-0" />
+                      {facility.address || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <CardContent className="space-y-4 p-4 sm:p-5">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div
+                      className="rounded-2xl px-3 py-3 text-center"
+                      style={{ backgroundColor: "#F8F8FA" }}
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Units
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-slate-900">—</p>
+                    </div>
+                    <div
+                      className="rounded-2xl px-3 py-3 text-center"
+                      style={{ backgroundColor: "#F8F8FA" }}
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Occupancy
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-emerald-600">—</p>
+                    </div>
+                    <div
+                      className="rounded-2xl px-3 py-3 text-center"
+                      style={{ backgroundColor: "#F8F8FA" }}
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                        Active Leads
+                      </p>
+                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">—</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="default"
+                      className="w-[70%] shrink-0 rounded-2xl font-semibold text-white"
+                      style={{ background: "#1A1E2F" }}
+                      onClick={() => openManageFacility(facility)}
+                    >
+                      Manage Facility
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="default"
+                      className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
+                    >
+                      View Analytics
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) resetForm();
+        }}
+      >
+        <DialogContent className="mx-4 max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900">
+              {editingId ? "Edit facility" : "Add new facility"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmitFacility} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Facility Name
+                </label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => handleInput("name", e.target.value)}
+                  placeholder="Evergreen Health Center"
+                  required
+                />
               </div>
-              {/* Name & location - bottom left on image, white text */}
-              <div className="absolute bottom-3 left-3 right-3 text-white">
-                <h3 className="text-lg font-bold drop-shadow-md sm:text-xl">
-                  {facility.name}
-                </h3>
-                <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/95 drop-shadow-md">
-                  <MapPin className="h-4 w-4 shrink-0" />
-                  {facility.location}
-                </p>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => handleInput("email", e.target.value)}
+                  placeholder="intake@evergreenhealth.com"
+                  required
+                />
               </div>
             </div>
 
-            <CardContent className="space-y-4 p-4 sm:p-5">
-              {/* Data cards - exact match to picture: #F8F8FA bg, rounded, light grey labels */}
-              <div className="grid grid-cols-3 gap-2">
-                <div
-                  className="rounded-2xl px-3 py-3 text-center"
-                  style={{ backgroundColor: "#F8F8FA" }}
-                >
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Units
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
-                    {facility.units}
-                  </p>
-                </div>
-                <div
-                  className="rounded-2xl px-3 py-3 text-center"
-                  style={{ backgroundColor: "#F8F8FA" }}
-                >
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Occupancy
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-emerald-600">
-                    {facility.occupancy}
-                  </p>
-                </div>
-                <div
-                  className="rounded-2xl px-3 py-3 text-center"
-                  style={{ backgroundColor: "#F8F8FA" }}
-                >
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Active Leads
-                  </p>
-                  <p className="mt-1 text-xl font-bold text-[#00B8DB]">
-                    {facility.activeLeads}
-                  </p>
-                </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Phone
+                </label>
+                <Input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={form.phone}
+                  onChange={(e) => handleInput("phone", formatPhoneInput(e.target.value))}
+                  placeholder="(206) 555-0123"
+                  required
+                />
               </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Pricing
+                </label>
+                <Input
+                  type="text"
+                  inputMode="text"
+                  value={form.pricing}
+                  onChange={(e) => handleInput("pricing", formatPricingInput(e.target.value))}
+                  placeholder="$4,500 or $4,500 - $6,800/month"
+                />
+              </div>
+            </div>
 
-              {/* Action buttons - 70% Manage Facility, 30% View Analytics */}
-              <div className="flex gap-2 pt-1">
-                <Button
-                  size="default"
-                  className="w-[70%] shrink-0 rounded-2xl font-semibold text-white"
-                  style={{ background: "#1A1E2F" }}
-                >
-                  Manage Facility
-                </Button>
-                <Button
-                  variant="outline"
-                  size="default"
-                  className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
-                >
-                  View Analytics
-                </Button>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Address
+              </label>
+              <Input
+                value={form.address}
+                onChange={(e) => handleInput("address", e.target.value)}
+                placeholder="123 Main St, Seattle, WA"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Facility images (max 8 total)
+              </label>
+              {editingId && keptImagePaths.length > 0 && (
+                <p className="text-xs text-slate-500">Current images — remove to delete on save.</p>
+              )}
+              {editingId && (
+                <div className="flex flex-wrap gap-2">
+                  {keptImagePaths.map((imgPath) => (
+                    <span
+                      key={imgPath}
+                      className="tag-chip inline-flex max-w-full animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-800"
+                    >
+                      <span className="max-w-[180px] truncate" title={imgPath}>
+                        {imgPath.split("/").pop()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeKeptImage(imgPath)}
+                        className="rounded-full p-0.5 text-slate-600 hover:bg-slate-200"
+                        aria-label="Remove image"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <Input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+              />
+              <div className="flex flex-wrap gap-2 pt-1">
+                {selectedImages.map((file, index) => (
+                  <span
+                    key={`${file.name}-${index}`}
+                    className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm"
+                  >
+                    {file.name}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="rounded-full p-0.5 text-slate-700/70 transition hover:bg-slate-700/10 hover:text-slate-900"
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Services
+                </label>
+                <Input
+                  value={tagDrafts.services}
+                  onChange={(e) =>
+                    setTagDrafts((prev) => ({
+                      ...prev,
+                      services: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => handleTagInputKeyDown("services", e)}
+                  onBlur={() => handleTagInputBlur("services")}
+                  placeholder="Type service and press Enter or comma"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {form.services.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-cyan-900 shadow-sm"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeTag("services", index)}
+                        className="rounded-full p-0.5 text-cyan-900/70 transition hover:bg-cyan-900/10 hover:text-cyan-900"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Amenities
+                </label>
+                <Input
+                  value={tagDrafts.amenities}
+                  onChange={(e) =>
+                    setTagDrafts((prev) => ({
+                      ...prev,
+                      amenities: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => handleTagInputKeyDown("amenities", e)}
+                  onBlur={() => handleTagInputBlur("amenities")}
+                  placeholder="Type amenity and press Enter or comma"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {form.amenities.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-violet-900 shadow-sm"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeTag("amenities", index)}
+                        className="rounded-full p-0.5 text-violet-900/70 transition hover:bg-violet-900/10 hover:text-violet-900"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Care Levels
+                </label>
+                <Input
+                  value={tagDrafts.careLevels}
+                  onChange={(e) =>
+                    setTagDrafts((prev) => ({
+                      ...prev,
+                      careLevels: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => handleTagInputKeyDown("careLevels", e)}
+                  onBlur={() => handleTagInputBlur("careLevels")}
+                  placeholder="Type care level and press Enter or comma"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {form.careLevels.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-emerald-900 shadow-sm"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeTag("careLevels", index)}
+                        className="rounded-full p-0.5 text-emerald-900/70 transition hover:bg-emerald-900/10 hover:text-emerald-900"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+              {editingId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl border-red-200 text-red-700 hover:bg-red-50 sm:w-auto"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  disabled={isSubmitting}
+                >
+                  Delete facility
+                </Button>
+              ) : (
+                <span />
+              )}
+              <Button
+                type="submit"
+                className="w-full rounded-xl bg-[#00B8DB] text-white hover:bg-[#00B8DB]/90 sm:min-w-[200px]"
+                disabled={isSubmitting}
+              >
+                {isSubmitting
+                  ? editingId
+                    ? "Saving…"
+                    : "Creating…"
+                  : editingId
+                    ? "Save changes"
+                    : "Create facility"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this facility?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the facility listing and its partner login. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteFacility();
+              }}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <style jsx global>{`
+        @keyframes tagPop {
+          0% {
+            opacity: 0;
+            transform: translateY(8px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .tag-chip:nth-child(3n + 1) {
+          background: linear-gradient(135deg, #cffafe, #bae6fd);
+          border-color: #a5f3fc;
+        }
+        .tag-chip:nth-child(3n + 2) {
+          background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+          border-color: #c4b5fd;
+        }
+        .tag-chip:nth-child(3n + 3) {
+          background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+          border-color: #86efac;
+        }
+      `}</style>
     </div>
   );
 }

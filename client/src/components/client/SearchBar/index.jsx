@@ -1,39 +1,186 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, ArrowRight, Mic } from "lucide-react";
+import { ArrowRight, Loader2, Mic } from "lucide-react";
+import { toast } from "sonner";
 
 export default function SearchBar() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [hasVoiceInput, setHasVoiceInput] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const typingTimerRef = useRef(null);
+  const recordingToastIdRef = useRef(null);
+  const transcribingToastIdRef = useRef(null);
+  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
   const handleSearch = () => {
     navigate("/find-care");
   };
 
-  const handleMicClick = () => {
-    // Placeholder for actual recording logic.
-    // Toggle recording state and, when stopping, mark that we have voice input
-    // so the send button becomes visible.
-    setIsRecording((prev) => {
-      const next = !prev;
-      if (prev && !next) {
-        setHasVoiceInput(true);
-      }
-      return next;
-    });
-  };
-
-  const handleChange = (e) => {
-    const value = e.target.value;
-    setQuery(value);
-    if (value.trim().length > 0) {
-      setHasVoiceInput(false);
+  const clearTypingAnimation = () => {
+    if (typingTimerRef.current) {
+      window.clearInterval(typingTimerRef.current);
+      typingTimerRef.current = null;
     }
   };
 
-  const showSendButton = query.trim().length > 0 || hasVoiceInput;
+  useEffect(() => {
+    return () => {
+      clearTypingAnimation();
+      if (mediaRecorderRef.current?.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingToastIdRef.current) {
+        toast.dismiss(recordingToastIdRef.current);
+      }
+      if (transcribingToastIdRef.current) {
+        toast.dismiss(transcribingToastIdRef.current);
+      }
+    };
+  }, []);
+
+  const typeTextWithAnimation = (text) => {
+    clearTypingAnimation();
+    setQuery("");
+
+    if (!text) return;
+
+    let index = 0;
+    typingTimerRef.current = window.setInterval(() => {
+      index += 1;
+      setQuery(text.slice(0, index));
+      if (index >= text.length) {
+        clearTypingAnimation();
+      }
+    }, 24);
+  };
+
+  const handleChange = (e) => {
+    clearTypingAnimation();
+    setQuery(e.target.value);
+  };
+
+  const transcribeAudio = async (audioBlob) => {
+    if (!OPENAI_API_KEY) {
+      const message = "Missing OpenAI key. Add VITE_OPENAI_API_KEY in your env.";
+      toast.error("Voice input unavailable", { description: message });
+      return;
+    }
+
+    setIsTranscribing(true);
+    transcribingToastIdRef.current = toast.loading("Transcribing your voice...");
+
+    try {
+      const file = new File([audioBlob], "voice-input.webm", {
+        type: audioBlob.type || "audio/webm",
+      });
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("model", "gpt-4o-mini-transcribe");
+
+      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        const errorMessage =
+          errorPayload?.error?.message || "Transcription failed. Please try again.";
+        throw new Error(errorMessage);
+      }
+
+      const payload = await response.json();
+      const transcript = (payload?.text || "").trim();
+
+      if (!transcript) {
+        const message = "No speech detected. Please try speaking clearly.";
+        toast.error("Transcription failed", { id: transcribingToastIdRef.current, description: message });
+        transcribingToastIdRef.current = null;
+        return;
+      }
+
+      typeTextWithAnimation(transcript);
+      toast.success("Voice captured", {
+        id: transcribingToastIdRef.current,
+        description: "Transcript added to search bar.",
+      });
+      transcribingToastIdRef.current = null;
+    } catch (error) {
+      const message = error.message || "Voice transcription failed.";
+      toast.error("Transcription failed", {
+        id: transcribingToastIdRef.current,
+        description: message,
+      });
+      transcribingToastIdRef.current = null;
+    } finally {
+      setIsTranscribing(false);
+    }
+  };
+
+  const startRecording = async () => {
+    clearTypingAnimation();
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      const message = "This browser does not support voice input.";
+      toast.error("Voice input unavailable", { description: message });
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        stream.getTracks().forEach((track) => track.stop());
+        await transcribeAudio(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      recordingToastIdRef.current = toast.loading("Listening... tap mic again to stop");
+    } catch {
+      const message = "Microphone access was blocked. Please allow mic permission.";
+      toast.error("Microphone blocked", { description: message });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+    if (recordingToastIdRef.current) {
+      toast.dismiss(recordingToastIdRef.current);
+      recordingToastIdRef.current = null;
+    }
+  };
+
+  const handleMicClick = () => {
+    if (isTranscribing) return;
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+    startRecording();
+  };
+
+  const showSendButton = query.trim().length > 0;
 
   return (
     <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl" id="search-bar">
@@ -50,7 +197,7 @@ export default function SearchBar() {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={handleChange}
               placeholder="Try: 'Looking for memory care in Los Angeles under $6000/month'"
               className="min-w-0 flex-1 rounded-lg bg-transparent text-[#132329] placeholder:italic placeholder:text-[#0000004D] focus:outline-none text-sm placeholder:text-base sm:text-base sm:placeholder:text-lg min-[1280px]:text-base min-[1280px]:placeholder:text-base min-[1536px]:text-lg min-[1536px]:placeholder:text-lg"
             />
@@ -76,12 +223,25 @@ export default function SearchBar() {
                 className={`flex items-center justify-center rounded-lg px-3 py-3.5 text-[#132329] sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5 ${
                   isRecording
                     ? "bg-[#FEE2E2] text-[#B91C1C] shadow-[0_0_0_3px_rgba(239,68,68,0.35)] mic-recording-pulse"
+                    : isTranscribing
+                    ? "bg-[#DBEAFE] text-[#1D4ED8] mic-transcribing-pulse"
                     : "bg-[#E2E8F0] hover:bg-[#CBD5F1]"
                 }`}
-                aria-label={isRecording ? "Stop recording" : "Start voice input"}
+                aria-label={
+                  isRecording
+                    ? "Stop recording"
+                    : isTranscribing
+                    ? "Transcribing voice"
+                    : "Start voice input"
+                }
                 onClick={handleMicClick}
+                disabled={isTranscribing}
               >
-                <Mic className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                {isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
+                ) : (
+                  <Mic className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                )}
               </button>
             )}
           </div>
@@ -131,6 +291,25 @@ export default function SearchBar() {
 
         .mic-recording-pulse {
           animation: micPulse 1.3s ease-out infinite;
+        }
+
+        @keyframes transcribingPulse {
+          0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45);
+          }
+          70% {
+            transform: scale(1.04);
+            box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+          }
+          100% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+          }
+        }
+
+        .mic-transcribing-pulse {
+          animation: transcribingPulse 1.2s ease-out infinite;
         }
       `}</style>
     </div>

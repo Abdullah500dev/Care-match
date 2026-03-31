@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your CareMatch AI account is ready</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f6f8;
+        font-family: Arial, sans-serif;
+        color: #1f2937;
+      }
+      .wrap {
+        width: 100%;
+        padding: 28px 14px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+      }
+      .header {
+        background: #00b8d9;
+        color: #ffffff;
+        text-align: center;
+        padding: 20px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+      .content {
+        padding: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .credentials {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+        margin: 16px 0;
+      }
+      .btn {
+        display: inline-block;
+        background: #00b8d9;
+        color: #ffffff !important;
+        text-decoration: none;
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-weight: 700;
+      }
+      .muted {
+        color: #6b7280;
+        font-size: 12px;
+      }
+      .link {
+        word-break: break-all;
+        color: #6b7280;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="header">CareMatch AI</div>
+        <div class="content">
+          <p>Hello <%= user.name %>,</p>
+          <p>
+            A new facility account for <strong><%= facility.name %></strong> has been created for you.
+          </p>
+
+          <div class="credentials">
+            <p><strong>Username:</strong> <%= username %></p>
+            <p><strong>Temporary Password:</strong> <%= temporaryPassword %></p>
+          </div>
+
+          <p>
+            For security, please reset your password now using the button below:
+          </p>
+          <p>
+            <a class="btn" href="<%= resetLink %>">Reset Password</a>
+          </p>
+
+          <p class="muted">
+            If the button does not work, copy and paste this link in your browser:
+          </p>
+          <p class="link"><%= resetLink %></p>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

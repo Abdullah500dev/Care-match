@@ -11,7 +11,9 @@ import { fileURLToPath } from "url";
 import database from "./config/db.js";
 import swaggerSpecs from "./config/swagger.js";
 import authRouter from "./routes/authRouter.js";
+import facilityRouter from "./routes/facilityRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
+import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +24,13 @@ const app = express();
 const port = process.env.PORT;
 
 database.on("error", console.error.bind(console, "Database connection error:"));
+database.once("open", async () => {
+  try {
+    await seedDefaultAdmin();
+  } catch (error) {
+    console.error("Default admin seed failed:", error.message);
+  }
+});
 
 app.use(
   cors({
@@ -47,6 +56,7 @@ app.use(
 );
 
 app.use("/api/auth", authRouter);
+app.use("/api/facilities", facilityRouter);
 
 // Serve client build if it exists, otherwise show API info
 const clientDistPath = path.join(__dirname, "../client/dist");

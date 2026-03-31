@@ -52,6 +52,11 @@ const options = {
         description:
           "Forgot password, reset via email, and change password. Used in CareMatch AI app forgot-password flow and account settings.",
       },
+      {
+        name: "Facility Management",
+        description:
+          "Admin-only endpoints to create and manage partner facilities (hospitals) and onboard their accounts.",
+      },
     ],
   },
   apis: ["./routes/*.js", "./controllers/*.js"],
