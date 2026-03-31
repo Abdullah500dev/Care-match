@@ -61,6 +61,9 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     services,
     amenities,
     care_levels,
+    units,
+    occupancy,
+    active_leads,
     pricing,
   } = req.body;
 
@@ -81,6 +84,9 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
   const temporaryPassword = generateTemporaryPassword();
   const normalizedServices = toArray(services);
   const normalizedAmenities = toArray(amenities);
+  const normalizedUnits = Number(units) || 0;
+  const normalizedOccupancy = Number(occupancy) || 0;
+  const normalizedActiveLeads = Number(active_leads) || 0;
   const normalizedCareLevels = toArray(care_levels);
   const uploadedImages = Array.isArray(req.files)
     ? req.files.map((file) => `/uploads/facilities/${file.filename}`)
@@ -93,6 +99,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     phone,
     is_verified: true,
     user_type: "user",
+ 
   });
 
   const facility = await Facility.create({
@@ -104,6 +111,9 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     amenities: normalizedAmenities,
     care_levels: normalizedCareLevels,
     pricing,
+    units: normalizedUnits,
+occupancy: normalizedOccupancy,
+active_leads: normalizedActiveLeads,
     images: uploadedImages,
     created_by: admin._id,
     user_id: facilityUser._id,
@@ -202,6 +212,9 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
     amenities,
     care_levels,
     pricing,
+    units,
+    occupancy,
+    active_leads,
   } = req.body;
 
   if (!validator.validate(email)) {
@@ -213,7 +226,9 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   const normalizedServices = toArray(services);
   const normalizedAmenities = toArray(amenities);
   const normalizedCareLevels = toArray(care_levels);
-
+  const normalizedUnits = Number(units) || 0;
+  const normalizedOccupancy = Number(occupancy) || 0;
+  const normalizedActiveLeads = Number(active_leads) || 0;
   let keepPaths = facility.images || [];
   try {
     if (req.body.keep_image_paths != null && req.body.keep_image_paths !== "") {
@@ -275,6 +290,9 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   facility.services = normalizedServices;
   facility.amenities = normalizedAmenities;
   facility.care_levels = normalizedCareLevels;
+  facility.units = normalizedUnits;
+  facility.occupancy = normalizedOccupancy;
+  facility.active_leads = normalizedActiveLeads;
   facility.pricing = pricing || "";
   facility.images = mergedImages;
   await facility.save();

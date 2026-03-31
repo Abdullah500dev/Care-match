@@ -15,6 +15,9 @@ const joiCreateFacilitySchema = Joi.object({
   care_levels: stringOrArray.optional(),
   pricing: Joi.string().trim().optional().allow(""),
   images: Joi.any().optional(),
+  units: Joi.number().min(0).optional(),
+occupancy: Joi.number().min(0).optional(),
+active_leads: Joi.number().min(0).optional(),
 });
 
 const joiUpdateFacilitySchema = Joi.object({
@@ -28,6 +31,9 @@ const joiUpdateFacilitySchema = Joi.object({
   pricing: Joi.string().trim().optional().allow(""),
   images: Joi.any().optional(),
   keep_image_paths: Joi.string().optional().allow(""),
+  units: Joi.number().min(0).optional(),
+occupancy: Joi.number().min(0).optional(),
+active_leads: Joi.number().min(0).optional(),
 });
 
 export { joiCreateFacilitySchema, joiUpdateFacilitySchema };

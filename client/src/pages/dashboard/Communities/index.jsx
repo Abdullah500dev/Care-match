@@ -160,6 +160,9 @@ export default function Communities() {
     amenities: [],
     careLevels: [],
     pricing: "",
+    units: 0,
+    occupancy: 0,
+    active_leads: 0,
   });
   const [tagDrafts, setTagDrafts] = useState({
     services: "",
@@ -205,6 +208,9 @@ export default function Communities() {
       services: [],
       amenities: [],
       careLevels: [],
+      units: 0,
+      occupancy: 0,
+      active_leads: 0,
       pricing: "",
     });
     setTagDrafts({
@@ -231,6 +237,9 @@ export default function Communities() {
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
       pricing: facility.pricing || "",
+      units: facility.units || 0,
+      occupancy: facility.occupancy || 0,
+      active_leads: facility.active_leads || 0,
     });
     setTagDrafts({ services: "", amenities: "", careLevels: "" });
     setKeptImagePaths([...(facility.images || [])]);
@@ -323,6 +332,9 @@ export default function Communities() {
       form.amenities.forEach((amenity) => payload.append("amenities", amenity));
       form.careLevels.forEach((careLevel) => payload.append("care_levels", careLevel));
       selectedImages.forEach((file) => payload.append("images", file));
+      payload.append("units", form.units);
+      payload.append("occupancy", form.occupancy);
+      payload.append("active_leads", form.active_leads);
 
       if (editingId) {
         payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
@@ -477,7 +489,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Units
                       </p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">—</p>
+                     <p className="mt-1 text-xl font-bold text-slate-900">
+  {facility.units ?? 0}
+</p>
                     </div>
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
@@ -486,7 +500,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Occupancy
                       </p>
-                      <p className="mt-1 text-xl font-bold text-emerald-600">—</p>
+                      <p className="mt-1 text-xl font-bold text-emerald-600">
+  {facility.occupancy ?? 0}
+</p>
                     </div>
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
@@ -495,7 +511,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Active Leads
                       </p>
-                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">—</p>
+                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">
+  {facility.active_leads ?? 0}
+</p>
                     </div>
                   </div>
 
@@ -767,7 +785,46 @@ export default function Communities() {
                 </div>
               </div>
             </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Units
+    </label>
+    <Input
+      type="number"
+      min="0"
+      value={form.units}
+      onChange={(e) => handleInput("units", Number(e.target.value))}
+      placeholder="100"
+    />
+  </div>
 
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Occupancy
+    </label>
+    <Input
+      type="number"
+      min="0"
+      value={form.occupancy}
+      onChange={(e) => handleInput("occupancy", Number(e.target.value))}
+      placeholder="85"
+    />
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Active Leads
+    </label>
+    <Input
+      type="number"
+      min="0"
+      value={form.active_leads}
+      onChange={(e) => handleInput("active_leads", Number(e.target.value))}
+      placeholder="12"
+    />
+  </div>
+</div>
             <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               {editingId ? (
                 <Button
@@ -796,6 +853,8 @@ export default function Communities() {
                     : "Create facility"}
               </Button>
             </div>
+
+            
           </form>
         </DialogContent>
       </Dialog>
