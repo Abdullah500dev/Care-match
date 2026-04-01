@@ -45,6 +45,23 @@ const facilitySchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+
+    units: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    occupancy: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    active_leads: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     created_by: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

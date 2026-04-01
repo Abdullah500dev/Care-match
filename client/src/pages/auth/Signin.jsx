@@ -26,7 +26,17 @@ function Signin() {
             dispatch(setUser({ user, token: accessToken, tokenExpire: null }));
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
-            navigate("/dashboard");
+            const role = user?.role;
+            const userType = user?.user_type;
+            if (["admin", "authenticator", "moderator"].includes(userType)) {
+              navigate("/dashboard");
+            } else if (role === "facility") {
+              navigate("/facility-dashboard");
+            } else if (role === "user") {
+              navigate("/user-dashboard");
+            } else {
+              navigate("/dashboard");
+            }
         } catch (error) {
             toastAuthError(error, {
               fallbackTitle: "Sign in failed",

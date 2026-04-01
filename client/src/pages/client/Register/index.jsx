@@ -23,7 +23,7 @@ export default function Register() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const showActivationCard = Boolean(pendingEmail);
-
+ 
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);

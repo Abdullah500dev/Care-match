@@ -69,22 +69,35 @@ function formatPhoneInput(value) {
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
-/** Formats pricing: $4,500, optional range $4,500 - $6,800, optional /month. */
+/**
+ * Pricing: digits only (plus optional one range: min - max). Strips letters/symbols.
+ * Optional suffix /month. Preserves "min - " while typing the second amount (fixes 4-digit ranges).
+ */
 function formatPricingInput(value) {
   const raw = String(value || "");
   const monthly = /\/\s*month\s*$/i.test(raw.trim());
-  const withoutMonthly = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
-  const nums = withoutMonthly.match(/\d+/g);
-  if (!nums || nums.length === 0) return monthly ? "" : raw;
+  let body = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
+  body = body.replace(/\$/g, "").replace(/,/g, "");
+  body = body.replace(/[^\d\s-]/g, "");
+  const parts = body.split(/\s*-\s*/);
+  const leftDigits = (parts[0] ?? "").replace(/\D/g, "").slice(0, 8);
+  const rightDigits =
+    parts.length > 1 ? parts.slice(1).join("").replace(/\D/g, "").slice(0, 8) : "";
 
-  const fmt = (n) => {
-    const num = Number.parseInt(n, 10);
-    if (Number.isNaN(num)) return n;
+  const fmt = (digits) => {
+    if (!digits) return "";
+    const num = Number.parseInt(digits, 10);
+    if (Number.isNaN(num)) return "";
     return `$${num.toLocaleString("en-US")}`;
   };
 
-  if (nums.length === 1) return fmt(nums[0]) + (monthly ? "/month" : "");
-  return `${fmt(nums[0])} - ${fmt(nums[1])}` + (monthly ? "/month" : "");
+  let out = fmt(leftDigits);
+  if (parts.length > 1) {
+    out += " - " + fmt(rightDigits);
+  }
+  const suffix = monthly ? "/month" : "";
+  if (!out && !suffix) return "";
+  return out + suffix;
 }
 
 function FacilityImageSlider({ images, name }) {
@@ -160,6 +173,9 @@ export default function Communities() {
     amenities: [],
     careLevels: [],
     pricing: "",
+    units: 0,
+    occupancy: 0,
+    active_leads: 0,
   });
   const [tagDrafts, setTagDrafts] = useState({
     services: "",
@@ -194,6 +210,21 @@ export default function Communities() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  /** Units / occupancy / leads: empty display when 0 so typing doesn’t stick to a leading 0. */
+  const handleNonNegativeCountInput = (field) => (e) => {
+    const raw = e.target.value;
+    if (raw === "") {
+      handleInput(field, 0);
+      return;
+    }
+    const n = parseInt(raw, 10);
+    if (!Number.isNaN(n)) {
+      handleInput(field, Math.max(0, n));
+    }
+  };
+
+  const countFieldDisplayValue = (n) => (n === 0 ? "" : n);
+
   const resetForm = () => {
     setEditingId(null);
     setKeptImagePaths([]);
@@ -205,6 +236,9 @@ export default function Communities() {
       services: [],
       amenities: [],
       careLevels: [],
+      units: 0,
+      occupancy: 0,
+      active_leads: 0,
       pricing: "",
     });
     setTagDrafts({
@@ -231,6 +265,9 @@ export default function Communities() {
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
       pricing: facility.pricing || "",
+      units: facility.units || 0,
+      occupancy: facility.occupancy || 0,
+      active_leads: facility.active_leads || 0,
     });
     setTagDrafts({ services: "", amenities: "", careLevels: "" });
     setKeptImagePaths([...(facility.images || [])]);
@@ -323,6 +360,9 @@ export default function Communities() {
       form.amenities.forEach((amenity) => payload.append("amenities", amenity));
       form.careLevels.forEach((careLevel) => payload.append("care_levels", careLevel));
       selectedImages.forEach((file) => payload.append("images", file));
+      payload.append("units", form.units);
+      payload.append("occupancy", form.occupancy);
+      payload.append("active_leads", form.active_leads);
 
       if (editingId) {
         payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
@@ -477,7 +517,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Units
                       </p>
-                      <p className="mt-1 text-xl font-bold text-slate-900">—</p>
+                     <p className="mt-1 text-xl font-bold text-slate-900">
+  {facility.units ?? 0}
+</p>
                     </div>
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
@@ -486,7 +528,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Occupancy
                       </p>
-                      <p className="mt-1 text-xl font-bold text-emerald-600">—</p>
+                      <p className="mt-1 text-xl font-bold text-emerald-600">
+  {facility.occupancy ?? 0}
+</p>
                     </div>
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
@@ -495,7 +539,9 @@ export default function Communities() {
                       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
                         Active Leads
                       </p>
-                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">—</p>
+                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">
+  {facility.active_leads ?? 0}
+</p>
                     </div>
                   </div>
 
@@ -586,9 +632,11 @@ export default function Communities() {
                 <Input
                   type="text"
                   inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   value={form.pricing}
                   onChange={(e) => handleInput("pricing", formatPricingInput(e.target.value))}
-                  placeholder="$4,500 or $4,500 - $6,800/month"
+                  placeholder="4500 or 4500 - 6800 (numbers only)"
                 />
               </div>
             </div>
@@ -767,7 +815,49 @@ export default function Communities() {
                 </div>
               </div>
             </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Units
+    </label>
+    <Input
+      type="number"
+      min="0"
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.units)}
+      onChange={handleNonNegativeCountInput("units")}
+      placeholder="100"
+    />
+  </div>
 
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Occupancy
+    </label>
+    <Input
+      type="number"
+      min="0"
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.occupancy)}
+      onChange={handleNonNegativeCountInput("occupancy")}
+      placeholder="85"
+    />
+  </div>
+
+  <div className="space-y-2">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+      Active Leads
+    </label>
+    <Input
+      type="number"
+      min="0"
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.active_leads)}
+      onChange={handleNonNegativeCountInput("active_leads")}
+      placeholder="12"
+    />
+  </div>
+</div>
             <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               {editingId ? (
                 <Button
@@ -796,6 +886,8 @@ export default function Communities() {
                     : "Create facility"}
               </Button>
             </div>
+
+            
           </form>
         </DialogContent>
       </Dialog>

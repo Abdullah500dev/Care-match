@@ -1,6 +1,8 @@
 import React from "react";
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { Bell, Menu, User } from "lucide-react";
+import { getUser } from "../../../store/auth/authSlice";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", exact: true },
@@ -8,7 +10,24 @@ const NAV_ITEMS = [
   { to: "/dashboard/communities", label: "My Facilities" },
 ];
 
+function headerAccountLabel(userData) {
+  const name = userData?.name?.trim();
+  if (userData?.role === "user") {
+    return name || "User";
+  }
+  return "Provider";
+}
+
 export default function DashboardHeader({ onMenuClick }) {
+  const location = useLocation();
+  const { userData } = useSelector(getUser);
+  const hideLeadsAndAnalytics =
+    location.pathname.startsWith("/user-dashboard") ||
+    location.pathname.startsWith("/facility-dashboard");
+  const visibleItems = hideLeadsAndAnalytics
+    ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
+    : NAV_ITEMS;
+
   return (
     <header className="border-b border-slate-200 bg-white" style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}>
       <div className="mx-auto flex h-14 min-w-0 max-w-[1800px] items-center justify-between gap-4 px-2 sm:h-16 sm:px-4 min-[1280px]:gap-6">
@@ -40,7 +59,7 @@ export default function DashboardHeader({ onMenuClick }) {
         <div className="flex min-w-0 shrink items-center gap-4 sm:gap-6 min-[1280px]:gap-8">
           {/* Center nav (desktop) */}
           <nav className="hidden items-center gap-4 text-xs text-[#45556C] font-bold sm:flex sm:text-sm">
-            {NAV_ITEMS.map((item) => (
+            {visibleItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -73,7 +92,9 @@ export default function DashboardHeader({ onMenuClick }) {
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00B8DB] text-xs font-semibold text-white">
               <User className="hidden h-3.5 w-3.5 text-white sm:inline" />
               </span>
-              <span className=" text-[#45556C] font-bold">Provider</span>
+              <span className="max-w-[10rem] truncate text-[#45556C] font-bold sm:max-w-[14rem]">
+                {headerAccountLabel(userData)}
+              </span>
             </button>
           </div>
         </div>

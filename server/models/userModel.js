@@ -50,6 +50,11 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "admin", "authenticator", "moderator"],
       default: "user",
     },
+    role: {
+      type: String,
+      enum: ["user", "facility", "admin"],
+      default: "user",
+    },
     phone: {
       type: String,
     },
@@ -80,7 +85,7 @@ const userSchema = new mongoose.Schema(
 // Hash Password before saving
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
-    next();
+    return next();
   }
   this.password = await bcrypt.hash(this.password, 10);
   next();

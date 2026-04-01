@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
-import { NavLink } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { NavLink, useLocation } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -16,7 +16,7 @@ import {
 import { toast } from "sonner";
 
 import { authServices, clearPersistedAuthTokens } from "../../../services/authServices";
-import { clearUser } from "../../../store/auth/authSlice";
+import { clearUser, getUser } from "../../../store/auth/authSlice";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -31,6 +31,14 @@ const NAV_ITEMS = [
 function NavContent({ onNavClick }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
+  useSelector(getUser);
+  const hideLeadsAndAnalytics =
+    location.pathname.startsWith("/user-dashboard") ||
+    location.pathname.startsWith("/facility-dashboard");
+  const visibleItems = hideLeadsAndAnalytics
+    ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
+    : NAV_ITEMS;
 
   const handleLogout = async () => {
     try {
@@ -48,7 +56,7 @@ function NavContent({ onNavClick }) {
 
   return (
     <nav className="flex w-full flex-1 flex-col space-y-1 px-[10%] text-base">
-      {NAV_ITEMS.map(({ to, label, icon: Icon, exact }) => (
+      {visibleItems.map(({ to, label, icon: Icon, exact }) => (
         <NavLink
           key={to}
           to={to}
