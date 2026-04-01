@@ -8,6 +8,7 @@ import { greetingNameForEmail } from "../utils/greetingNameForEmail.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
+import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 
 // Register user
 export const register = catchAsyncError(async (req, res, next) => {
@@ -304,12 +305,12 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("User not found with this email", 404));
     }
 
-    // Generate reset token
-    const resetToken = await user.getToken(15); // 15 minutes validity
+    const resetToken = await user.getToken(RESET_PASSWORD_TOKEN_MINUTES);
     await user.save({ validateBeforeSave: false });
 
-    // Send reset email
-    const resetLink = `${process.env.CLIENT_BASE_URL}/api/auth/reset-password?token=${resetToken}`;
+    const clientBase =
+      (process.env.CLIENT_BASE_URL || "http://localhost:5173").replace(/\/+$/, "");
+    const resetLink = `${clientBase}/reset-password?token=${resetToken}`;
 
     try {
       await sendMail({
@@ -318,13 +319,15 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
         template: "reset-password.ejs",
         data: {
           user: { name: greetingNameForEmail(user) },
-          resetLink: resetLink,
+          resetLink,
+          expiresInMinutes: RESET_PASSWORD_TOKEN_MINUTES,
         },
       });
 
       res.status(200).json({
         success: true,
         message: "Password reset link sent to your email!",
+        expiresInMinutes: RESET_PASSWORD_TOKEN_MINUTES,
       });
     } catch (error) {
       user.token = undefined;

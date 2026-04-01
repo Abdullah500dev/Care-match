@@ -625,59 +625,8 @@ router.put("/update-user-info", isAutheticated, updateUserInfo);
  */
 router.put("/update-user-password", isAutheticated, updatePassword);
 
-// Password reset
-/**
- * @swagger
- * /api/auth/password/reset:
- *   post:
- *     summary: Request password reset
- *     tags: [Password Management]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: ['email']
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: "saad.dev.404@gmail.com"
- *           example:
- *             email: "saad.dev.404@gmail.com"
- *     responses:
- *       200:
- *         description: Password reset email sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Password reset email sent successfully"
- *       400:
- *         description: Email not found
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: false
- *                 message:
- *                   type: string
- *                   example: "Email not found"
- *                 status:
- *                   type: integer
- *                   example: 400
- */
-router.post("/password/reset", forgetPasswordEmailValidation, forgotPassword);
+// Password reset — :token route MUST be registered before the bare /password/reset
+// so Express doesn't treat the hex token as an unmatched body-only request.
 /**
  * @swagger
  * /api/auth/password/reset/{token}:
@@ -741,5 +690,57 @@ router.post("/password/reset", forgetPasswordEmailValidation, forgotPassword);
  *                   example: 400
  */
 router.post("/password/reset/:token", resetPasswordValidation, resetPassword);
+/**
+ * @swagger
+ * /api/auth/password/reset:
+ *   post:
+ *     summary: Request password reset
+ *     tags: [Password Management]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: ['email']
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: "saad.dev.404@gmail.com"
+ *           example:
+ *             email: "saad.dev.404@gmail.com"
+ *     responses:
+ *       200:
+ *         description: Password reset email sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Password reset email sent successfully"
+ *       400:
+ *         description: Email not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 message:
+ *                   type: string
+ *                   example: "Email not found"
+ *                 status:
+ *                   type: integer
+ *                   example: 400
+ */
+router.post("/password/reset", forgetPasswordEmailValidation, forgotPassword);
 
 export default router;

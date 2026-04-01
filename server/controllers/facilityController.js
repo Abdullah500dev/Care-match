@@ -25,6 +25,7 @@ import sendMail from "../utils/sendMail.js";
 import { greetingNameForEmail } from "../utils/greetingNameForEmail.js";
 import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
+import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -99,7 +100,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     phone,
     is_verified: true,
     user_type: "user",
- 
+    role: "facility",
   });
 
   const facility = await Facility.create({
@@ -112,17 +113,19 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     care_levels: normalizedCareLevels,
     pricing,
     units: normalizedUnits,
-occupancy: normalizedOccupancy,
-active_leads: normalizedActiveLeads,
+    occupancy: normalizedOccupancy,
+    active_leads: normalizedActiveLeads,
     images: uploadedImages,
     created_by: admin._id,
     user_id: facilityUser._id,
   });
 
-  const resetToken = facilityUser.getToken(15);
+  const resetToken = facilityUser.getToken(RESET_PASSWORD_TOKEN_MINUTES);
   await facilityUser.save({ validateBeforeSave: false });
 
-  const resetLink = `${process.env.CLIENT_BASE_URL}/api/auth/reset-password?token=${resetToken}`;
+  const clientBaseUrl = (process.env.CLIENT_BASE_URL || "http://localhost:5173").replace(/\/+$/, "");
+  const resetLink = `${clientBaseUrl}/reset-password?token=${resetToken}`;
+  const loginUrl = `${clientBaseUrl}/signin`;
 
   try {
     await sendMail({
@@ -134,6 +137,7 @@ active_leads: normalizedActiveLeads,
         facility: { name: facility.name },
         username: facilityUser.email,
         temporaryPassword,
+        loginUrl,
         resetLink,
       },
     });

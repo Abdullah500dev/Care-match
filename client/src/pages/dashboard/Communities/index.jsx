@@ -69,22 +69,35 @@ function formatPhoneInput(value) {
   return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
-/** Formats pricing: $4,500, optional range $4,500 - $6,800, optional /month. */
+/**
+ * Pricing: digits only (plus optional one range: min - max). Strips letters/symbols.
+ * Optional suffix /month. Preserves "min - " while typing the second amount (fixes 4-digit ranges).
+ */
 function formatPricingInput(value) {
   const raw = String(value || "");
   const monthly = /\/\s*month\s*$/i.test(raw.trim());
-  const withoutMonthly = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
-  const nums = withoutMonthly.match(/\d+/g);
-  if (!nums || nums.length === 0) return monthly ? "" : raw;
+  let body = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
+  body = body.replace(/\$/g, "").replace(/,/g, "");
+  body = body.replace(/[^\d\s-]/g, "");
+  const parts = body.split(/\s*-\s*/);
+  const leftDigits = (parts[0] ?? "").replace(/\D/g, "").slice(0, 8);
+  const rightDigits =
+    parts.length > 1 ? parts.slice(1).join("").replace(/\D/g, "").slice(0, 8) : "";
 
-  const fmt = (n) => {
-    const num = Number.parseInt(n, 10);
-    if (Number.isNaN(num)) return n;
+  const fmt = (digits) => {
+    if (!digits) return "";
+    const num = Number.parseInt(digits, 10);
+    if (Number.isNaN(num)) return "";
     return `$${num.toLocaleString("en-US")}`;
   };
 
-  if (nums.length === 1) return fmt(nums[0]) + (monthly ? "/month" : "");
-  return `${fmt(nums[0])} - ${fmt(nums[1])}` + (monthly ? "/month" : "");
+  let out = fmt(leftDigits);
+  if (parts.length > 1) {
+    out += " - " + fmt(rightDigits);
+  }
+  const suffix = monthly ? "/month" : "";
+  if (!out && !suffix) return "";
+  return out + suffix;
 }
 
 function FacilityImageSlider({ images, name }) {
@@ -196,6 +209,21 @@ export default function Communities() {
   const handleInput = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  /** Units / occupancy / leads: empty display when 0 so typing doesn’t stick to a leading 0. */
+  const handleNonNegativeCountInput = (field) => (e) => {
+    const raw = e.target.value;
+    if (raw === "") {
+      handleInput(field, 0);
+      return;
+    }
+    const n = parseInt(raw, 10);
+    if (!Number.isNaN(n)) {
+      handleInput(field, Math.max(0, n));
+    }
+  };
+
+  const countFieldDisplayValue = (n) => (n === 0 ? "" : n);
 
   const resetForm = () => {
     setEditingId(null);
@@ -604,9 +632,11 @@ export default function Communities() {
                 <Input
                   type="text"
                   inputMode="text"
+                  autoComplete="off"
+                  spellCheck={false}
                   value={form.pricing}
                   onChange={(e) => handleInput("pricing", formatPricingInput(e.target.value))}
-                  placeholder="$4,500 or $4,500 - $6,800/month"
+                  placeholder="4500 or 4500 - 6800 (numbers only)"
                 />
               </div>
             </div>
@@ -793,8 +823,9 @@ export default function Communities() {
     <Input
       type="number"
       min="0"
-      value={form.units}
-      onChange={(e) => handleInput("units", Number(e.target.value))}
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.units)}
+      onChange={handleNonNegativeCountInput("units")}
       placeholder="100"
     />
   </div>
@@ -806,8 +837,9 @@ export default function Communities() {
     <Input
       type="number"
       min="0"
-      value={form.occupancy}
-      onChange={(e) => handleInput("occupancy", Number(e.target.value))}
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.occupancy)}
+      onChange={handleNonNegativeCountInput("occupancy")}
       placeholder="85"
     />
   </div>
@@ -819,8 +851,9 @@ export default function Communities() {
     <Input
       type="number"
       min="0"
-      value={form.active_leads}
-      onChange={(e) => handleInput("active_leads", Number(e.target.value))}
+      inputMode="numeric"
+      value={countFieldDisplayValue(form.active_leads)}
+      onChange={handleNonNegativeCountInput("active_leads")}
       placeholder="12"
     />
   </div>

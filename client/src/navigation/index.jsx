@@ -49,11 +49,15 @@ const DashboardMessages = lazyWithRetry(() => import("../pages/dashboard/Message
 const DashboardSettings = lazyWithRetry(() => import("../pages/dashboard/Settings"));
 const DashboardCalendar = lazyWithRetry(() => import("../pages/dashboard/Calendar"));
 const DashboardAnalytics = lazyWithRetry(() => import("../pages/dashboard/Analytics"));
+const UserDashboardHome = lazyWithRetry(() => import("../pages/userDashboard/UserDashboardHome"));
+const FacilityDashboardHome = lazyWithRetry(() => import("../pages/facilityDashboard/FacilityDashboardHome"));
 
 import Header from "../components/client/Header";
 import TopBar from "../components/client/TopBar";
 import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
+import UserDashboardLayout from "../components/userDashboard/layout/UserDashboardLayout";
+import FacilityDashboardLayout from "../components/facilityDashboard/layout/FacilityDashboardLayout";
 import { getUser } from "../store/auth/authSlice";
 
 const RequireAuth = ({ children }) => {
@@ -69,9 +73,59 @@ const RequireAuth = ({ children }) => {
   return children;
 };
 
+const getHomeByRole = (userData) => {
+  const role = userData?.role;
+  const userType = userData?.user_type;
+
+  if (["admin", "authenticator", "moderator"].includes(userType)) return "/dashboard";
+  if (role === "facility") return "/facility-dashboard";
+  if (role === "user") return "/user-dashboard";
+  return "/dashboard";
+};
+
+const RequireUserRole = ({ children }) => {
+  const { userData } = useSelector(getUser);
+  const location = useLocation();
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userData?.user_type);
+
+  if (isAdminStaff || userData?.role !== "user") {
+    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+  }
+
+  return children;
+};
+
+const RequireFacilityRole = ({ children }) => {
+  const { userData } = useSelector(getUser);
+  const location = useLocation();
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userData?.user_type);
+
+  if (isAdminStaff || userData?.role !== "facility") {
+    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+  }
+
+  return children;
+};
+
+const RequireAdminDashboard = ({ children }) => {
+  const { userData } = useSelector(getUser);
+  const location = useLocation();
+  const userType = userData?.user_type;
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userType);
+
+  if (!isAdminStaff) {
+    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+  }
+
+  return children;
+};
+
 const Layout = ({ children }) => {
   const location = useLocation();
-  const isDashboardRoute = location.pathname.startsWith("/dashboard");
+  const isDashboardRoute =
+    location.pathname.startsWith("/dashboard") ||
+    location.pathname.startsWith("/user-dashboard") ||
+    location.pathname.startsWith("/facility-dashboard");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
@@ -193,7 +247,9 @@ export default function Navigation() {
                 path="/dashboard/*"
                 element={
                   <RequireAuth>
-                    <DashboardLayout />
+                    <RequireAdminDashboard>
+                      <DashboardLayout />
+                    </RequireAdminDashboard>
                   </RequireAuth>
                 }
               >
@@ -205,6 +261,32 @@ export default function Navigation() {
                 <Route path="calendar" element={<DashboardCalendar />} />
                 <Route path="analytics" element={<DashboardAnalytics />} />
                 <Route path="settings" element={<DashboardSettings />} />
+              </Route>
+
+              <Route
+                path="/user-dashboard/*"
+                element={
+                  <RequireAuth>
+                    <RequireUserRole>
+                      <UserDashboardLayout />
+                    </RequireUserRole>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<UserDashboardHome />} />
+              </Route>
+
+              <Route
+                path="/facility-dashboard/*"
+                element={
+                  <RequireAuth>
+                    <RequireFacilityRole>
+                      <FacilityDashboardLayout />
+                    </RequireFacilityRole>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<FacilityDashboardHome />} />
               </Route>
 
               <Route path="/*" element={<NotFound />} />
