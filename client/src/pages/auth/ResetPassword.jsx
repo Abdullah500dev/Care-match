@@ -1,16 +1,14 @@
 import React from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { useDispatch } from "react-redux";
 
-import { authServices, persistAuthTokens } from "../../services/authServices";
-import { setUser } from "../../store/auth/authSlice";
+import { authServices } from "../../services/authServices";
 
 function ResetPassword() {
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
-  const dispatch = useDispatch();
+  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -30,14 +28,8 @@ function ResetPassword() {
         confirmPassword: data.confirmPassword,
       });
 
-      const payload = response?.data || {};
-      persistAuthTokens({
-        accessToken: payload?.accessToken,
-        refreshToken: payload?.refreshToken,
-      });
-      dispatch(setUser({ user: payload?.user, token: payload?.accessToken, tokenExpire: null }));
-
       toast.success("Password reset successful.");
+      navigate("/signin", { replace: true });
     } catch (error) {
       toast.error(error?.response?.data?.message || "Could not reset password.");
     }

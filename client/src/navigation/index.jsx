@@ -1,7 +1,7 @@
 import { Suspense, lazy, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { ChevronUp } from "lucide-react";
 
 import ScrollToTop from "../utils/scroll-top";
@@ -58,15 +58,33 @@ import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 import UserDashboardLayout from "../components/userDashboard/layout/UserDashboardLayout";
 import FacilityDashboardLayout from "../components/facilityDashboard/layout/FacilityDashboardLayout";
-import { getUser } from "../store/auth/authSlice";
+import { clearUser, getUser } from "../store/auth/authSlice";
+import { clearPersistedAuthTokens } from "../services/authServices";
+
+const isJwtExpired = (token) => {
+  if (!token) return true;
+
+  try {
+    const payloadBase64 = token.split(".")[1];
+    if (!payloadBase64) return true;
+    const payload = JSON.parse(atob(payloadBase64));
+    if (!payload?.exp) return true;
+    return payload.exp * 1000 <= Date.now();
+  } catch {
+    return true;
+  }
+};
 
 const RequireAuth = ({ children }) => {
   const { isAuthenticated, token } = useSelector(getUser);
+  const dispatch = useDispatch();
   const location = useLocation();
-  const persistedToken = localStorage.getItem("access_token");
-  const canAccessDashboard = Boolean(isAuthenticated && (token || persistedToken));
+  const currentToken = token || localStorage.getItem("access_token");
+  const canAccessDashboard = Boolean(isAuthenticated && currentToken && !isJwtExpired(currentToken));
 
   if (!canAccessDashboard) {
+    clearPersistedAuthTokens();
+    dispatch(clearUser());
     return <Navigate to="/signin" replace state={{ from: location }} />;
   }
 
