@@ -163,11 +163,29 @@ export const listFacilities = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Only admins can list facilities", 403));
   }
 
-  const facilities = await Facility.find().sort({ createdAt: -1 }).lean();
+  const parsedPage = Number.parseInt(req.query.page, 10);
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
+  const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 10 : Math.min(parsedLimit, 100);
+  const skip = (page - 1) * limit;
+
+  const [facilities, total] = await Promise.all([
+    Facility.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Facility.countDocuments(),
+  ]);
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
   res.status(200).json({
     success: true,
     facilities,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1,
+    },
   });
 });
 

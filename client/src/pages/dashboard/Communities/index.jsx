@@ -158,6 +158,7 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
+  const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [keptImagePaths, setKeptImagePaths] = useState([]);
@@ -186,6 +187,15 @@ export default function Communities() {
   const [facilities, setFacilities] = useState([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
 
   const selectedImagePreviewUrls = useMemo(
     () => selectedImages.map((file) => URL.createObjectURL(file)),
@@ -205,17 +215,40 @@ export default function Communities() {
     setListLoading(true);
     setListError("");
     try {
-      const { data } = await apiClient.get("/api/facilities");
-      setFacilities(data?.facilities || []);
+      const { data } = await apiClient.get("/api/facilities", {
+        params: { page: currentPage, limit: PAGE_SIZE },
+      });
+      const nextFacilities = data?.facilities || [];
+      const nextPagination = data?.pagination || {
+        page: currentPage,
+        limit: PAGE_SIZE,
+        total: nextFacilities.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+      setFacilities(nextFacilities);
+      setPagination(nextPagination);
+      if (nextPagination.totalPages > 0 && currentPage > nextPagination.totalPages) {
+        setCurrentPage(nextPagination.totalPages);
+      }
     } catch (error) {
       setListError(
         error?.response?.data?.message || "Could not load facilities. Sign in as admin and try again."
       );
       setFacilities([]);
+      setPagination({
+        page: 1,
+        limit: PAGE_SIZE,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [currentPage, PAGE_SIZE]);
 
   useEffect(() => {
     fetchFacilities();
@@ -411,11 +444,14 @@ export default function Communities() {
         toast.success("Facility created", {
           description: "Credentials and reset-password link sent to facility email.",
         });
+        setCurrentPage(1);
       }
 
       setModalOpen(false);
       resetForm();
-      fetchFacilities();
+      if (editingId) {
+        await fetchFacilities();
+      }
     } catch (error) {
       toast.error(editingId ? "Unable to update facility" : "Unable to create facility", {
         description:
@@ -437,7 +473,7 @@ export default function Communities() {
       setDeleteDialogOpen(false);
       setModalOpen(false);
       resetForm();
-      fetchFacilities();
+      await fetchFacilities();
     } catch (error) {
       toast.error("Unable to delete facility", {
         description: error?.response?.data?.message || "Please try again.",
@@ -599,6 +635,34 @@ export default function Communities() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {!listLoading && facilities.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row">
+          <p className="text-sm text-slate-600">
+            Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={listLoading || !pagination.hasPrevPage}
+              className="rounded-xl"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={listLoading || !pagination.hasNextPage}
+              className="rounded-xl"
+            >
+              Next
+            </Button>
+          </div>
         </div>
       )}
 
