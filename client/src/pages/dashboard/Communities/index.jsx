@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MapPin, Plus, Star, X } from "lucide-react";
+import { ImagePlus, MapPin, Plus, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
 import {
@@ -26,6 +26,7 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
+import GooglePlacesAddressInput from "@/components/dashboard/facilities/GooglePlacesAddressInput";
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
@@ -157,6 +158,7 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
+  const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [keptImagePaths, setKeptImagePaths] = useState([]);
@@ -185,22 +187,68 @@ export default function Communities() {
   const [facilities, setFacilities] = useState([]);
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPrevPage: false,
+  });
+
+  const selectedImagePreviewUrls = useMemo(
+    () => selectedImages.map((file) => URL.createObjectURL(file)),
+    [selectedImages]
+  );
+
+  useEffect(() => {
+    return () => {
+      selectedImagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [selectedImagePreviewUrls]);
+
+  const facilitySlotsMax = Math.max(0, 8 - keptImagePaths.length);
+  const facilitySlotsLeft = Math.max(0, facilitySlotsMax - selectedImages.length);
 
   const fetchFacilities = useCallback(async () => {
     setListLoading(true);
     setListError("");
     try {
-      const { data } = await apiClient.get("/api/facilities");
-      setFacilities(data?.facilities || []);
+      const { data } = await apiClient.get("/api/facilities", {
+        params: { page: currentPage, limit: PAGE_SIZE },
+      });
+      const nextFacilities = data?.facilities || [];
+      const nextPagination = data?.pagination || {
+        page: currentPage,
+        limit: PAGE_SIZE,
+        total: nextFacilities.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+      setFacilities(nextFacilities);
+      setPagination(nextPagination);
+      if (nextPagination.totalPages > 0 && currentPage > nextPagination.totalPages) {
+        setCurrentPage(nextPagination.totalPages);
+      }
     } catch (error) {
       setListError(
         error?.response?.data?.message || "Could not load facilities. Sign in as admin and try again."
       );
       setFacilities([]);
+      setPagination({
+        page: 1,
+        limit: PAGE_SIZE,
+        total: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
     } finally {
       setListLoading(false);
     }
-  }, []);
+  }, [currentPage, PAGE_SIZE]);
 
   useEffect(() => {
     fetchFacilities();
@@ -275,27 +323,44 @@ export default function Communities() {
     setModalOpen(true);
   };
 
+  const addFacilityImageFiles = useCallback(
+    (fileList) => {
+      const files = Array.from(fileList || []);
+      if (!files.length) return;
+
+      const imageFiles = files.filter((file) => file.type?.startsWith("image/"));
+      const rejectedCount = files.length - imageFiles.length;
+
+      if (rejectedCount > 0) {
+        toast.error("Only image files are allowed", {
+          description: "PDF, folders, and other file types are blocked.",
+        });
+      }
+
+      if (!imageFiles.length) return;
+
+      const maxFiles = 8 - keptImagePaths.length;
+      setSelectedImages((prev) =>
+        [...prev, ...imageFiles].slice(0, Math.max(0, maxFiles))
+      );
+    },
+    [keptImagePaths.length]
+  );
+
   const handleImageSelect = (event) => {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    const imageFiles = files.filter((file) => file.type?.startsWith("image/"));
-    const rejectedCount = files.length - imageFiles.length;
-
-    if (rejectedCount > 0) {
-      toast.error("Only image files are allowed", {
-        description: "PDF, folders, and other file types are blocked.",
-      });
-    }
-
-    if (!imageFiles.length) {
-      event.target.value = "";
-      return;
-    }
-
-    const maxFiles = 8 - keptImagePaths.length;
-    setSelectedImages((prev) => [...prev, ...imageFiles].slice(0, Math.max(0, maxFiles)));
+    addFacilityImageFiles(event.target.files);
     event.target.value = "";
+  };
+
+  const handleFacilityImageDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFacilityImageFiles(e.dataTransfer?.files);
+  };
+
+  const handleFacilityImageDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const removeImage = (indexToRemove) => {
@@ -379,11 +444,14 @@ export default function Communities() {
         toast.success("Facility created", {
           description: "Credentials and reset-password link sent to facility email.",
         });
+        setCurrentPage(1);
       }
 
       setModalOpen(false);
       resetForm();
-      fetchFacilities();
+      if (editingId) {
+        await fetchFacilities();
+      }
     } catch (error) {
       toast.error(editingId ? "Unable to update facility" : "Unable to create facility", {
         description:
@@ -405,7 +473,7 @@ export default function Communities() {
       setDeleteDialogOpen(false);
       setModalOpen(false);
       resetForm();
-      fetchFacilities();
+      await fetchFacilities();
     } catch (error) {
       toast.error("Unable to delete facility", {
         description: error?.response?.data?.message || "Please try again.",
@@ -570,6 +638,34 @@ export default function Communities() {
         </div>
       )}
 
+      {!listLoading && facilities.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row">
+          <p className="text-sm text-slate-600">
+            Showing page {pagination.page} of {pagination.totalPages} ({pagination.total} total)
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              disabled={listLoading || !pagination.hasPrevPage}
+              className="rounded-xl"
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCurrentPage((prev) => prev + 1)}
+              disabled={listLoading || !pagination.hasNextPage}
+              className="rounded-xl"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
       <Dialog
         open={modalOpen}
         onOpenChange={(open) => {
@@ -645,67 +741,133 @@ export default function Communities() {
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Address
               </label>
-              <Input
+              <GooglePlacesAddressInput
+                enabled={modalOpen}
                 value={form.address}
                 onChange={(e) => handleInput("address", e.target.value)}
-                placeholder="123 Main St, Seattle, WA"
+                placeholder="Start typing street or city — select from suggestions"
                 required
               />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Facility images (max 8 total)
               </label>
               {editingId && keptImagePaths.length > 0 && (
-                <p className="text-xs text-slate-500">Current images — remove to delete on save.</p>
+                <p className="facility-copy-fade text-xs text-slate-500">
+                  Current images — remove to delete on save.
+                </p>
               )}
-              {editingId && (
-                <div className="flex flex-wrap gap-2">
-                  {keptImagePaths.map((imgPath) => (
-                    <span
+              {editingId && keptImagePaths.length > 0 && (
+                <div className="flex flex-wrap gap-3">
+                  {keptImagePaths.map((imgPath, idx) => (
+                    <div
                       key={imgPath}
-                      className="tag-chip inline-flex max-w-full animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-medium text-slate-800"
+                      className="facility-kept-card group relative overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-sm ring-1 ring-slate-900/5"
+                      style={{
+                        animation: "facilityThumbIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both",
+                        animationDelay: `${idx * 65}ms`,
+                      }}
                     >
-                      <span className="max-w-[180px] truncate" title={imgPath}>
-                        {imgPath.split("/").pop()}
-                      </span>
+                      <img
+                        src={resolveSingleImageUrl(imgPath)}
+                        alt=""
+                        className="h-20 w-20 object-cover transition duration-300 group-hover:scale-105"
+                      />
                       <button
                         type="button"
                         onClick={() => removeKeptImage(imgPath)}
-                        className="rounded-full p-0.5 text-slate-600 hover:bg-slate-200"
+                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/75 text-white opacity-0 shadow-md transition hover:bg-red-600 group-hover:opacity-100"
                         aria-label="Remove image"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                       </button>
-                    </span>
+                      <span className="block max-w-[5.5rem] truncate px-1.5 pb-1 text-center text-[10px] font-medium text-slate-600">
+                        {imgPath.split("/").pop()}
+                      </span>
+                    </div>
                   ))}
                 </div>
               )}
-              <Input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageSelect}
-              />
-              <div className="flex flex-wrap gap-2 pt-1">
-                {selectedImages.map((file, index) => (
-                  <span
-                    key={`${file.name}-${index}`}
-                    className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-slate-800 shadow-sm"
+
+              {facilitySlotsMax === 0 ? (
+                <p className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-center text-xs font-medium text-amber-950">
+                  Image limit reached (8 total). Remove a current or new image to add more.
+                </p>
+              ) : (
+                <div
+                  className="facility-upload-zone group relative overflow-hidden rounded-2xl border-2 border-dashed border-slate-200/90 bg-gradient-to-br from-slate-50/80 via-white to-cyan-50/40 transition duration-300 hover:border-[#00B8DB]/50 hover:shadow-[0_12px_40px_-12px_rgba(0,184,219,0.35)]"
+                  onDragOver={handleFacilityImageDragOver}
+                  onDrop={handleFacilityImageDrop}
+                >
+                  <div
+                    className="facility-upload-shimmer pointer-events-none absolute inset-0 opacity-0 transition duration-500 group-hover:opacity-100"
+                    aria-hidden
+                  />
+                  <input
+                    id="facility-images-input"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="sr-only"
+                    onChange={handleImageSelect}
+                  />
+                  <label
+                    htmlFor="facility-images-input"
+                    className="relative flex cursor-pointer flex-col items-center gap-2 px-4 py-8"
                   >
-                    {file.name}
-                    <button
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      className="rounded-full p-0.5 text-slate-700/70 transition hover:bg-slate-700/10 hover:text-slate-900"
-                      aria-label={`Remove ${file.name}`}
+                    <div className="facility-upload-icon flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00B8DB] to-cyan-600 text-white shadow-lg shadow-cyan-500/25 ring-4 ring-cyan-100/80 transition duration-300 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-cyan-500/30">
+                      <ImagePlus className="h-7 w-7" strokeWidth={1.75} />
+                    </div>
+                    <span className="text-sm font-semibold text-slate-800">
+                      Drop images here or click to browse
+                    </span>
+                    <span className="text-center text-xs text-slate-500">
+                      JPG, PNG, WebP — {facilitySlotsLeft} of {facilitySlotsMax} upload slot
+                      {facilitySlotsMax === 1 ? "" : "s"} left
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {selectedImages.length > 0 && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {selectedImages.map((file, index) => (
+                    <div
+                      key={`${file.name}-${index}`}
+                      className="facility-new-card group relative overflow-hidden rounded-2xl border border-cyan-100/80 bg-white shadow-md ring-1 ring-cyan-500/10"
+                      style={{
+                        animation: "facilityThumbIn 0.48s cubic-bezier(0.22, 1, 0.36, 1) both",
+                        animationDelay: `${index * 55}ms`,
+                      }}
                     >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
+                      <div className="relative aspect-square w-full overflow-hidden bg-slate-100">
+                        <img
+                          src={selectedImagePreviewUrls[index]}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(index)}
+                          className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-lg backdrop-blur-sm transition hover:bg-red-500 hover:text-white"
+                          aria-label={`Remove ${file.name}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <p
+                        className="truncate px-2 py-1.5 text-center text-[10px] font-medium text-slate-600"
+                        title={file.name}
+                      >
+                        {file.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 gap-4">

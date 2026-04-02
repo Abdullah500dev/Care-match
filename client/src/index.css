@@ -250,3 +250,90 @@
     animation: journey-card-shine 4s ease-in-out infinite;
   }
 }
+
+/* Google Places Autocomplete — above Radix Dialog (z-50) so clicks hit suggestions, not fields below */
+.pac-container {
+  z-index: 11000 !important;
+  pointer-events: auto !important;
+}
+
+.pac-item {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+}
+
+.pac-item-query {
+  pointer-events: auto !important;
+}
+
+/* Facility modal — image upload zone & thumbnails (CareMatch cyan accent) */
+@keyframes facilityThumbIn {
+  0% {
+    opacity: 0;
+    transform: translateY(14px) scale(0.94);
+    filter: blur(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes facilityFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes facilityShimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.facility-copy-fade {
+  animation: facilityFadeIn 0.45s ease-out both;
+}
+
+.facility-upload-shimmer {
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(0, 184, 219, 0.14) 50%,
+    transparent 62%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: facilityShimmer 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .facility-kept-card,
+  .facility-new-card,
+  .facility-copy-fade {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+
+  .facility-upload-shimmer {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  .facility-upload-zone,
+  .facility-upload-icon {
+    transition: none !important;
+  }
+}
