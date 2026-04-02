@@ -6,6 +6,11 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
+/** Google Places Autocomplete renders `.pac-container` on `document.body`; Radix Dialog must not treat those clicks as “outside”. */
+function isGooglePlacesDropdownNode(node) {
+  return node instanceof Element && Boolean(node.closest(".pac-container"));
+}
+
 const Dialog = DialogPrimitive.Root
 
 const DialogTrigger = DialogPrimitive.Trigger
@@ -25,7 +30,18 @@ const DialogOverlay = React.forwardRef(({ className, ...props }, ref) => (
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
-const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => (
+const DialogContent = React.forwardRef(
+  (
+    {
+      className,
+      children,
+      onInteractOutside,
+      onPointerDownOutside,
+      onFocusOutside,
+      ...props
+    },
+    ref
+  ) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -34,6 +50,18 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
         "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg",
         className
       )}
+      onInteractOutside={(e) => {
+        if (isGooglePlacesDropdownNode(e.target)) e.preventDefault();
+        else onInteractOutside?.(e);
+      }}
+      onPointerDownOutside={(e) => {
+        if (isGooglePlacesDropdownNode(e.target)) e.preventDefault();
+        else onPointerDownOutside?.(e);
+      }}
+      onFocusOutside={(e) => {
+        if (isGooglePlacesDropdownNode(e.target)) e.preventDefault();
+        else onFocusOutside?.(e);
+      }}
       {...props}>
       {children}
       <DialogPrimitive.Close
@@ -43,7 +71,8 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>
-))
+  )
+)
 DialogContent.displayName = DialogPrimitive.Content.displayName
 
 const DialogHeader = ({
