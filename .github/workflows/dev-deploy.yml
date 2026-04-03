@@ -69,15 +69,14 @@ jobs:
           rm -f package-lock.json
           yarn install --frozen-lockfile
 
-          # Kill any process using port 3030
+          # Restart PM2 app (server listens on PORT from env, default 3002 in start script)
           pm2 delete care-match-server || true
           pm2 flush care-match-server || true
           sleep 5
 
-          # Start server from server directory with proper environment
+          # Start server with Node (PM2 defaults to node; do not use `yarn`/`npm` as the script — they are shell, not JS)
           cd /home/ubuntu/care-match-ai/server
-          # Use yarn start script which already sets NODE_ENV and PORT
-          if ! pm2 start yarn --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server -- run start; then
+          if ! NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server; then
             echo "❌ Failed to start server"
             pm2 logs care-match-server --lines 20
             exit 1
@@ -112,9 +111,9 @@ jobs:
             exit 1
           fi
 
-          # Check server health (server runs on port 3030)
+          # Check server health (matches server package.json: PORT=3002)
           if ! curl -s http://localhost:3002/ > /dev/null; then
-            echo "❌ Server health check failed on port 3030"
+            echo "❌ Server health check failed on port 3002"
             pm2 logs care-match-server --lines 20
             exit 1
           fi
