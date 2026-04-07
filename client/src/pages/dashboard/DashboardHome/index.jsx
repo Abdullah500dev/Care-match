@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import SEO from "@/components/common/SEO";
 import {
   Card,
   CardContent,
@@ -6,7 +8,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import {
@@ -17,11 +18,12 @@ import {
   YAxis,
 } from "recharts";
 import {
-  Download,
   Users,
   CalendarDays,
   Eye,
   TrendingUp,
+  MessageSquare,
+  ArrowRight,
 } from "lucide-react";
 import AnimatedNumber from "@/components/common/AnimatedNumber";
 
@@ -61,14 +63,33 @@ const SUMMARY_CARDS = [
   },
 ];
 
-const CHART_DATA = [
-  { day: "Mon", leads: 4 },
-  { day: "Tue", leads: 8 },
-  { day: "Wed", leads: 6 },
-  { day: "Thu", leads: 12 },
-  { day: "Fri", leads: 14 },
-  { day: "Sat", leads: 10 },
-  { day: "Sun", leads: 8 },
+const CHART_DATA_BY_RANGE = {
+  week: [
+    { day: "Mon", leads: 4 },
+    { day: "Tue", leads: 8 },
+    { day: "Wed", leads: 6 },
+    { day: "Thu", leads: 12 },
+    { day: "Fri", leads: 14 },
+    { day: "Sat", leads: 10 },
+    { day: "Sun", leads: 8 },
+  ],
+  month: [
+    { day: "W1", leads: 24 },
+    { day: "W2", leads: 67 },
+    { day: "W3", leads: 31 },
+    { day: "W4", leads: 53 },
+  ],
+  quarter: [
+    { day: "Jan", leads: 102 },
+    { day: "Feb", leads: 66 },
+    { day: "Mar", leads: 149 },
+  ],
+};
+
+const RANGE_OPTIONS = [
+  { value: "week", label: "7 days" },
+  { value: "month", label: "30 days" },
+  { value: "quarter", label: "90 days" },
 ];
 
 const TOP_LEADS = [
@@ -76,6 +97,45 @@ const TOP_LEADS = [
   { initials: "RM", name: "Robert Miller", facility: "Sunrise Villa", score: "88%", time: "5 H AGO" },
   { initials: "ED", name: "Emily Davis", facility: "Golden Years", score: "72%", time: "3 D AGO" },
   { initials: "MC", name: "Michael Chen", facility: "Sunrise Villa", score: "91%", time: "2 D AGO" },
+];
+
+const RECENT_MESSAGES = [
+  {
+    id: 1,
+    name: "Sunrise Villa",
+    subtitle: "Facility Partner",
+    preview: "We've confirmed 2 new tours for next week.",
+    time: "5m ago",
+    unread: 3,
+    color: "#00B8DB",
+  },
+  {
+    id: 2,
+    name: "Golden Years",
+    subtitle: "Facility Partner",
+    preview: "Can we update our amenities listing?",
+    time: "1h ago",
+    unread: 1,
+    color: "#8b5cf6",
+  },
+  {
+    id: 3,
+    name: "Sarah Johnson",
+    subtitle: "Lead / Family",
+    preview: "My father needs memory care urgently.",
+    time: "3h ago",
+    unread: 0,
+    color: "#f59e0b",
+  },
+  {
+    id: 4,
+    name: "Robert Miller",
+    subtitle: "Lead / Family",
+    preview: "Tour at Sunrise Villa went well!",
+    time: "Yesterday",
+    unread: 0,
+    color: "#10b981",
+  },
 ];
 
 const chartConfig = {
@@ -86,8 +146,17 @@ const chartConfig = {
 };
 
 export default function DashboardHome() {
+  const navigate = useNavigate();
+  const [leadsRange, setLeadsRange] = useState("week");
+  const chartData = CHART_DATA_BY_RANGE[leadsRange] ?? CHART_DATA_BY_RANGE.week;
+  const yAxisMax = useMemo(() => {
+    const max = Math.max(...chartData.map((d) => d.leads), 1);
+    return Math.ceil(max * 1.2);
+  }, [chartData]);
+
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6">
+      <SEO title="Overview – Admin | CareMatch AI" />
       {/* Header */}
       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex flex-col sm:min-w-0">
@@ -103,36 +172,6 @@ export default function DashboardHome() {
           >
             Welcome back, here&apos;s what&apos;s happening with your facilities today.
           </p>
-        </div>
-        <div className="mt-4 flex min-w-0 flex-shrink-0 flex-wrap items-center gap-2 sm:mt-0">
-          <Button
-            variant="outline"
-            size="default"
-            className="relative flex shrink-0 items-center justify-center gap-2 border-slate-200"
-            style={{
-              minWidth: "100px",
-              width: "121.6px",
-              maxWidth: "100%",
-              height: "48px",
-              borderRadius: "14px",
-              border: "1.5px solid #cbd5e1",
-            }}
-          >
-            <Download className="h-4 w-4 shrink-0 text-[#45556C]" />
-            <span
-              style={{
-                fontFamily: "Rethink Sans, sans-serif",
-                fontWeight: 700,
-                fontSize: "14px",
-                lineHeight: "20px",
-                letterSpacing: "0px",
-                textAlign: "center",
-                color: "#45556C",
-              }}
-            >
-              Export
-            </span>
-          </Button>
         </div>
       </div>
 
@@ -172,17 +211,42 @@ export default function DashboardHome() {
       <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Leads Performance - 2/3 width */}
         <Card className="min-w-0 border-slate-200 bg-white shadow-sm lg:col-span-2">
-          <CardHeader className="min-w-0">
-            <CardTitle className="min-w-0 text-slate-900 lg:h-7">
-              Leads Performance
-            </CardTitle>
-            <CardDescription className="min-w-0 text-slate-500 lg:h-6">
-              Daily leads generated across all facilities
-            </CardDescription>
+          <CardHeader className="min-w-0 space-y-3">
+            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="min-w-0 text-slate-900 lg:h-7">
+                  Leads Performance
+                </CardTitle>
+                <CardDescription className="mt-1 min-w-0 text-slate-500 lg:h-6">
+                  Leads generated across all facilities
+                </CardDescription>
+              </div>
+              {/* Tab-style range filter – no portal, no z-index issues */}
+              <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                {RANGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setLeadsRange(opt.value)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                      leadsRange === opt.value
+                        ? "bg-white text-[#00B8DB] shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="min-w-0 overflow-x-auto">
             <ChartContainer config={chartConfig} className="h-[240px] w-full min-w-0 sm:h-[280px]">
-              <AreaChart data={CHART_DATA} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <AreaChart
+                key={leadsRange}
+                data={chartData}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              >
                 <defs>
                   <linearGradient id="fillLeads" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#00B8DB" stopOpacity={0.4} />
@@ -201,7 +265,7 @@ export default function DashboardHome() {
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v) => String(v)}
-                  domain={[0, 16]}
+                  domain={[0, yAxisMax]}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 <Area
@@ -210,6 +274,7 @@ export default function DashboardHome() {
                   stroke="#00B8DB"
                   strokeWidth={2}
                   fill="url(#fillLeads)"
+                  isAnimationActive
                 />
               </AreaChart>
             </ChartContainer>
@@ -249,6 +314,7 @@ export default function DashboardHome() {
             <div className="mt-4 text-center">
               <button
                 type="button"
+                onClick={() => navigate("/admin/residents")}
                 className="text-sm font-medium text-[#00B8DB] underline underline-offset-2 hover:no-underline"
               >
                 View All Leads
@@ -257,6 +323,71 @@ export default function DashboardHome() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Messages */}
+      <Card className="min-w-0 border-slate-200 bg-white shadow-sm">
+        <CardHeader className="min-w-0 pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-slate-900">
+                <MessageSquare className="h-4 w-4 text-[#00B8DB]" />
+                Recent Messages
+              </CardTitle>
+              <CardDescription className="mt-1 text-slate-500">
+                Latest conversations with facility partners and families
+              </CardDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate("/admin/messages")}
+              className="flex items-center gap-1 text-sm font-semibold text-[#00B8DB] hover:underline underline-offset-2"
+            >
+              View all
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="min-w-0 p-0">
+          <ul className="divide-y divide-slate-100">
+            {RECENT_MESSAGES.map((msg) => (
+              <li key={msg.id}>
+                <button
+                  type="button"
+                  onClick={() => navigate("/admin/messages")}
+                  className="flex w-full items-center gap-4 px-6 py-3.5 text-left transition-colors hover:bg-slate-50"
+                >
+                  {/* Colored avatar */}
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                    style={{ backgroundColor: msg.color }}
+                  >
+                    {msg.name.slice(0, 2).toUpperCase()}
+                  </div>
+
+                  {/* Text */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {msg.name}
+                      </p>
+                      <span className="shrink-0 text-[11px] text-slate-400">{msg.time}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400">{msg.subtitle}</p>
+                    <p className="truncate text-xs text-slate-500">{msg.preview}</p>
+                  </div>
+
+                  {/* Unread badge */}
+                  {msg.unread > 0 && (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#00B8DB] text-[10px] font-bold text-white">
+                      {msg.unread}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -3,7 +3,10 @@ import { useLocation } from "react-router-dom";
 
 export default function TopBar() {
   const location = useLocation();
-  const isDashboard = location.pathname.startsWith("/dashboard");
+  const isDashboard =
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/portal") ||
+    location.pathname.startsWith("/facility");
 
   // Use same container as Header so top bar and header align
   const containerClass = isDashboard

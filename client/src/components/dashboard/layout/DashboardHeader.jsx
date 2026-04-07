@@ -5,9 +5,9 @@ import { Bell, Menu, User } from "lucide-react";
 import { getUser } from "../../../store/auth/authSlice";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Dashboard", exact: true },
-  { to: "/dashboard/residents", label: "Leads" },
-  { to: "/dashboard/communities", label: "My Facilities" },
+  { to: "/admin", label: "Dashboard", exact: true },
+  { to: "/admin/residents", label: "Leads" },
+  { to: "/admin/communities", label: "My Facilities" },
 ];
 
 function headerAccountLabel(userData) {
@@ -15,15 +15,23 @@ function headerAccountLabel(userData) {
   if (userData?.role === "user") {
     return name || "User";
   }
+  if (["superadmin", "super_admin", "admin"].includes(userData?.role)) {
+    return "Super Admin";
+  }
   return "Provider";
 }
 
 export default function DashboardHeader({ onMenuClick }) {
   const location = useLocation();
   const { userData } = useSelector(getUser);
-  const hideLeadsAndAnalytics =
-    location.pathname.startsWith("/user-dashboard") ||
-    location.pathname.startsWith("/facility-dashboard");
+  const isUserDashboard = location.pathname.startsWith("/portal");
+  const isFacilityDashboard = location.pathname.startsWith("/facility");
+  const basePath = isUserDashboard
+    ? "/portal"
+    : isFacilityDashboard
+    ? "/facility"
+    : "/admin";
+  const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard;
   const visibleItems = hideLeadsAndAnalytics
     ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
     : NAV_ITEMS;
@@ -62,7 +70,7 @@ export default function DashboardHeader({ onMenuClick }) {
             {visibleItems.map((item) => (
               <NavLink
                 key={item.to}
-                to={item.to}
+                to={item.to.replace("/admin", basePath)}
                 end={item.exact}
                 className={({ isActive }) =>
                   [
@@ -85,8 +93,8 @@ export default function DashboardHeader({ onMenuClick }) {
             >
               <Bell className="h-4 w-4" />
             </button>
-            <button
-              type="button"
+            <Link
+              to={`${basePath}/settings`}
               className="flex min-w-[6.5rem] items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:min-w-0 sm:px-2"
             >
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00B8DB] text-xs font-semibold text-white">
@@ -95,7 +103,7 @@ export default function DashboardHeader({ onMenuClick }) {
               <span className="max-w-[10rem] truncate text-[#45556C] font-bold sm:max-w-[14rem]">
                 {headerAccountLabel(userData)}
               </span>
-            </button>
+            </Link>
           </div>
         </div>
       </div>

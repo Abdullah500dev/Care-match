@@ -1,22 +1,39 @@
 import React from "react";
-import { Link } from "react-router-dom";
-import { MessageCircle } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 const FOOTER_BG = "#0A122C";
 const ACCENT = "#00CFF4";
 const TEXT_MUTED = "text-white/70";
 
 export default function Footer() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const resourcesLinks = [
-    { label: "Care Guides", path: "/care-explorer" },
-    { label: "Cost Calculator", path: "/cost-calculator" },
-    { label: "Blog", path: "/blog" },
     { label: "FAQs", path: "/faqs" },
   ];
 
+  const scrollPageToTop = () => {
+    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
+    document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.scrollTo?.({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleAIAssistance = (e) => {
+    e.preventDefault();
+    if (location.pathname === "/") {
+      scrollPageToTop();
+    } else {
+      navigate("/");
+      setTimeout(scrollPageToTop, 350);
+    }
+  };
+
   const socialLinks = [
     { label: "Facebook", href: "https://facebook.com" },
-    { label: "Twitter", href: "https://twitter.com" },
+    // { label: "X", href: "https://twitter.com" },
     { label: "LinkedIn", href: "https://linkedin.com" },
   ];
 
@@ -76,6 +93,15 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <a
+                  href="/"
+                  onClick={handleAIAssistance}
+                  className={`text-sm ${TEXT_MUTED} transition hover:text-white sm:text-base cursor-pointer`}
+                >
+                  AI Assistance – Carrie
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -90,10 +116,6 @@ export default function Footer() {
                 <Link to="/contact" className=" transition-colors">
                   Contact Us
                 </Link>
-              </li>
-              <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
-                AI Assistance – Carrie
-               
               </li>
               <li className={`text-sm ${TEXT_MUTED} sm:text-base`}>
               <a

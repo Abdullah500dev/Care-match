@@ -115,6 +115,7 @@ export default function Banner() {
           </h1>
         </div>
         <p
+          id="carrie-hero-tagline"
           className="mt-3 font-normal text-[#132329] text-base leading-relaxed sm:mt-4 sm:text-lg sm:leading-8 md:mt-5 md:text-xl md:leading-8 lg:text-xl lg:leading-9"
           style={{
             fontSize: "clamp(1rem, 1vw + 0.75rem, 1.25rem)",

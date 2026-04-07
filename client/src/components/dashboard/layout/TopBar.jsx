@@ -12,10 +12,10 @@ export default function DashboardTopBar() {
   const dispatch = useDispatch();
 
   const getTitle = () => {
-    if (location.pathname.startsWith("/dashboard/residents")) return "Residents";
-    if (location.pathname.startsWith("/dashboard/communities")) return "Communities";
-    if (location.pathname.startsWith("/dashboard/messages")) return "Messages";
-    if (location.pathname.startsWith("/dashboard/settings")) return "Settings";
+    if (location.pathname.startsWith("/admin/residents")) return "Residents";
+    if (location.pathname.startsWith("/admin/communities")) return "Communities";
+    if (location.pathname.startsWith("/admin/messages")) return "Messages";
+    if (location.pathname.startsWith("/admin/settings")) return "Settings";
     return "Overview";
   };
 

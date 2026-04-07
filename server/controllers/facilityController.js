@@ -23,6 +23,7 @@ const safeRemoveFacilityImageFile = (relativePath) => {
 import ErrorHandler from "../utils/errorHandler.js";
 import sendMail from "../utils/sendMail.js";
 import { greetingNameForEmail } from "../utils/greetingNameForEmail.js";
+import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
@@ -123,7 +124,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
   const resetToken = facilityUser.getToken(RESET_PASSWORD_TOKEN_MINUTES);
   await facilityUser.save({ validateBeforeSave: false });
 
-  const clientBaseUrl = (process.env.CLIENT_BASE_URL || "http://localhost:5173").replace(/\/+$/, "");
+  const clientBaseUrl = resolveClientBaseUrl(req);
   const resetLink = `${clientBaseUrl}/reset-password?token=${resetToken}`;
   const loginUrl = `${clientBaseUrl}/signin`;
 

@@ -50,6 +50,12 @@ const DashboardSettings = lazyWithRetry(() => import("../pages/dashboard/Setting
 const DashboardCalendar = lazyWithRetry(() => import("../pages/dashboard/Calendar"));
 const DashboardAnalytics = lazyWithRetry(() => import("../pages/dashboard/Analytics"));
 const UserDashboardHome = lazyWithRetry(() => import("../pages/userDashboard/UserDashboardHome"));
+const UserDashboardMessages = lazyWithRetry(() =>
+  import("../pages/userDashboard/UserDashboardMessages")
+);
+const UserDashboardSettings = lazyWithRetry(() =>
+  import("../pages/userDashboard/UserDashboardSettings")
+);
 const FacilityDashboardHome = lazyWithRetry(() => import("../pages/facilityDashboard/FacilityDashboardHome"));
 
 import Header from "../components/client/Header";
@@ -95,10 +101,10 @@ const getHomeByRole = (userData) => {
   const role = userData?.role;
   const userType = userData?.user_type;
 
-  if (["admin", "authenticator", "moderator"].includes(userType)) return "/dashboard";
-  if (role === "facility") return "/facility-dashboard";
-  if (role === "user") return "/user-dashboard";
-  return "/dashboard";
+  if (["admin", "authenticator", "moderator"].includes(userType)) return "/admin";
+  if (role === "facility") return "/facility";
+  if (role === "user") return "/portal";
+  return "/admin";
 };
 
 const RequireUserRole = ({ children }) => {
@@ -141,15 +147,16 @@ const RequireAdminDashboard = ({ children }) => {
 const Layout = ({ children }) => {
   const location = useLocation();
   const isDashboardRoute =
-    location.pathname.startsWith("/dashboard") ||
-    location.pathname.startsWith("/user-dashboard") ||
-    location.pathname.startsWith("/facility-dashboard");
+    location.pathname.startsWith("/admin") ||
+    location.pathname.startsWith("/portal") ||
+    location.pathname.startsWith("/facility");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Button only when user has scrolled past the trigger (never on hero).
-  const showScrollToTop = !isDashboardRoute && scrollPastThreshold;
+  const showScrollToTop = !isDashboardRoute && scrollPastThreshold && !isChatOpen;
 
   // On home: trigger is below hero; use bottom rootMargin so button stays hidden when trigger is just below fold.
   // Defer observer setup on home so #scroll-to-top-trigger (rendered by Home) exists in the DOM; reset state when landing on home.
@@ -199,6 +206,16 @@ const Layout = ({ children }) => {
     observer = setupObserver();
     return () => observer?.disconnect();
   }, [location.pathname, isDashboardRoute, isHomePage]);
+
+  useEffect(() => {
+    const onChatOpenChange = (event) => {
+      setIsChatOpen(Boolean(event?.detail?.isOpen));
+    };
+    window.addEventListener("carematch:chat-open-change", onChatOpenChange);
+    return () => {
+      window.removeEventListener("carematch:chat-open-change", onChatOpenChange);
+    };
+  }, []);
 
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -261,8 +278,9 @@ export default function Navigation() {
               <Route path="/api/auth/reset-password" element={<ResetPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
 
+              {/* ── Admin Panel (/admin/*) ───────────────────────── */}
               <Route
-                path="/dashboard/*"
+                path="/admin/*"
                 element={
                   <RequireAuth>
                     <RequireAdminDashboard>
@@ -281,8 +299,9 @@ export default function Navigation() {
                 <Route path="settings" element={<DashboardSettings />} />
               </Route>
 
+              {/* ── User Portal (/portal/*) ──────────────────────── */}
               <Route
-                path="/user-dashboard/*"
+                path="/portal/*"
                 element={
                   <RequireAuth>
                     <RequireUserRole>
@@ -292,10 +311,13 @@ export default function Navigation() {
                 }
               >
                 <Route index element={<UserDashboardHome />} />
+                <Route path="messages" element={<UserDashboardMessages />} />
+                <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
 
+              {/* ── Facility Portal (/facility/*) ────────────────── */}
               <Route
-                path="/facility-dashboard/*"
+                path="/facility/*"
                 element={
                   <RequireAuth>
                     <RequireFacilityRole>

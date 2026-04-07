@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import catchAsyncError from "../middleware/catchAsyncErrors.js";
 import sendMail from "../utils/sendMail.js";
 import { greetingNameForEmail } from "../utils/greetingNameForEmail.js";
+import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
@@ -308,8 +309,7 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
     const resetToken = await user.getToken(RESET_PASSWORD_TOKEN_MINUTES);
     await user.save({ validateBeforeSave: false });
 
-    const clientBase =
-      (process.env.CLIENT_BASE_URL || "http://localhost:5173").replace(/\/+$/, "");
+    const clientBase = resolveClientBaseUrl(req);
     const resetLink = `${clientBase}/reset-password?token=${resetToken}`;
 
     try {

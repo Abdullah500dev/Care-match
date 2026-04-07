@@ -1,9 +1,11 @@
 import React from "react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import SEO from "@/components/common/SEO";
 
 export default function FacilityDashboardHome() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
+      <SEO title="Facility Dashboard – CareMatch AI" />
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Facility Dashboard</h1>
         <p className="text-slate-500">Manage onboarding, leads, and operations for your community.</p>

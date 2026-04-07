@@ -10,8 +10,8 @@ const quickLinks = [
 ];
 
 const forProvidersLinks = [
-  { label: "List Your Facility", path: "/dashboard/communities" },
-  { label: "Provider Portal", path: "/dashboard" },
+  { label: "List Your Facility", path: "/admin/communities" },
+  { label: "Provider Portal", path: "/admin" },
   { label: "Marketing Tools", path: "/marketing-tools" },
   { label: "Success Stories", path: "/success-stories" },
 ];

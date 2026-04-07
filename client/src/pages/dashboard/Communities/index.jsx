@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import SEO from "@/components/common/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -158,6 +160,7 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
+  const navigate = useNavigate();
   const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -487,11 +490,25 @@ export default function Communities() {
     setKeptImagePaths((prev) => prev.filter((p) => p !== path));
   };
 
+  const scrollFacilitiesPageToTop = () => {
+    const pageTop = document.getElementById("page-top");
+    if (pageTop) {
+      pageTop.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
+    document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.scrollTo?.({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <div
       className="mx-auto w-full min-w-0 max-w-5xl space-y-6"
       style={{ fontFamily: "Rethink Sans, sans-serif" }}
     >
+      <SEO title="Facilities – Admin | CareMatch AI" />
       {/* Header */}
       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex flex-col">
@@ -627,6 +644,7 @@ export default function Communities() {
                       variant="outline"
                       size="default"
                       className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
+                      onClick={() => navigate("/admin/analytics")}
                     >
                       View Analytics
                     </Button>
@@ -647,7 +665,10 @@ export default function Communities() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+              onClick={() => {
+                setCurrentPage((prev) => Math.max(1, prev - 1));
+                scrollFacilitiesPageToTop();
+              }}
               disabled={listLoading || !pagination.hasPrevPage}
               className="rounded-xl"
             >
@@ -656,7 +677,10 @@ export default function Communities() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setCurrentPage((prev) => prev + 1)}
+              onClick={() => {
+                setCurrentPage((prev) => prev + 1);
+                scrollFacilitiesPageToTop();
+              }}
               disabled={listLoading || !pagination.hasNextPage}
               className="rounded-xl"
             >
@@ -679,10 +703,13 @@ export default function Communities() {
               {editingId ? "Edit facility" : "Add new facility"}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSubmitFacility} className="space-y-4">
+          <form
+            onSubmit={handleSubmitFacility}
+            className="space-y-4 [&_input]:placeholder:text-slate-400"
+          >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Facility Name
                 </label>
                 <Input
@@ -693,7 +720,7 @@ export default function Communities() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Email
                 </label>
                 <Input
@@ -708,7 +735,7 @@ export default function Communities() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Phone
                 </label>
                 <Input
@@ -722,7 +749,7 @@ export default function Communities() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Pricing
                 </label>
                 <Input
@@ -738,7 +765,7 @@ export default function Communities() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                 Address
               </label>
               <GooglePlacesAddressInput
@@ -750,8 +777,8 @@ export default function Communities() {
               />
             </div>
 
-            <div className="space-y-3">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+            <div className="mt-8 space-y-3">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                 Facility images (max 8 total)
               </label>
               {editingId && keptImagePaths.length > 0 && (
@@ -872,7 +899,7 @@ export default function Communities() {
 
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Services
                 </label>
                 <Input
@@ -907,7 +934,7 @@ export default function Communities() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Amenities
                 </label>
                 <Input
@@ -942,7 +969,7 @@ export default function Communities() {
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                   Care Levels
                 </label>
                 <Input
@@ -979,7 +1006,7 @@ export default function Communities() {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
   <div className="space-y-2">
-    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
       Units
     </label>
     <Input
@@ -993,7 +1020,7 @@ export default function Communities() {
   </div>
 
   <div className="space-y-2">
-    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
       Occupancy
     </label>
     <Input
@@ -1007,7 +1034,7 @@ export default function Communities() {
   </div>
 
   <div className="space-y-2">
-    <label className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
       Active Leads
     </label>
     <Input

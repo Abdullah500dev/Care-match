@@ -76,7 +76,7 @@ export default function Contact() {
 
   return (
     <>
-      <SEO title="Contact" />
+      <SEO title="Contact Us – CareMatch AI" />
       <div className="min-h-screen bg-[#F9FAFB]">
         {/* Back to Results - top left of content area */}
         {/* <div

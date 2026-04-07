@@ -39,7 +39,7 @@ export default function Header() {
     // { label: "How it Works", target: "how-it-works", isScroll: true },
     // { label: "Client Types", target: "care-types", isScroll: true },
     { label: "Why Us", path: "/why-us", isScroll: false },
-    { label: "Resources", target: "resources", isScroll: true },
+    // { label: "Resources", target: "resources", isScroll: true },
     { label: "Contact", path: "/contact", isScroll: false },
   ];
 
@@ -135,8 +135,8 @@ export default function Header() {
               )}
             </div>
             <Link
-              to="/dashboard"
-              className="rounded-full bg-[#00B8DB] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 md:px-5 md:py-2.5 min-[1024px]:px-4 min-[1024px]:py-2 min-[1024px]:text-sm min-[1280px]:px-4 min-[1280px]:py-2 min-[1280px]:text-sm min-[1536px]:px-5 min-[1536px]:py-2.5"
+              to="/admin"
+            className="rounded-full bg-[#00B8DB] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 md:px-5 md:py-2.5 min-[1024px]:px-4 min-[1024px]:py-2 min-[1024px]:text-sm min-[1280px]:px-4 min-[1280px]:py-2 min-[1280px]:text-sm min-[1536px]:px-5 min-[1536px]:py-2.5"
             >
               Facilities
             </Link>
@@ -164,43 +164,43 @@ export default function Header() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="flex items-center gap-2">
+                    <Link to="/admin" className="flex items-center gap-2">
                       <LayoutDashboard className="h-4 w-4" />
                       Overview
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/residents" className="flex items-center gap-2">
+                    <Link to="/admin/residents" className="flex items-center gap-2">
                       <Users className="h-4 w-4" />
                       Leads
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/communities" className="flex items-center gap-2">
+                    <Link to="/admin/communities" className="flex items-center gap-2">
                       <Building2 className="h-4 w-4" />
                       Facilities
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/calendar" className="flex items-center gap-2">
+                    <Link to="/admin/calendar" className="flex items-center gap-2">
                       <CalendarDays className="h-4 w-4" />
                       Calendar
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/messages" className="flex items-center gap-2">
+                    <Link to="/admin/messages" className="flex items-center gap-2">
                       <MessageSquareText className="h-4 w-4" />
                       Messages
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/analytics" className="flex items-center gap-2">
+                    <Link to="/admin/analytics" className="flex items-center gap-2">
                       <BarChart3 className="h-4 w-4" />
                       Analytics
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard/settings" className="flex items-center gap-2">
+                    <Link to="/admin/settings" className="flex items-center gap-2">
                       <Settings className="h-4 w-4" />
                       Settings
                     </Link>
@@ -231,14 +231,14 @@ export default function Header() {
                     to="/register"
                     className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
                   >
-                    Signup
+                    Sign Up
                   </Link>
                   <span className="text-[#364153]">/</span>
                   <Link
                     to="/signin"
                     className="font-medium text-[#364153] text-sm md:text-base hover:text-[#132329] transition-colors min-[1024px]:text-sm min-[1280px]:text-sm min-[1536px]:text-base"
                   >
-                    Login
+                    Sign In
                   </Link>
                 </div>
               </div>
@@ -291,49 +291,49 @@ export default function Header() {
                       {userData.name || "Account"}
                     </div>
                     <Link
-                      to="/dashboard"
+                      to="/admin"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Overview
                     </Link>
                     <Link
-                      to="/dashboard/residents"
+                      to="/admin/residents"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Leads
                     </Link>
                     <Link
-                      to="/dashboard/communities"
+                      to="/admin/communities"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Facilities
                     </Link>
                     <Link
-                      to="/dashboard/calendar"
+                      to="/admin/calendar"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Calendar
                     </Link>
                     <Link
-                      to="/dashboard/messages"
+                      to="/admin/messages"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Messages
                     </Link>
                     <Link
-                      to="/dashboard/analytics"
+                      to="/admin/analytics"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
                       Analytics
                     </Link>
                     <Link
-                      to="/dashboard/settings"
+                      to="/admin/settings"
                       className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
@@ -354,7 +354,7 @@ export default function Header() {
                       className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      Signup
+                      Sign Up
                     </Link>
                     <span className="text-[#364153]">/</span>
                     <Link
@@ -362,12 +362,12 @@ export default function Header() {
                       className="font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
                       onClick={() => setIsMenuOpen(false)}
                     >
-                      Login
+                      Sign In
                     </Link>
                   </div>
                 )}
                 <Link
-                  to="/dashboard"
+                  to="/admin"
                   className="mt-1 inline-flex justify-center rounded-full bg-[#00B8DB] px-5 py-2.5 text-sm font-medium text-white"
                   onClick={() => setIsMenuOpen(false)}
                 >

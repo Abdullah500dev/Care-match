@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { authServices } from "../../services/authServices";
+import SEO from "../../components/common/SEO";
 
 function ForgotPassword() {
   const {
@@ -16,11 +17,18 @@ function ForgotPassword() {
       const response = await authServices.forgotPassword(data);
       toast.success(response?.data?.message || "Reset link sent to your email.");
     } catch (error) {
-      toast.error(error?.response?.data?.message || "Unable to send reset link.");
+      const rawMessage = error?.response?.data?.message || "Unable to send reset link.";
+      const cleanedMessage = String(rawMessage)
+        .replace(/["'"'"'`“”‘’]\s*email\s*["'"'"'`“”‘’]/gi, "email")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      toast.error(cleanedMessage);
     }
   };
 
   return (
+    <>
+      <SEO title="Forgot Password – CareMatch AI" />
     <div
       className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-10 bg-no-repeat"
       style={{
@@ -68,6 +76,7 @@ function ForgotPassword() {
         </p>
       </form>
     </div>
+    </>
   );
 }
 

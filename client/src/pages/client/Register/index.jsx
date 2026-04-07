@@ -20,8 +20,10 @@ export default function Register() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
   const [activationCode, setActivationCode] = useState("");
+  const [activationError, setActivationError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
+  const [errors, setErrors] = useState({});
   const showActivationCard = Boolean(pendingEmail);
  
   useEffect(() => {
@@ -31,22 +33,43 @@ export default function Register() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => {
+      if (!prev[name]) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const validateForm = () => {
+    const nextErrors = {};
+
+    if (!form.fullName.trim()) nextErrors.fullName = "Full name is required";
+    if (!form.email.trim()) {
+      nextErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      nextErrors.email = "Enter a valid email address";
+    }
+    if (!form.password) nextErrors.password = "Password is required";
+    if (!form.confirmPassword) nextErrors.confirmPassword = "Confirm password is required";
+    if (
+      form.password &&
+      form.confirmPassword &&
+      form.password !== form.confirmPassword
+    ) {
+      nextErrors.confirmPassword = "Passwords do not match";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.fullName || !form.email || !form.password || !form.confirmPassword) {
+    if (!validateForm()) {
       toastAuthError(
-        { response: { status: 400, data: { message: "All fields are required." } } },
-        { fallbackTitle: "Missing information" }
-      );
-      return;
-    }
-
-    if (form.password !== form.confirmPassword) {
-      toastAuthError(
-        { response: { status: 400, data: { message: "Passwords do not match." } } },
-        { fallbackTitle: "Passwords don’t match" }
+        { response: { status: 400, data: { message: "Please fix the highlighted fields." } } },
+        { fallbackTitle: "Invalid form" }
       );
       return;
     }
@@ -79,6 +102,7 @@ export default function Register() {
   const handleActivateAccount = async (e) => {
     e.preventDefault();
     if (!pendingEmail || !activationCode) {
+      setActivationError("Verification code is required");
       toastAuthError(
         { response: { status: 400, data: { message: "Verification code is required." } } },
         { fallbackTitle: "Missing verification code" }
@@ -87,6 +111,7 @@ export default function Register() {
     }
 
     try {
+      setActivationError("");
       setIsVerifying(true);
       const response = await authServices.activate({ email: pendingEmail, code: activationCode });
       toastAuthSuccess(
@@ -162,8 +187,11 @@ export default function Register() {
                         value={form.fullName}
                         onChange={handleChange}
                         placeholder="Jane Doe"
-                        className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                        className={`h-11 rounded-xl border text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                          errors.fullName ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
+                        }`}
                       />
+                      {errors.fullName && <p className="text-red-500 text-sm mt-1">{errors.fullName}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -177,8 +205,11 @@ export default function Register() {
                         value={form.email}
                         onChange={handleChange}
                         placeholder="jane@example.com"
-                        className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                        className={`h-11 rounded-xl border text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                          errors.email ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
+                        }`}
                       />
+                      {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -193,7 +224,9 @@ export default function Register() {
                           value={form.password}
                           onChange={handleChange}
                           placeholder="Enter password"
-                          className="h-11 rounded-xl border border-[#E2E8F0] pr-11 text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                          className={`h-11 rounded-xl border pr-11 text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                            errors.password ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
+                          }`}
                         />
                         <button
                           type="button"
@@ -204,6 +237,7 @@ export default function Register() {
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
                       </div>
+                      {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
                     </div>
 
                     <div className="space-y-2">
@@ -218,7 +252,9 @@ export default function Register() {
                           value={form.confirmPassword}
                           onChange={handleChange}
                           placeholder="Re-enter password"
-                          className="h-11 rounded-xl border border-[#E2E8F0] pr-11 text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                          className={`h-11 rounded-xl border pr-11 text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                            errors.confirmPassword ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
+                          }`}
                         />
                         <button
                           type="button"
@@ -229,12 +265,15 @@ export default function Register() {
                           {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
                       </div>
+                      {errors.confirmPassword && (
+                        <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
+                      )}
                     </div>
 
                     <Button
                       type="submit"
                       disabled={isSubmitting}
-                      className="h-12 w-full rounded-xl bg-[#0F172B] text-base font-bold text-white hover:bg-[#1e293b]"
+                      className="h-12 w-full rounded-xl bg-[#00b8db] text-base font-bold text-white hover:bg-[#009fbe]"
                     >
                       {isSubmitting ? "Creating account..." : "Sign Up"}
                     </Button>
@@ -268,10 +307,18 @@ export default function Register() {
                         id="activationCode"
                         name="activationCode"
                         value={activationCode}
-                        onChange={(e) => setActivationCode(e.target.value)}
+                        onChange={(e) => {
+                          setActivationCode(e.target.value);
+                          if (activationError) setActivationError("");
+                        }}
                         placeholder="123456"
-                        className="h-11 rounded-xl border border-[#E2E8F0] text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                        className={`h-11 rounded-xl border text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                          activationError ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
+                        }`}
                       />
+                      {activationError && (
+                        <p className="text-red-500 text-sm mt-1 text-left">{activationError}</p>
+                      )}
                     </div>
 
                     <Button
