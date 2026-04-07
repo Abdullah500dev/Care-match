@@ -18,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 export default function Profile() {
   return (
     <>
-      <SEO title="Profile" />
+      <SEO title="My Profile – CareMatch AI" />
       <div className="min-h-screen bg-[#FDFCFB]">
         <div className="px-4 py-6 sm:py-10 sm:px-6 max-w-4xl mx-auto">
           {/* Profile Header - same width as grid below */}

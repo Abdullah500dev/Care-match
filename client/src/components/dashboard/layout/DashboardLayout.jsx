@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import DashboardSidebar from "./Sidebar";
 import DashboardHeader from "./DashboardHeader";
-import Footer from "../../client/Footer";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -22,12 +21,6 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
-
-      {/* Thin white strip separating data from footer (matches sidebar white) */}
-      <div className="h-12 w-full shrink-0 bg-white" aria-hidden />
-
-      {/* Full-width footer at bottom */}
-      <Footer />
     </div>
   );
 }

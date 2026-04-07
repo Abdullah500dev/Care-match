@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   Users,
   Building2,
-  CalendarDays,
   MessageSquare,
   BarChart2,
   Settings,
@@ -19,13 +18,12 @@ import { authServices, clearPersistedAuthTokens } from "../../../services/authSe
 import { clearUser, getUser } from "../../../store/auth/authSlice";
 
 const NAV_ITEMS = [
-  { to: "/dashboard", label: "Overview", icon: LayoutDashboard, exact: true },
-  { to: "/dashboard/residents", label: "Leads", icon: Users },
-  { to: "/dashboard/communities", label: "Facilities", icon: Building2 },
-  { to: "/dashboard/calendar", label: "Calendar", icon: CalendarDays },
-  { to: "/dashboard/messages", label: "Messages", icon: MessageSquare },
-  { to: "/dashboard/analytics", label: "Analytics", icon: BarChart2 },
-  { to: "/dashboard/settings", label: "Settings", icon: Settings },
+  { to: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
+  { to: "/admin/residents", label: "Leads", icon: Users },
+  { to: "/admin/communities", label: "Facilities", icon: Building2 },
+  { to: "/admin/messages", label: "Messages", icon: MessageSquare },
+  { to: "/admin/analytics", label: "Analytics", icon: BarChart2 },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 function NavContent({ onNavClick }) {
@@ -33,12 +31,18 @@ function NavContent({ onNavClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   useSelector(getUser);
-  const hideLeadsAndAnalytics =
-    location.pathname.startsWith("/user-dashboard") ||
-    location.pathname.startsWith("/facility-dashboard");
+  const isUserDashboard = location.pathname.startsWith("/portal");
+  const isFacilityDashboard = location.pathname.startsWith("/facility");
+  const basePath = isUserDashboard
+    ? "/portal"
+    : isFacilityDashboard
+    ? "/facility"
+    : "/admin";
+  const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard;
   const visibleItems = hideLeadsAndAnalytics
     ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
     : NAV_ITEMS;
+  const finalItems = visibleItems;
 
   const handleLogout = async () => {
     try {
@@ -56,10 +60,10 @@ function NavContent({ onNavClick }) {
 
   return (
     <nav className="flex w-full flex-1 flex-col space-y-1 px-[10%] text-base">
-      {visibleItems.map(({ to, label, icon: Icon, exact }) => (
+      {finalItems.map(({ to, label, icon: Icon, exact }) => (
         <NavLink
           key={to}
-          to={to}
+          to={to.replace("/admin", basePath)}
           end={exact}
           onClick={onNavClick}
           className="group flex w-full items-center gap-3 rounded-lg py-2.5 font-bold transition-colors hover:bg-slate-50 hover:text-slate-900"

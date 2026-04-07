@@ -6,6 +6,7 @@ import { authServices, persistAuthTokens } from "../../services/authServices";
 import { setUser } from "../../store/auth/authSlice";
 import { Eye, EyeOff } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
+import SEO from "../../components/common/SEO";
 
 function Signin() {
     const dispatch = useDispatch();
@@ -29,13 +30,13 @@ function Signin() {
             const role = user?.role;
             const userType = user?.user_type;
             if (["admin", "authenticator", "moderator"].includes(userType)) {
-              navigate("/dashboard");
+              navigate("/admin");
             } else if (role === "facility") {
-              navigate("/facility-dashboard");
+              navigate("/facility");
             } else if (role === "user") {
-              navigate("/user-dashboard");
+              navigate("/portal");
             } else {
-              navigate("/dashboard");
+              navigate("/admin");
             }
         } catch (error) {
             toastAuthError(error, {
@@ -46,6 +47,8 @@ function Signin() {
     }
 
     return (
+        <>
+        <SEO title="Sign In - CareMatch AI" />
         <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-10 bg-no-repeat"
             style={{
                 backgroundImage: "url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
@@ -98,6 +101,7 @@ function Signin() {
                 </p>
             </form>
         </div>
+        </>
     );
 }
 

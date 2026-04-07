@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
 import { authServices } from "../../services/authServices";
+import SEO from "../../components/common/SEO";
 
 function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -36,6 +37,8 @@ function ResetPassword() {
   };
 
   return (
+    <>
+      <SEO title="Reset Password – CareMatch AI" />
     <div
       className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-10 bg-no-repeat"
       style={{
@@ -100,6 +103,7 @@ function ResetPassword() {
         </p>
       </form>
     </div>
+    </>
   );
 }
 

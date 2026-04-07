@@ -9,6 +9,9 @@ import SimpleProcess from "../../../components/client/SimpleProcess";
 import StartYourSearch from "../../../components/client/StartYourSearch";
 import SuccessStories from "../../../components/client/SuccessStories";
 import WhyCareMatch from "../../../components/client/WhyCareMatch";
+import {
+  scrollToCarrieHeroTagline,
+} from "../../../utils/scrollToCarrieHeroTagline";
 
 export default function Home() {
   const location = useLocation();
@@ -16,11 +19,15 @@ export default function Home() {
   useEffect(() => {
     if (location.state?.scrollTo) {
       const targetId = location.state.scrollTo;
-      const el = document.getElementById(targetId);
-      if (el) {
-        const yOffset = -80;
-        const y = el.getBoundingClientRect().top + window.scrollY + yOffset;
-        window.scrollTo({ top: y, behavior: "smooth" });
+      if (targetId === "carrie-hero-tagline") {
+        scrollToCarrieHeroTagline({ behavior: "auto" });
+      } else {
+        const el = document.getElementById(targetId);
+        if (el) {
+          const yOffset = -80;
+          const y = el.getBoundingClientRect().top + window.scrollY + yOffset;
+          window.scrollTo({ top: y, behavior: "smooth" });
+        }
       }
 
       // Clear scroll state so it doesn't persist
@@ -28,9 +35,17 @@ export default function Home() {
     }
   }, [location]);
 
+  useEffect(() => {
+    if (location.pathname !== "/" || location.hash !== "#carrie-hero-tagline") return;
+    const id = window.setTimeout(() => {
+      scrollToCarrieHeroTagline({ behavior: "auto" });
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [location.pathname, location.hash]);
+
   return (
     <Fragment>
-      <SEO title="Home" />
+      <SEO title="CareMatch AI – Find the Right Senior Care" />
       <div className="content-container flex w-full min-h-screen flex-col bg-[#F9FAFB]">
       
         <Banner />

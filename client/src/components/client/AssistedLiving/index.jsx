@@ -4,6 +4,7 @@ import { TiltCard } from "@/components/ui/tilt-card";
 
 
 import { useLocation } from "react-router-dom";
+import { scrollToCarrieHeroThenOpenChat } from "@/utils/scrollToCarrieHeroTagline";
 
 
 function SparkleIcon({ className = "" }) {
@@ -106,26 +107,25 @@ export default function AssistedLiving() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3 md:gap-4 min-[1920px]:mt-8">
                 {FEATURE_BUTTONS.map(({ label }) => (
-                  <button
+                  <span
                     key={label}
-                    type="button"
-                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-[#1A202C] transition hover:bg-gray-50 sm:px-4 sm:py-2.5 sm:text-sm md:px-5 md:py-3 md:text-base min-[1920px]:w-[30%] min-[1920px]:flex-none"
+                    className="min-w-0 flex-1 rounded-lg bg-white px-3 py-2 text-center text-xs font-medium text-[#1A202C] sm:px-4 sm:py-2.5 sm:text-sm md:px-5 md:py-3 md:text-base min-[1920px]:w-[30%] min-[1920px]:flex-none"
                   >
                     {label}
-                  </button>
+                  </span>
                 ))}
               </div>
             </TiltCard>
             {/* CTA buttons below the card — Try AI Assistant & Find Facilities */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
               <Link
-                onClick={() => {
-                  if (location.pathname === "/" && location.hash === "#search-bar") {
-                    const el = document.getElementById("search-bar");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
+                onClick={(e) => {
+                  if (location.pathname === "/") {
+                    e.preventDefault();
+                    scrollToCarrieHeroThenOpenChat({ source: "assisted-living-cta" });
                   }
                 }}
-                to="/#search-bar"
+                to="/#carrie-hero-tagline"
 
                 className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                 style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
@@ -142,13 +142,6 @@ export default function AssistedLiving() {
                 to="/find-care"
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-2xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white transition  sm:w-auto sm:px-8 sm:py-4 sm:text-base"
                 style={{ boxShadow: "0 4px 14px rgba(0, 207, 244, 0.4)" }}
-
-                onClick={() => {
-                  if (location.pathname === "/" && location.hash === "#search-bar") {
-                    const el = document.getElementById("search-bar");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }
-                }}
               >
                 Find Facilities
               </Link>

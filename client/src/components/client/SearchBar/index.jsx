@@ -1,22 +1,100 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Loader2, Mic } from "lucide-react";
+import { ArrowRight, Loader2, Mic, MessageCircle } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 
 export default function SearchBar() {
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatComposer, setChatComposer] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const inputRef = useRef(null);
+  const chatComposerRef = useRef(null);
+  const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const typingTimerRef = useRef(null);
   const recordingToastIdRef = useRef(null);
   const transcribingToastIdRef = useRef(null);
+  const isChatOpenRef = useRef(false);
   const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+
+  useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+    window.dispatchEvent(
+      new CustomEvent("carematch:chat-open-change", {
+        detail: { isOpen: isChatOpen },
+      })
+    );
+  }, [isChatOpen]);
+
+  useEffect(() => {
+    if (!isChatOpen) return;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, isChatOpen]);
+
+  useEffect(() => {
+    if (!isChatOpen) return;
+    const id = window.setTimeout(() => {
+      chatComposerRef.current?.focus();
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, [isChatOpen]);
+
+  useEffect(() => {
+    const onOpenChatRequest = () => {
+      openChatPanel();
+    };
+    window.addEventListener("carematch:open-chat-request", onOpenChatRequest);
+    return () => {
+      window.removeEventListener("carematch:open-chat-request", onOpenChatRequest);
+    };
+  }, []);
 
   const handleSearch = () => {
     navigate("/find-care");
+  };
+
+  const focusChatComposer = () => {
+    window.requestAnimationFrame(() => {
+      chatComposerRef.current?.focus();
+    });
+  };
+
+  const openChatPanel = () => {
+    setIsChatOpen(true);
+    focusChatComposer();
+  };
+
+  const handleChatSubmit = () => {
+    const text = query.trim();
+    if (!text) return;
+    setChatMessages((prev) => [...prev, { id: `${Date.now()}-u`, role: "user", text }]);
+    setQuery("");
+    setIsChatOpen(true);
+    focusChatComposer();
+  };
+
+  const handlePanelSend = () => {
+    const text = chatComposer.trim();
+    if (!text) return;
+    setChatMessages((prev) => [...prev, { id: `${Date.now()}-u`, role: "user", text }]);
+    setChatComposer("");
+    focusChatComposer();
+  };
+
+  const handleCarrieClick = () => {
+    openChatPanel();
   };
 
   const clearTypingAnimation = () => {
@@ -106,10 +184,15 @@ export default function SearchBar() {
         return;
       }
 
-      typeTextWithAnimation(transcript);
+      if (isChatOpenRef.current) {
+        setChatComposer((prev) => (prev ? `${prev.trim()} ${transcript}` : transcript));
+        focusChatComposer();
+      } else {
+        typeTextWithAnimation(transcript);
+      }
       toast.success("Voice captured", {
         id: transcribingToastIdRef.current,
-        description: "Transcript added to search bar.",
+        description: isChatOpenRef.current ? "Transcript added to chat." : "Transcript added to search bar.",
       });
       transcribingToastIdRef.current = null;
     } catch (error) {
@@ -161,6 +244,7 @@ export default function SearchBar() {
   };
 
   const stopRecording = () => {
+    openChatPanel();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }
@@ -195,25 +279,37 @@ export default function SearchBar() {
         <div className="flex min-h-44 flex-col justify-between rounded-[14px] bg-white p-4 sm:min-h-48 sm:p-5 md:min-h-52 md:p-6 min-[1280px]:min-h-48 min-[1280px]:rounded-[22px] min-[1280px]:p-5 min-[1536px]:min-h-52 min-[1536px]:p-6">
           <div className="flex items-center gap-2 rounded-lg">
             <input
+              ref={inputRef}
               type="text"
               value={query}
               onChange={handleChange}
-              placeholder="Try: 'Looking for memory care in Los Angeles under $6000/month'"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleChatSubmit();
+                }
+              }}
+              placeholder="Try: 'Looking for Assisted living facilities in Los Angeles under $6000/month'"
               className="min-w-0 flex-1 rounded-lg bg-transparent text-[#132329] placeholder:italic placeholder:text-[#0000004D] focus:outline-none text-sm placeholder:text-base sm:text-base sm:placeholder:text-lg min-[1280px]:text-base min-[1280px]:placeholder:text-base min-[1536px]:text-lg min-[1536px]:placeholder:text-lg"
             />
             {/* <Mic className="h-4 w-4 shrink-0 text-[#132329] sm:h-5 sm:w-5 min-[1280px]:h-4 min-[1280px]:w-4 min-[1536px]:h-5 min-[1536px]:w-5" strokeWidth={2} aria-hidden /> */}
           </div>
 
           <div className="mt-2 flex items-center justify-end gap-2">
-            <button className="flex items-center gap-2 rounded-lg bg-[#132329] px-3 py-3.5 text-white font-medium hover:opacity-90 text-sm sm:rounded-xl sm:px-4 sm:py-4 sm:text-base min-[1280px]:rounded-xl min-[1280px]:px-4 min-[1280px]:py-4 min-[1536px]:py-5">
+            <button
+              type="button"
+              onClick={handleCarrieClick}
+              className="flex items-center gap-2 rounded-lg bg-[#132329] px-3 py-3.5 text-white font-medium hover:opacity-90 text-sm sm:rounded-xl sm:px-4 sm:py-4 sm:text-base min-[1280px]:rounded-xl min-[1280px]:px-4 min-[1280px]:py-4 min-[1536px]:py-5"
+            >
               <span className="whitespace-nowrap">Carrie – AI Advisor</span>
             </button>
 
             {showSendButton ? (
               <button
+                type="button"
                 className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
                 aria-label="Send"
-                onClick={handleSearch}
+                onClick={handleChatSubmit}
               >
                 <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
               </button>
@@ -247,6 +343,104 @@ export default function SearchBar() {
           </div>
         </div>
       </div>
+
+      <Sheet open={isChatOpen} onOpenChange={setIsChatOpen}>
+        <SheetContent
+          side="right"
+          className="z-[100] flex h-full max-h-screen w-full flex-col gap-0 border-l border-slate-200 p-0 sm:max-w-md [&>button]:text-slate-600"
+        >
+          <SheetHeader className="shrink-0 space-y-1 border-b border-slate-200 px-4 py-4 text-left">
+            <SheetTitle className="flex items-center gap-2 text-lg text-[#132329]">
+              <MessageCircle className="h-5 w-5 shrink-0 text-[#00CFF4]" aria-hidden />
+              Carrie – AI Advisor
+            </SheetTitle>
+            <SheetDescription className="text-left text-sm text-slate-600">
+              Chat with Carrie about senior living options. Use the microphone to speak, or type your message.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {chatMessages.length === 0 ? (
+              <p className="text-sm text-slate-500">Send a message from the search bar or type below to get started.</p>
+            ) : (
+              chatMessages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`mb-3 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "bg-[#00CFF4] text-white"
+                        : "bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="shrink-0 border-t border-slate-200 bg-white p-4">
+            <div className="flex items-end gap-2">
+              <div className="min-w-0 flex-1">
+                <textarea
+                  ref={chatComposerRef}
+                  value={chatComposer}
+                  onChange={(e) => setChatComposer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handlePanelSend();
+                    }
+                  }}
+                  placeholder="Type your message..."
+                  rows={1}
+                  className="h-11 min-h-[44px] w-full max-w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-[#132329] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/50"
+                />
+              </div>
+              <div className="mb-2 flex shrink-0 items-end gap-2">
+                <button
+                  type="button"
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl text-[#132329] ${
+                    isRecording
+                      ? "bg-[#FEE2E2] text-[#B91C1C] shadow-[0_0_0_3px_rgba(239,68,68,0.35)] mic-recording-pulse"
+                      : isTranscribing
+                        ? "bg-[#DBEAFE] text-[#1D4ED8] mic-transcribing-pulse"
+                        : "bg-[#E2E8F0] hover:bg-[#CBD5F1]"
+                  }`}
+                  aria-label={
+                    isRecording
+                      ? "Stop recording"
+                      : isTranscribing
+                        ? "Transcribing voice"
+                        : "Start voice input"
+                  }
+                  onClick={handleMicClick}
+                  disabled={isTranscribing}
+                >
+                  {isTranscribing ? (
+                    <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.5} />
+                  ) : (
+                    <Mic className="h-5 w-5" strokeWidth={2.5} />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#00CFF4] text-white hover:opacity-90"
+                  aria-label="Send message"
+                  onClick={handlePanelSend}
+                  disabled={!chatComposer.trim()}
+                >
+                  <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Subtext */}
       <p className="mt-3 text-center text-sm font-medium italic text-[#132329B2] sm:mt-4 sm:text-base min-[1280px]:mt-4 min-[1280px]:text-sm min-[1536px]:text-base">

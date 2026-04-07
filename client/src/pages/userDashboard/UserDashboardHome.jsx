@@ -1,5 +1,6 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import SEO from "@/components/common/SEO";
 import { BadgeCheck, Heart, MessageSquare, Search } from "lucide-react";
 
 const cards = [
@@ -12,6 +13,7 @@ const cards = [
 export default function UserDashboardHome() {
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
+      <SEO title="My Dashboard – CareMatch AI" />
       <div>
         <h1 className="text-2xl font-bold text-slate-900">User Dashboard</h1>
         <p className="text-slate-500">Track your search progress, saved facilities, and advisor conversations.</p>

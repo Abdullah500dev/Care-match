@@ -15,6 +15,9 @@ export const authServices = {
     apiClient.post(`${AUTH_BASE}/password/reset/${token}`, payload),
   logout: () => apiClient.get(`${AUTH_BASE}/logout`),
   me: () => apiClient.get(`${AUTH_BASE}/me`),
+  updateUserInfo: (payload) => apiClient.put(`${AUTH_BASE}/update-user-info`, payload),
+  updateUserPassword: (payload) =>
+    apiClient.put(`${AUTH_BASE}/update-user-password`, payload),
 };
 
 export const persistAuthTokens = ({ accessToken, refreshToken }) => {

@@ -1,5 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { scrollToCarrieHeroThenOpenChat } from "@/utils/scrollToCarrieHeroTagline";
 
 /** Sparkle / asterisk icon for AI Assistant button */
 function SparkleIcon({ className = "" }) {
@@ -26,6 +28,7 @@ function SparkleIcon({ className = "" }) {
 // }
 
 export default function StartYourSearch() {
+  const location = useLocation();
   return (
     <section
       id="start-your-search-section"
@@ -51,13 +54,13 @@ export default function StartYourSearch() {
         {/* Button + input group */}
         <div className="mt-6 flex w-full max-w-full flex-col items-stretch gap-3 sm:mt-10 sm:max-w-none sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
           <Link
-           onClick={() => {
-            if (location.pathname === "/" && location.hash === "#search-bar") {
-              const el = document.getElementById("search-bar");
-              if (el) el.scrollIntoView({ behavior: "smooth" });
+           onClick={(e) => {
+            if (location.pathname === "/") {
+              e.preventDefault();
+              scrollToCarrieHeroThenOpenChat({ source: "start-your-search-cta" });
             }
           }}
-            to="/#search-bar"
+            to="/#carrie-hero-tagline"
             className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-white px-5 py-3.5 text-sm font-semibold transition hover:bg-white/95 sm:w-auto sm:px-8 sm:py-4 sm:text-base"
             style={{ color: "#00CFF4", boxShadow: "0px 20px 25px -5px #0000001A" }}
           >
