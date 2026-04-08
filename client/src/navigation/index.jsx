@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef, useState, useEffect } from "react";
+﻿import { Suspense, lazy, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -22,6 +22,7 @@ import FAQ from "../pages/client/FAQ";
 import WhyUs from "../pages/client/WhyUs";
 import NotFound from "../pages/common/NotFound";
 import Signin from "../pages/auth/Signin";
+import AdminSignin from "../pages/auth/AdminSignin";
 import ForgotPassword from "../pages/auth/ForgotPassword";
 import ResetPassword from "../pages/auth/ResetPassword";
 
@@ -277,6 +278,8 @@ export default function Navigation() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/api/auth/reset-password" element={<ResetPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+
+              <Route path="/admin/login" element={<AdminSignin />} />
 
               {/* ── Admin Panel (/admin/*) ───────────────────────── */}
               <Route
