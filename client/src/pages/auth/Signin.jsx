@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useForm } from "react-hook-form";
-import { authServices, persistAuthTokens } from "../../services/authServices";
-import { setUser } from "../../store/auth/authSlice";
+import { authServices, clearPersistedAuthTokens, persistAuthTokens } from "../../services/authServices";
+import { clearUser, setUser } from "../../store/auth/authSlice";
 import { Eye, EyeOff } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import SEO from "../../components/common/SEO";
@@ -22,21 +22,29 @@ function Signin() {
             const accessToken = payload?.accessToken;
             const refreshToken = payload?.refreshToken;
             const user = payload?.user;
+            const role = user?.role;
+            const userType = user?.user_type ?? user?.userType;
+
+            // Normal sign-in is only for user/facility accounts.
+            if (["admin", "authenticator", "moderator"].includes(userType) || role === "admin") {
+              clearPersistedAuthTokens();
+              dispatch(clearUser());
+              toastAuthError(new Error("admin-signin-only"), {
+                fallbackTitle: "Use Admin Sign In",
+                fallbackDescription: "Admins must sign in from /admin/login.",
+              });
+              navigate("/admin/login", { replace: true });
+              return;
+            }
 
             persistAuthTokens({ accessToken, refreshToken });
             dispatch(setUser({ user, token: accessToken, tokenExpire: null }));
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
-            const role = user?.role;
-            const userType = user?.user_type;
-            if (["admin", "authenticator", "moderator"].includes(userType)) {
-              navigate("/admin");
-            } else if (role === "facility") {
+            if (role === "facility") {
               navigate("/facility");
-            } else if (role === "user") {
-              navigate("/portal");
             } else {
-              navigate("/admin");
+              navigate("/portal");
             }
         } catch (error) {
             toastAuthError(error, {
