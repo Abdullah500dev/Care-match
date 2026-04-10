@@ -104,6 +104,37 @@ const CARE_SYNONYMS = [
   ["hospice", "hospice care"],
 ];
 
+/** Overlap groups for must-have amenities (phrase in user intake vs listing text). */
+const AMENITY_SYNONYMS = [
+  ["outdoor", "outside", "garden", "courtyard", "patio", "terrace", "walking path", "walking paths", "nature", "secure garden", "courtyards"],
+  ["private room", "private suite", "private rooms", "suite", "semi-private"],
+  ["pet", "pets", "dog", "cat", "animal friendly", "pet-friendly"],
+  ["therapy", "rehab", "physical therapy", "occupational therapy"],
+  ["dialysis"],
+  ["lgbtq", "lgbt", "welcoming"],
+];
+
+/**
+ * @param {string} wantNorm normalized single must-have phrase
+ * @param {string[]} pool normalized amenity + service strings
+ */
+function amenityWantMatchesPool(wantNorm, pool) {
+  if (!wantNorm) return false;
+  if (pool.some((p) => p.includes(wantNorm) || wantNorm.includes(p))) return true;
+  for (const group of AMENITY_SYNONYMS) {
+    const userTouchesGroup = group.some(
+      (g) => wantNorm === g || wantNorm.includes(g) || g.includes(wantNorm)
+    );
+    if (!userTouchesGroup) continue;
+    if (pool.some((p) => group.some((g) => p.includes(g) || g.includes(p)))) return true;
+  }
+  const significant = wantNorm.split(/\s+/).filter((t) => t.length >= 4);
+  if (significant.some((t) => pool.some((p) => p.includes(t)))) return true;
+  const threes = wantNorm.split(/\s+/).filter((t) => t.length === 3);
+  if (threes.length && threes.every((t) => pool.some((p) => p.includes(t)))) return true;
+  return false;
+}
+
 /**
  * @param {string[]} userLevels
  * @param {string[]} facilityLevels
@@ -154,7 +185,7 @@ function amenityScore(mustHaves, facilityAmenities, facilityServices) {
   const hits = [];
   const misses = [];
   for (const w of wants) {
-    const hit = pool.some((p) => p.includes(w) || w.includes(p));
+    const hit = amenityWantMatchesPool(w, pool);
     if (hit) hits.push(w);
     else misses.push(w);
   }
@@ -190,6 +221,66 @@ function budgetScore(budgetMax, facilityRange) {
   return { score: 0.5, label: "budget alignment unclear" };
 }
 
+const SHORT_LOCATION_TOKENS = new Set([
+  "la",
+  "sf",
+  "ca",
+  "ny",
+  "tx",
+  "fl",
+  "il",
+  "wa",
+  "or",
+  "co",
+  "az",
+  "nv",
+  "ut",
+  "ma",
+  "ga",
+  "nc",
+  "mi",
+  "oh",
+  "pa",
+  "va",
+  "vt",
+]);
+
+const STATE_NAME_TO_ABBR = {
+  california: "ca",
+  "new york": "ny",
+  texas: "tx",
+  florida: "fl",
+  vermont: "vt",
+  massachusetts: "ma",
+};
+
+/**
+ * Tokens for fuzzy address matching (includes 2-letter state/city codes and metro hints).
+ * @param {string} q normalized search location
+ */
+function locationSearchTokens(q) {
+  const raw = q.split(/[,\s]+/).map((t) => norm(t)).filter(Boolean);
+  const tokens = new Set(
+    raw.filter((t) => t.length > 2 || SHORT_LOCATION_TOKENS.has(t))
+  );
+  for (const [full, abbr] of Object.entries(STATE_NAME_TO_ABBR)) {
+    if (q.includes(full)) tokens.add(abbr);
+  }
+  const metroHints = [
+    { triggers: ["los angeles", "la county", "southern california", "greater los angeles"], add: ["los", "angeles", "hollywood"] },
+    { triggers: ["san francisco", "bay area", "sf bay"], add: ["san", "francisco", "oakland"] },
+    { triggers: ["new york", "nyc", "manhattan"], add: ["new", "york", "brooklyn"] },
+  ];
+  for (const m of metroHints) {
+    if (m.triggers.some((t) => q.includes(t))) {
+      for (const x of m.add) {
+        if (x.length > 2) tokens.add(x);
+      }
+    }
+  }
+  return [...tokens];
+}
+
 /**
  * @param {string} searchLocation
  * @param {string} facilityAddress
@@ -200,7 +291,11 @@ function locationScore(searchLocation, facilityAddress) {
   if (!q || q.length < 3) return { score: 0.5, label: "location not specified" };
   if (!a) return { score: 0.3, label: "no address on listing" };
 
-  const tokens = q.split(/[,\s]+/).filter((t) => t.length > 2);
+  if (q.length >= 5 && a.includes(q)) {
+    return { score: 0.9, label: "location text overlap" };
+  }
+
+  const tokens = locationSearchTokens(q);
   let hits = 0;
   for (const t of tokens) {
     if (a.includes(t)) hits += 1;
@@ -365,9 +460,72 @@ export function scoreFacility(facility, prefs) {
     address: facility.address,
     pricing: facility.pricing,
     care_levels: fcLevels,
+    images: Array.isArray(facility.images) ? facility.images : [],
     score: score100,
     reasons: reasons.slice(0, 6),
   };
+}
+
+/**
+ * Hard gates: only facilities that satisfy stated care, must-have amenities, budget cap,
+ * location keywords (when provided), and SNF readiness (when requested) are returned for ranking.
+ * @param {object} facility lean mongoose doc
+ * @param {IntakePrefs} prefs
+ */
+export function facilityMeetsIntakeRequirements(facility, prefs) {
+  if (!prefs || typeof prefs !== "object") return false;
+
+  const careLevels = Array.isArray(prefs.careLevels) ? prefs.careLevels : [];
+  const amenityMustHaves = Array.isArray(prefs.amenityMustHaves)
+    ? prefs.amenityMustHaves
+    : [];
+  const budgetMax =
+    prefs.budgetMaxMonthly != null && !Number.isNaN(Number(prefs.budgetMaxMonthly))
+      ? Number(prefs.budgetMaxMonthly)
+      : null;
+  const searchLocation = prefs.searchLocation || "";
+  const snfReadiness = Boolean(prefs.snfReadiness);
+
+  const fcLevels = facility.care_levels || [];
+  const fcAmenities = facility.amenities || [];
+  const fcServices = facility.services || [];
+
+  if (careLevels.length > 0) {
+    const care = careLevelScore(careLevels, fcLevels);
+    if (care.matched.length === 0) return false;
+  }
+
+  if (amenityMustHaves.length > 0) {
+    const amen = amenityScore(amenityMustHaves, fcAmenities, fcServices);
+    if (amen.misses.length > 0) return false;
+  }
+
+  if (budgetMax != null && budgetMax > 0) {
+    const priceR = parseMonthlyPriceRange(facility.pricing);
+    const budget = budgetScore(budgetMax, priceR);
+    if (budget.label === "likely above stated budget") return false;
+  }
+
+  const q = norm(searchLocation);
+  if (q.length >= 3) {
+    const locTokens = locationSearchTokens(q);
+    if (locTokens.length > 0) {
+      const loc = locationScore(searchLocation, facility.address || "");
+      if (
+        loc.label === "distance/area: not a clear text match (MVP)" ||
+        loc.label === "no address on listing"
+      ) {
+        return false;
+      }
+    }
+  }
+
+  if (snfReadiness) {
+    const f = fcLevels.map(norm).join(" ");
+    if (!/skilled|snf|nursing|subacute/i.test(f)) return false;
+  }
+
+  return true;
 }
 
 /**
@@ -377,9 +535,24 @@ export function scoreFacility(facility, prefs) {
  */
 export function rankFacilities(facilities, prefs, opts = {}) {
   const limit = opts.limit ?? 8;
-  const scored = facilities.map((f) => scoreFacility(f, prefs));
+  if (!prefs || typeof prefs !== "object") return [];
+  const matched = facilities.filter((f) => facilityMeetsIntakeRequirements(f, prefs));
+  const scored = matched.map((f) => scoreFacility(f, prefs));
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, limit);
+}
+
+/**
+ * All facilities that pass requirement gates, scored and sorted.
+ * @param {object[]} facilities lean
+ * @param {IntakePrefs|null} prefs
+ */
+export function rankAllFacilities(facilities, prefs) {
+  if (!prefs || typeof prefs !== "object") return [];
+  const matched = facilities.filter((f) => facilityMeetsIntakeRequirements(f, prefs));
+  const scored = matched.map((f) => scoreFacility(f, prefs));
+  scored.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
+  return scored;
 }
 
 /**
@@ -392,14 +565,18 @@ export function formatRecommendationsForChat(facilities, prefs) {
   }
   const ranked = rankFacilities(facilities, prefs, { limit: 6 });
   if (ranked.length === 0) {
-    return "\n\n---\n**Ranked matches (rule-based MVP)**\nNo communities are in the directory yet. Ask your CareMatch admin to add facilities, then try again.\n";
+    const emptyDir = !facilities || facilities.length === 0;
+    const msg = emptyDir
+      ? "No communities are in the directory yet. Ask your CareMatch admin to add facilities, then try again."
+      : "No communities in our directory satisfy **all** of your stated care level, must-have amenities, budget cap, and location requirements. Try relaxing one constraint or ask your admin to add more listings.";
+    return `\n\n---\n**Matches (rule-based MVP)**\n${msg}\n`;
   }
 
   const lines = [
     "",
     "---",
-    "**Your ranked matches (explainable, rule-based MVP)**",
-    "Scores combine care level fit, must-have amenities, budget vs listed pricing, rough location text match, visitation-friendly signals, and lifestyle hints. Always confirm on a tour.",
+    "**Your matches (rule-based MVP)**",
+    "Only communities that meet your stated care level, must-have amenities, budget cap, and location (when you gave one) are listed. Scores rank those passes. Always confirm on a tour.",
   ];
   ranked.forEach((r, i) => {
     lines.push(`\n**${i + 1}. ${r.name}** — match score **${r.score}/100**`);

@@ -9,6 +9,7 @@ import {
   extractIntakeJsonBlock,
   formatRecommendationsForChat,
   normalizeIntakePreferences,
+  rankAllFacilities,
 } from "../services/matchingEngine.js";
 
 /**
@@ -95,6 +96,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const { userVisible, prefs: rawPrefs } = extractIntakeJsonBlock(text);
   let finalContent = userVisible || text;
 
+  let matchedFacilities = null;
   if (rawPrefs) {
     const prefs = normalizeIntakePreferences(rawPrefs);
     const facilities = await Facility.find().lean();
@@ -102,6 +104,9 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     finalContent = (userVisible || "").trim() + matchSection;
     if (!userVisible?.trim()) {
       finalContent = `Here are communities ranked from our directory using your answers:${matchSection}`;
+    }
+    if (prefs) {
+      matchedFacilities = rankAllFacilities(facilities, prefs);
     }
   }
 
@@ -111,5 +116,6 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       role: "assistant",
       content: finalContent.trim(),
     },
+    ...(matchedFacilities != null && { matchedFacilities }),
   });
 });

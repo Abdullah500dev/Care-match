@@ -108,6 +108,11 @@ export default function SearchBar() {
           ...prev,
           { id: `${Date.now()}-a`, role: "assistant", text: reply.content },
         ]);
+        const matches = data?.matchedFacilities;
+        if (Array.isArray(matches) && matches.length > 0) {
+          setIsChatOpen(false);
+          navigate("/care-explorer", { state: { carrieMatches: matches, fromCarrie: true } });
+        }
       } else {
         toast.error("No reply from Carrie");
         setChatMessages((prev) => prev.filter((m) => m.id !== userEntry.id));

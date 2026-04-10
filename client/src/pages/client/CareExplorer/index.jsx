@@ -1,9 +1,22 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
+
+const API_BASE =
+  typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
+    ? import.meta.env.VITE_REACT_APP_API_BASE_URL.replace(/\/$/, "")
+    : "";
+
+function resolveFacilityImageUrl(path) {
+  if (!path || typeof path !== "string") return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!API_BASE) return path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
+}
 
 const FACILITIES = [
   { matchPercent: 98, imageSrc: "/assets/images/imgForFindCare.svg" },
@@ -20,14 +33,65 @@ const FACILITIES = [
   { matchPercent: 74, imageSrc: "/assets/images/imgForFindCare.svg" },
 ];
 
+const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
+
 const CareExplorer = () => {
+  const location = useLocation();
+  const carrieMatches = location.state?.carrieMatches;
+  const fromCarrie = Boolean(location.state?.fromCarrie);
+
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
 
+  const liveFacilities = useMemo(() => {
+    if (!Array.isArray(carrieMatches) || carrieMatches.length === 0) return null;
+    return carrieMatches.map((m) => {
+      const firstImg = Array.isArray(m.images) && m.images.length ? m.images[0] : null;
+      const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
+      const category =
+        Array.isArray(m.care_levels) && m.care_levels.length
+          ? m.care_levels.join(" · ").toUpperCase()
+          : "SENIOR LIVING";
+      const features = Array.isArray(m.reasons) && m.reasons.length
+        ? m.reasons.map((r) => String(r).replace(/^[✓○]\s*/, "").trim())
+        : ["Review listing details and tour to validate fit"];
+      const priceRange = m.pricing && String(m.pricing).trim() ? String(m.pricing).trim() : "Contact for pricing";
+      const distance =
+        m.address && String(m.address).trim()
+          ? String(m.address).trim().slice(0, 48) + (String(m.address).length > 48 ? "…" : "")
+          : "Address on file";
+      return {
+        key: m.facilityId || m.name,
+        matchPercent: typeof m.score === "number" ? m.score : 0,
+        imageSrc,
+        category,
+        name: m.name || "Community",
+        priceRange,
+        distance,
+        features,
+      };
+    });
+  }, [carrieMatches]);
+
   const scopedFacilities =
-    scope === "saved" ? FACILITIES.filter((_, idx) => idx % 2 === 0) : FACILITIES;
+    scope === "saved" && liveFacilities
+      ? liveFacilities.filter((_, idx) => idx % 2 === 0)
+      : liveFacilities
+        ? liveFacilities
+        : scope === "saved"
+          ? FACILITIES.filter((_, idx) => idx % 2 === 0)
+          : FACILITIES;
+
+  const showFullCarrieList = Boolean(liveFacilities?.length);
+  const listingItems = showFullCarrieList
+    ? scopedFacilities
+    : layout === "single"
+      ? scopedFacilities.slice(0, 3)
+      : layout === "two"
+        ? scopedFacilities.slice(0, 4)
+        : scopedFacilities.slice(0, 12);
 
   return (
     <>
@@ -63,10 +127,21 @@ const CareExplorer = () => {
             </div>
             <div className="md:border-l-2 md:border-[#E2E8F0] md:pl-8 flex-1 flex items-center justify-center min-w-0 max-w-5xl w-full">
               <p className="text-xs sm:text-sm text-[#64748b] text-center sm:text-left md:text-center">
-                Prioritized for{" "}
-                <span className="font-semibold text-[#132329]">Assisted Living</span>, budget around{" "}
-                <span className="font-semibold text-[#132329]">$3,000/mo</span>, and your specific{" "}
-                <span className="font-semibold text-[#222c2e]">mobility needs</span>.
+                {fromCarrie && liveFacilities ? (
+                  <>
+                    These communities are{" "}
+                    <span className="font-semibold text-[#132329]">ranked from your chat with Carrie</span>{" "}
+                    using care level fit, must-have amenities, budget vs listed pricing, location keywords, and
+                    visitation-friendly signals. Always confirm details on a tour.
+                  </>
+                ) : (
+                  <>
+                    Prioritized for{" "}
+                    <span className="font-semibold text-[#132329]">Assisted Living</span>, budget around{" "}
+                    <span className="font-semibold text-[#132329]">$3,000/mo</span>, and your specific{" "}
+                    <span className="font-semibold text-[#222c2e]">mobility needs</span>.
+                  </>
+                )}
               </p>
             </div>
           </div>
@@ -104,16 +179,16 @@ const CareExplorer = () => {
                     : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
               }`}
             >
-              {(layout === "single"
-                ? scopedFacilities.slice(0, 3)
-                : layout === "two"
-                  ? scopedFacilities.slice(0, 4)
-                  : scopedFacilities.slice(0, 12)
-              ).map((f) => (
-                <div key={f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
+              {listingItems.map((f) => (
+                <div key={f.key ?? f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
                   <FacilityCard
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
+                    name={f.name}
+                    category={f.category}
+                    priceRange={f.priceRange}
+                    distance={f.distance}
+                    features={f.features}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
                   />
@@ -126,9 +201,14 @@ const CareExplorer = () => {
               <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
                 {scopedFacilities.map((f) => (
                   <FacilityCard
-                    key={f.matchPercent}
+                    key={f.key ?? f.matchPercent}
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
+                    name={f.name}
+                    category={f.category}
+                    priceRange={f.priceRange}
+                    distance={f.distance}
+                    features={f.features}
                     compact
                   />
                 ))}
