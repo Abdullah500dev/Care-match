@@ -1,21 +1,23 @@
-import React, { useState } from "react";
-import { Search, Send, MessageSquare, Circle } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Bot, Circle, MessageSquare, Search, Send, User } from "lucide-react";
+import { toast } from "sonner";
 import SEO from "@/components/common/SEO";
+import { sendChatMessages } from "@/services/chatService";
+
+const CARRIE_WELCOME =
+  "Hi — I’m Carrie. I’ll walk through care level, amenities, budget, how far you can go, visitation, and personality, then show ranked options with plain-English ✓ reasons.";
 
 const THREADS = [
   {
     id: 1,
     name: "Carrie — AI Advisor",
     subtitle: "CareMatch Assistant",
-    preview: "I found 3 memory care facilities near you.",
-    time: "2m ago",
-    unread: 2,
+    preview: "OpenAI-powered — sign in required",
+    time: "Live",
+    unread: 0,
     color: "#00B8DB",
-    messages: [
-      { from: "them", text: "Hi! Based on your intake form, I found 3 memory care facilities near you.", time: "9:41 AM" },
-      { from: "me", text: "That's great! Can you compare their pricing?", time: "9:43 AM" },
-      { from: "them", text: "Absolutely. Sunrise Villa starts at $4,500/mo, Golden Years at $3,900/mo, and Evergreen at $5,200/mo.", time: "9:44 AM" },
-    ],
+    isAi: true,
+    messages: [],
   },
   {
     id: 2,
@@ -51,8 +53,19 @@ export default function UserDashboardMessages() {
   const [activeId, setActiveId] = useState(THREADS[0].id);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
+  const [aiMessages, setAiMessages] = useState([
+    { role: "assistant", content: CARRIE_WELCOME },
+  ]);
+  const [aiSending, setAiSending] = useState(false);
+  const aiBottomRef = useRef(null);
 
   const activeThread = threads.find((t) => t.id === activeId) ?? threads[0];
+
+  useEffect(() => {
+    if (activeThread.isAi) {
+      aiBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [activeThread.isAi, aiMessages, aiSending]);
 
   const filteredThreads = threads.filter(
     (t) =>
@@ -69,6 +82,7 @@ export default function UserDashboardMessages() {
   };
 
   const handleSend = () => {
+    if (activeThread.isAi) return;
     const text = message.trim();
     if (!text) return;
     setThreads((prev) =>
@@ -86,10 +100,37 @@ export default function UserDashboardMessages() {
     setMessage("");
   };
 
+  const handleAiSend = async () => {
+    const text = message.trim();
+    if (!text || aiSending) return;
+    const history = [...aiMessages, { role: "user", content: text }];
+    setAiMessages(history);
+    setMessage("");
+    setAiSending(true);
+    try {
+      const { data } = await sendChatMessages(history);
+      const reply = data?.message;
+      if (reply?.content) {
+        setAiMessages((prev) => [...prev, reply]);
+      } else {
+        toast.error("No reply from assistant");
+      }
+    } catch (err) {
+      const desc =
+        err?.response?.data?.message || err?.message || "Chat request failed.";
+      toast.error("Carrie couldn’t respond", { description: desc });
+      setAiMessages((prev) => prev.slice(0, -1));
+      setMessage(text);
+    } finally {
+      setAiSending(false);
+    }
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      if (activeThread.isAi) handleAiSend();
+      else handleSend();
     }
   };
 
@@ -105,7 +146,7 @@ export default function UserDashboardMessages() {
           Messages
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Chat with Carrie, facility partners, and the CareMatch team.
+          Carrie uses OpenAI (requires login). Other threads are samples until wired to real chat.
         </p>
       </div>
 
@@ -147,7 +188,11 @@ export default function UserDashboardMessages() {
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
                       style={{ backgroundColor: thread.color }}
                     >
-                      {thread.name.slice(0, 2).toUpperCase()}
+                      {thread.isAi ? (
+                        <Bot className="h-4 w-4 text-white" aria-hidden />
+                      ) : (
+                        thread.name.slice(0, 2).toUpperCase()
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
@@ -186,7 +231,11 @@ export default function UserDashboardMessages() {
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
               style={{ backgroundColor: activeThread.color }}
             >
-              {activeThread.name.slice(0, 2).toUpperCase()}
+              {activeThread.isAi ? (
+                <Bot className="h-4 w-4 text-white" aria-hidden />
+              ) : (
+                activeThread.name.slice(0, 2).toUpperCase()
+              )}
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-900">{activeThread.name}</p>
@@ -197,31 +246,74 @@ export default function UserDashboardMessages() {
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
-            {activeThread.messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${msg.from === "me" ? "justify-end" : "justify-start"}`}
-              >
+          {activeThread.isAi ? (
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+              {aiMessages.map((m, i) => (
                 <div
-                  className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
-                    msg.from === "me"
-                      ? "rounded-br-sm bg-[#00B8DB] text-white"
-                      : "rounded-bl-sm bg-slate-100 text-slate-800"
-                  }`}
+                  key={`${i}-${m.role}`}
+                  className={`flex gap-2 ${m.role === "user" ? "flex-row-reverse" : ""}`}
                 >
-                  <p>{msg.text}</p>
-                  <p
-                    className={`mt-1 text-[10px] ${
-                      msg.from === "me" ? "text-white/70" : "text-slate-400"
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      m.role === "user" ? "bg-slate-200 text-slate-600" : "bg-[#00B8DB] text-white"
                     }`}
                   >
-                    {msg.time}
-                  </p>
+                    {m.role === "user" ? (
+                      <User className="h-3.5 w-3.5" />
+                    ) : (
+                      <Bot className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+                  <div
+                    className={`max-w-[min(100%,28rem)] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                      m.role === "user"
+                        ? "rounded-br-sm bg-[#00B8DB] text-white"
+                        : "rounded-bl-sm border border-cyan-100 bg-cyan-50/70 text-slate-800"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+              {aiSending && (
+                <div className="flex gap-2">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#00B8DB] text-white">
+                    <Bot className="h-3.5 w-3.5 animate-pulse" />
+                  </div>
+                  <div className="rounded-2xl rounded-bl-sm border border-cyan-100 bg-cyan-50/50 px-3.5 py-2 text-sm text-slate-500">
+                    Thinking…
+                  </div>
+                </div>
+              )}
+              <div ref={aiBottomRef} />
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+              {activeThread.messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex ${msg.from === "me" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[70%] rounded-2xl px-4 py-2.5 text-sm shadow-sm ${
+                      msg.from === "me"
+                        ? "rounded-br-sm bg-[#00B8DB] text-white"
+                        : "rounded-bl-sm bg-slate-100 text-slate-800"
+                    }`}
+                  >
+                    <p>{msg.text}</p>
+                    <p
+                      className={`mt-1 text-[10px] ${
+                        msg.from === "me" ? "text-white/70" : "text-slate-400"
+                      }`}
+                    >
+                      {msg.time}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="border-t border-slate-100 p-3">
             <div className="flex items-center gap-2">
@@ -231,13 +323,18 @@ export default function UserDashboardMessages() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message… (Enter to send)"
-                className="h-10 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                placeholder={
+                  activeThread.isAi
+                    ? "Ask Carrie… (Enter to send)"
+                    : "Type a message… (Enter to send)"
+                }
+                disabled={activeThread.isAi && aiSending}
+                className="h-10 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 disabled:opacity-60"
               />
               <button
                 type="button"
-                onClick={handleSend}
-                disabled={!message.trim()}
+                onClick={activeThread.isAi ? handleAiSend : handleSend}
+                disabled={!message.trim() || (activeThread.isAi && aiSending)}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[#00B8DB] text-white shadow-sm transition hover:opacity-90 disabled:opacity-40"
                 aria-label="Send message"
               >
