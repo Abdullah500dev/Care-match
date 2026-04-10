@@ -11,7 +11,9 @@ import { fileURLToPath } from "url";
 import database from "./config/db.js";
 import swaggerSpecs from "./config/swagger.js";
 import authRouter from "./routes/authRouter.js";
+import chatRouter from "./routes/chatRouter.js";
 import facilityRouter from "./routes/facilityRouter.js";
+import matchRouter from "./routes/matchRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 
@@ -56,6 +58,8 @@ app.use(
 );
 
 app.use("/api/auth", authRouter);
+app.use("/api/chat", chatRouter);
+app.use("/api/match", matchRouter);
 app.use("/api/facilities", facilityRouter);
 
 // Serve client build if it exists, otherwise show API info

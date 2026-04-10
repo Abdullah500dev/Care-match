@@ -9,6 +9,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { sendChatMessages } from "@/services/chatService";
 
 export default function SearchBar() {
   const navigate = useNavigate();
@@ -16,6 +17,7 @@ export default function SearchBar() {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatComposer, setChatComposer] = useState("");
+  const [chatSending, setChatSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const inputRef = useRef(null);
@@ -27,7 +29,12 @@ export default function SearchBar() {
   const recordingToastIdRef = useRef(null);
   const transcribingToastIdRef = useRef(null);
   const isChatOpenRef = useRef(false);
+  const chatMessagesRef = useRef(chatMessages);
   const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
+
+  useEffect(() => {
+    chatMessagesRef.current = chatMessages;
+  }, [chatMessages]);
 
   useEffect(() => {
     isChatOpenRef.current = isChatOpen;
@@ -76,21 +83,62 @@ export default function SearchBar() {
     focusChatComposer();
   };
 
+  const buildApiMessages = (priorMessages, userText) => [
+    ...priorMessages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role, content: m.text })),
+    { role: "user", content: userText },
+  ];
+
+  const sendCarrieReply = async (text, { restoreToQuery, restoreToComposer } = {}) => {
+    const trimmed = text.trim();
+    if (!trimmed || chatSending) return;
+    const userEntry = { id: `${Date.now()}-u`, role: "user", text: trimmed };
+    const apiPayload = buildApiMessages(chatMessagesRef.current, trimmed);
+
+    setChatSending(true);
+    setChatMessages((prev) => [...prev, userEntry]);
+    setIsChatOpen(true);
+
+    try {
+      const { data } = await sendChatMessages(apiPayload);
+      const reply = data?.message;
+      if (reply?.role === "assistant" && reply?.content) {
+        setChatMessages((prev) => [
+          ...prev,
+          { id: `${Date.now()}-a`, role: "assistant", text: reply.content },
+        ]);
+      } else {
+        toast.error("No reply from Carrie");
+        setChatMessages((prev) => prev.filter((m) => m.id !== userEntry.id));
+        if (restoreToQuery) setQuery(trimmed);
+        if (restoreToComposer) setChatComposer(trimmed);
+      }
+    } catch (err) {
+      const desc =
+        err?.response?.data?.message || err?.message || "Chat request failed.";
+      toast.error("Carrie couldn’t respond", { description: desc });
+      setChatMessages((prev) => prev.filter((m) => m.id !== userEntry.id));
+      if (restoreToQuery) setQuery(trimmed);
+      if (restoreToComposer) setChatComposer(trimmed);
+    } finally {
+      setChatSending(false);
+      focusChatComposer();
+    }
+  };
+
   const handleChatSubmit = () => {
     const text = query.trim();
-    if (!text) return;
-    setChatMessages((prev) => [...prev, { id: `${Date.now()}-u`, role: "user", text }]);
+    if (!text || chatSending) return;
     setQuery("");
-    setIsChatOpen(true);
-    focusChatComposer();
+    sendCarrieReply(text, { restoreToQuery: true });
   };
 
   const handlePanelSend = () => {
     const text = chatComposer.trim();
-    if (!text) return;
-    setChatMessages((prev) => [...prev, { id: `${Date.now()}-u`, role: "user", text }]);
+    if (!text || chatSending) return;
     setChatComposer("");
-    focusChatComposer();
+    sendCarrieReply(text, { restoreToComposer: true });
   };
 
   const handleCarrieClick = () => {
@@ -307,11 +355,16 @@ export default function SearchBar() {
             {showSendButton ? (
               <button
                 type="button"
-                className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
+                className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 disabled:opacity-40 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
                 aria-label="Send"
                 onClick={handleChatSubmit}
+                disabled={chatSending}
               >
-                <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                {chatSending ? (
+                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
+                ) : (
+                  <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
+                )}
               </button>
             ) : (
               <button
@@ -355,30 +408,39 @@ export default function SearchBar() {
               Carrie – AI Advisor
             </SheetTitle>
             <SheetDescription className="text-left text-sm text-slate-600">
-              Chat with Carrie about senior living options. Use the microphone to speak, or type your message.
+              Ask about senior living options. Use the microphone to speak, or type your message. Sign in for AI replies.
             </SheetDescription>
           </SheetHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            {chatMessages.length === 0 ? (
+            {chatMessages.length === 0 && !chatSending ? (
               <p className="text-sm text-slate-500">Send a message from the search bar or type below to get started.</p>
             ) : (
-              chatMessages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`mb-3 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+              <>
+                {chatMessages.map((m) => (
                   <div
-                    className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
-                      m.role === "user"
-                        ? "bg-[#00CFF4] text-white"
-                        : "bg-slate-100 text-slate-800"
-                    }`}
+                    key={m.id}
+                    className={`mb-3 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    {m.text}
+                    <div
+                      className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                        m.role === "user"
+                          ? "bg-[#00CFF4] text-white"
+                          : "bg-slate-100 text-slate-800"
+                      }`}
+                    >
+                      {m.text}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+                {chatSending && (
+                  <div className="mb-3 flex justify-start">
+                    <div className="max-w-[90%] rounded-2xl bg-slate-100 px-3 py-2 text-sm text-slate-500">
+                      Carrie is thinking…
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <div ref={messagesEndRef} />
           </div>
@@ -398,7 +460,8 @@ export default function SearchBar() {
                   }}
                   placeholder="Type your message..."
                   rows={1}
-                  className="h-11 min-h-[44px] w-full max-w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-[#132329] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/50"
+                  disabled={chatSending}
+                  className="h-11 min-h-[44px] w-full max-w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-[#132329] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/50 disabled:opacity-60"
                 />
               </div>
               <div className="mb-2 flex shrink-0 items-end gap-2">
@@ -429,12 +492,16 @@ export default function SearchBar() {
                 </button>
                 <button
                   type="button"
-                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#00CFF4] text-white hover:opacity-90"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#00CFF4] text-white hover:opacity-90 disabled:opacity-40"
                   aria-label="Send message"
                   onClick={handlePanelSend}
-                  disabled={!chatComposer.trim()}
+                  disabled={!chatComposer.trim() || chatSending}
                 >
-                  <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                  {chatSending ? (
+                    <Loader2 className="h-5 w-5 animate-spin" strokeWidth={2.5} />
+                  ) : (
+                    <ArrowRight className="h-5 w-5" strokeWidth={2.5} />
+                  )}
                 </button>
               </div>
             </div>
