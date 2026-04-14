@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { authServices } from "../../../services/authServices";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../../lib/authFeedback";
 
 export default function Register() {
@@ -294,6 +294,9 @@ export default function Register() {
                     boxShadow: "0px 1px 2px -1px #0000001A, 0px 1px 3px 0px #0000001A",
                   }}
                 >
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-[#00b8db]/10 text-[#00b8db]">
+                    <ShieldCheck className="h-6 w-6" aria-hidden />
+                  </div>
                   <h2 className="text-center text-lg font-bold text-[#0f172a]">Activate your account</h2>
                   <p className="mt-1 text-center text-sm text-[#64748b]">
                     Enter the 6-digit code sent to <span className="font-semibold">{pendingEmail}</span>.

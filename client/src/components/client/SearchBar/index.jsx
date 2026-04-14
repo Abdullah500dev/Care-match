@@ -109,9 +109,12 @@ export default function SearchBar() {
           { id: `${Date.now()}-a`, role: "assistant", text: reply.content },
         ]);
         const matches = data?.matchedFacilities;
+        const matchedPreferences = data?.matchedPreferences;
         if (Array.isArray(matches) && matches.length > 0) {
           setIsChatOpen(false);
-          navigate("/care-explorer", { state: { carrieMatches: matches, fromCarrie: true } });
+          navigate("/care-explorer", {
+            state: { carrieMatches: matches, carrieFilters: matchedPreferences, fromCarrie: true },
+          });
         }
       } else {
         toast.error("No reply from Carrie");

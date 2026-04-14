@@ -1,12 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { authServices } from "../../services/authServices";
 import SEO from "../../components/common/SEO";
 
 function ResetPassword() {
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
   const navigate = useNavigate();
@@ -59,14 +62,24 @@ function ResetPassword() {
 
         <div className="mb-4">
           <label className="block text-sm font-medium mb-1">New Password</label>
-          <input
-            type="password"
-            placeholder="New password"
-            {...register("newPassword", { required: "New password required" })}
-            className={`w-full px-4 py-2 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${
-              errors.newPassword ? "ring-2 ring-red-400" : ""
-            }`}
-          />
+          <div className="relative">
+            <input
+              type={showNewPassword ? "text" : "password"}
+              placeholder="New password"
+              {...register("newPassword", { required: "New password required" })}
+              className={`w-full px-4 py-2 pr-11 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${
+                errors.newPassword ? "ring-2 ring-red-400" : ""
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-[#64748b] hover:text-[#0f172a]"
+              aria-label={showNewPassword ? "Hide password" : "Show password"}
+            >
+              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           {errors.newPassword && (
             <p className="text-red-500 text-sm mt-1">{errors.newPassword.message}</p>
           )}
@@ -74,14 +87,24 @@ function ResetPassword() {
 
         <div className="mb-6">
           <label className="block text-sm font-medium mb-1">Confirm Password</label>
-          <input
-            type="password"
-            placeholder="Confirm password"
-            {...register("confirmPassword", { required: "Confirm password required" })}
-            className={`w-full px-4 py-2 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${
-              errors.confirmPassword ? "ring-2 ring-red-400" : ""
-            }`}
-          />
+          <div className="relative">
+            <input
+              type={showConfirmPassword ? "text" : "password"}
+              placeholder="Confirm password"
+              {...register("confirmPassword", { required: "Confirm password required" })}
+              className={`w-full px-4 py-2 pr-11 rounded-md bg-white/90 text-black focus:outline-none focus:ring-2 focus:ring-white ${
+                errors.confirmPassword ? "ring-2 ring-red-400" : ""
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-[#64748b] hover:text-[#0f172a]"
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+            >
+              {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
           {errors.confirmPassword && (
             <p className="text-red-500 text-sm mt-1">{errors.confirmPassword.message}</p>
           )}

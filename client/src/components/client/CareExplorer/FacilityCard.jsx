@@ -154,7 +154,6 @@ const FacilityCard = ({
             </p>
             <p className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}>
               {priceRange}
-              <span className={`font-normal text-[#64748b] ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}> /mo</span>
             </p>
           </div>
         </div>

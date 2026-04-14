@@ -20,8 +20,7 @@ export function normalizeIntakePreferences(raw) {
     : [];
   let budgetMaxMonthly = null;
   if (raw.budgetMaxMonthly != null && raw.budgetMaxMonthly !== "") {
-    const n = Number(raw.budgetMaxMonthly);
-    if (!Number.isNaN(n) && n > 0) budgetMaxMonthly = n;
+    budgetMaxMonthly = parseBudgetLikeValue(raw.budgetMaxMonthly);
   }
   const searchLocation =
     typeof raw.searchLocation === "string" ? raw.searchLocation.trim() : "";
@@ -45,6 +44,32 @@ export function normalizeIntakePreferences(raw) {
     personalityNotes,
     snfReadiness,
   };
+}
+
+/**
+ * Parse budget-like values from number/string inputs.
+ * Supports: 9000, "9000", "$9,000", "9k", "under 9,500 /mo"
+ * @param {unknown} value
+ * @returns {number|null}
+ */
+export function parseBudgetLikeValue(value) {
+  if (value == null) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.round(value);
+  }
+  const raw = String(value).toLowerCase().trim();
+  if (!raw) return null;
+  const kMatch = raw.match(/(\d+(?:\.\d+)?)\s*k\b/);
+  if (kMatch) {
+    const n = Number.parseFloat(kMatch[1]);
+    if (!Number.isNaN(n) && n > 0) return Math.round(n * 1000);
+  }
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return null;
+  const n = Number.parseInt(digits, 10);
+  if (Number.isNaN(n) || n <= 0) return null;
+  return n;
 }
 
 /** @param {string} text */
@@ -211,7 +236,7 @@ function budgetScore(budgetMax, facilityRange) {
     return { score: 1, label: "within budget" };
   }
   if (compareLow <= budgetMax && compareHigh > budgetMax) {
-    return { score: 0.65, label: "range may extend over budget" };
+    return { score: 0.25, label: "range exceeds stated budget" };
   }
   if (compareLow > budgetMax) {
     const over = compareLow - budgetMax;
@@ -479,10 +504,7 @@ export function facilityMeetsIntakeRequirements(facility, prefs) {
   const amenityMustHaves = Array.isArray(prefs.amenityMustHaves)
     ? prefs.amenityMustHaves
     : [];
-  const budgetMax =
-    prefs.budgetMaxMonthly != null && !Number.isNaN(Number(prefs.budgetMaxMonthly))
-      ? Number(prefs.budgetMaxMonthly)
-      : null;
+  const budgetMax = parseBudgetLikeValue(prefs.budgetMaxMonthly);
   const searchLocation = prefs.searchLocation || "";
   const snfReadiness = Boolean(prefs.snfReadiness);
 
@@ -502,8 +524,9 @@ export function facilityMeetsIntakeRequirements(facility, prefs) {
 
   if (budgetMax != null && budgetMax > 0) {
     const priceR = parseMonthlyPriceRange(facility.pricing);
-    const budget = budgetScore(budgetMax, priceR);
-    if (budget.label === "likely above stated budget") return false;
+    const compareHigh = priceR.max ?? priceR.min;
+    if (compareHigh == null) return false;
+    if (compareHigh > budgetMax) return false;
   }
 
   const q = norm(searchLocation);
@@ -529,6 +552,93 @@ export function facilityMeetsIntakeRequirements(facility, prefs) {
 }
 
 /**
+ * Build criteria array from user intake.
+ * Primary 3 requested by product flow: care, amenities, budget.
+ * @param {IntakePrefs} prefs
+ */
+function buildCriteriaArray(prefs) {
+  const budgetMax = parseBudgetLikeValue(prefs?.budgetMaxMonthly);
+  const careLevels = Array.isArray(prefs?.careLevels)
+    ? prefs.careLevels.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+  const amenityMustHaves = Array.isArray(prefs?.amenityMustHaves)
+    ? prefs.amenityMustHaves.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+  const searchLocation =
+    typeof prefs?.searchLocation === "string" ? prefs.searchLocation.trim() : "";
+  const personalityNotes =
+    typeof prefs?.personalityNotes === "string" ? prefs.personalityNotes.trim() : "";
+
+  const criteria = [];
+  if (careLevels.length) criteria.push({ key: "care", value: careLevels, primary: true });
+  if (amenityMustHaves.length) {
+    criteria.push({ key: "amenities", value: amenityMustHaves, primary: true });
+  }
+  if (budgetMax != null && budgetMax > 0) {
+    criteria.push({ key: "budget", value: budgetMax, primary: true });
+  }
+  if (searchLocation.length >= 3) criteria.push({ key: "location", value: searchLocation, primary: false });
+  if (personalityNotes.length >= 2) criteria.push({ key: "personality", value: personalityNotes, primary: false });
+  return criteria;
+}
+
+/**
+ * Evaluate facility against criteria array.
+ * @param {object} facility
+ * @param {IntakePrefs} prefs
+ * @param {{key:string,value:any,primary:boolean}[]} criteria
+ */
+function evaluateCriteriaMatch(facility, prefs, criteria) {
+  const fcLevels = Array.isArray(facility.care_levels) ? facility.care_levels : [];
+  const fcAmenities = Array.isArray(facility.amenities) ? facility.amenities : [];
+  const fcServices = Array.isArray(facility.services) ? facility.services : [];
+  const checks = [];
+
+  for (const c of criteria) {
+    if (c.key === "care") {
+      const care = careLevelScore(c.value, fcLevels);
+      checks.push({ key: c.key, primary: c.primary, matched: care.matched.length > 0 });
+    } else if (c.key === "amenities") {
+      const amen = amenityScore(c.value, fcAmenities, fcServices);
+      // criterion-level match: at least one amenity hit
+      checks.push({ key: c.key, primary: c.primary, matched: amen.hits.length > 0 });
+    } else if (c.key === "budget") {
+      const priceR = parseMonthlyPriceRange(facility.pricing);
+      const compareHigh = priceR.max ?? priceR.min;
+      checks.push({ key: c.key, primary: c.primary, matched: compareHigh != null && compareHigh <= c.value });
+    } else if (c.key === "location") {
+      const loc = locationScore(c.value, facility.address || "");
+      checks.push({ key: c.key, primary: c.primary, matched: loc.score >= 0.55 });
+    } else if (c.key === "personality") {
+      const pers = personalityScore(c.value, fcAmenities, fcServices);
+      checks.push({ key: c.key, primary: c.primary, matched: pers.hits.length > 0 });
+    }
+  }
+
+  const primaryChecks = checks.filter((c) => c.primary);
+  const primaryMatched = primaryChecks.filter((c) => c.matched).length;
+  const totalMatched = checks.filter((c) => c.matched).length;
+  const primaryCount = primaryChecks.length;
+  const totalCount = checks.length;
+  const fullPrimaryArray = primaryCount >= 3;
+  const isFullMatch = fullPrimaryArray
+    ? primaryMatched === primaryCount
+    : totalCount > 0 && totalMatched === totalCount;
+  const isPartialMatch = !isFullMatch && totalMatched > 0;
+
+  return {
+    checks,
+    totalMatched,
+    totalCount,
+    primaryMatched,
+    primaryCount,
+    fullPrimaryArray,
+    isFullMatch,
+    isPartialMatch,
+  };
+}
+
+/**
  * @param {object[]} facilities lean
  * @param {IntakePrefs} prefs
  * @param {{ limit?: number }} [opts]
@@ -536,10 +646,49 @@ export function facilityMeetsIntakeRequirements(facility, prefs) {
 export function rankFacilities(facilities, prefs, opts = {}) {
   const limit = opts.limit ?? 8;
   if (!prefs || typeof prefs !== "object") return [];
-  const matched = facilities.filter((f) => facilityMeetsIntakeRequirements(f, prefs));
-  const scored = matched.map((f) => scoreFacility(f, prefs));
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+  const criteria = buildCriteriaArray(prefs);
+  // Do not show everything when we have no usable criteria.
+  if (criteria.length === 0) return [];
+
+  const evaluated = facilities.map((f) => {
+    const base = scoreFacility(f, prefs);
+    const evals = evaluateCriteriaMatch(f, prefs, criteria);
+    return {
+      ...base,
+      criteriaMatched: evals.totalMatched,
+      criteriaTotal: evals.totalCount,
+      primaryMatched: evals.primaryMatched,
+      primaryTotal: evals.primaryCount,
+      _isFull: evals.isFullMatch,
+      _isPartial: evals.isPartialMatch,
+      _hasPrimaryArray: evals.fullPrimaryArray,
+    };
+  });
+
+  const full = evaluated.filter((x) => x._isFull);
+  const partial = evaluated.filter((x) => x._isPartial);
+
+  const sorter = (a, b) =>
+    b.primaryMatched - a.primaryMatched ||
+    b.criteriaMatched - a.criteriaMatched ||
+    b.score - a.score ||
+    String(a.name).localeCompare(String(b.name));
+
+  full.sort(sorter);
+  partial.sort(sorter);
+
+  return [...full, ...partial].slice(0, limit).map((x) => ({
+    facilityId: x.facilityId,
+    name: x.name,
+    address: x.address,
+    pricing: x.pricing,
+    care_levels: x.care_levels,
+    images: x.images,
+    score: x.score,
+    reasons: x.reasons,
+    criteriaMatched: x.criteriaMatched,
+    criteriaTotal: x.criteriaTotal,
+  }));
 }
 
 /**
@@ -549,10 +698,16 @@ export function rankFacilities(facilities, prefs, opts = {}) {
  */
 export function rankAllFacilities(facilities, prefs) {
   if (!prefs || typeof prefs !== "object") return [];
-  const matched = facilities.filter((f) => facilityMeetsIntakeRequirements(f, prefs));
-  const scored = matched.map((f) => scoreFacility(f, prefs));
-  scored.sort((a, b) => b.score - a.score || String(a.name).localeCompare(String(b.name)));
-  return scored;
+  const criteria = buildCriteriaArray(prefs);
+  if (criteria.length === 0) return [];
+
+  const ranked = rankFacilities(facilities, prefs, { limit: facilities.length });
+  return ranked.sort(
+    (a, b) =>
+      (b.criteriaMatched || 0) - (a.criteriaMatched || 0) ||
+      b.score - a.score ||
+      String(a.name).localeCompare(String(b.name))
+  );
 }
 
 /**
@@ -576,10 +731,13 @@ export function formatRecommendationsForChat(facilities, prefs) {
     "",
     "---",
     "**Your matches (rule-based MVP)**",
-    "Only communities that meet your stated care level, must-have amenities, budget cap, and location (when you gave one) are listed. Scores rank those passes. Always confirm on a tour.",
+    "Results are ordered by criteria-array matching: full matches first, then partial matches (any matched criterion), then score. Always confirm on a tour.",
   ];
   ranked.forEach((r, i) => {
     lines.push(`\n**${i + 1}. ${r.name}** — match score **${r.score}/100**`);
+    if (typeof r.criteriaMatched === "number" && typeof r.criteriaTotal === "number") {
+      lines.push(`  ✓ Criteria match: ${r.criteriaMatched}/${r.criteriaTotal}`);
+    }
     lines.push(r.reasons.map((x) => `  ${x}`).join("\n"));
     if (r.address) lines.push(`  _${r.address}_`);
     if (r.pricing) lines.push(`  _Pricing (listing): ${r.pricing}_`);
