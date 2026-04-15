@@ -21,13 +21,14 @@ export default function UserDashboardHome() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((item) => (
           <Card key={item.label} className="border-slate-200">
-            <CardHeader className="pb-2">
-              <CardDescription>{item.label}</CardDescription>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-3">
+                <CardDescription>{item.label}</CardDescription>
+                <item.icon className="h-5 w-5 shrink-0 text-slate-500" />
+              </div>
               <CardTitle className="text-2xl">{item.value}</CardTitle>
             </CardHeader>
-            <CardContent className="text-slate-500">
-              <item.icon className="h-5 w-5" />
-            </CardContent>
+            <CardContent className="pt-0 pb-1" />
           </Card>
         ))}
       </div>

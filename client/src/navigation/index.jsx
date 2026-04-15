@@ -57,7 +57,13 @@ const UserDashboardMessages = lazyWithRetry(() =>
 const UserDashboardSettings = lazyWithRetry(() =>
   import("../pages/userDashboard/UserDashboardSettings")
 );
+const UserDashboardFacilities = lazyWithRetry(() =>
+  import("../pages/userDashboard/UserDashboardFacilities")
+);
 const FacilityDashboardHome = lazyWithRetry(() => import("../pages/facilityDashboard/FacilityDashboardHome"));
+const FacilityDashboardFacilities = lazyWithRetry(() =>
+  import("../pages/facilityDashboard/FacilityDashboardFacilities")
+);
 
 import Header from "../components/client/Header";
 import TopBar from "../components/client/TopBar";
@@ -314,6 +320,7 @@ export default function Navigation() {
                 }
               >
                 <Route index element={<UserDashboardHome />} />
+                <Route path="communities" element={<UserDashboardFacilities />} />
                 <Route path="messages" element={<UserDashboardMessages />} />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
@@ -330,6 +337,9 @@ export default function Navigation() {
                 }
               >
                 <Route index element={<FacilityDashboardHome />} />
+                <Route path="communities" element={<FacilityDashboardFacilities />} />
+                <Route path="messages" element={<UserDashboardMessages />} />
+                <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
 
               <Route path="/*" element={<NotFound />} />

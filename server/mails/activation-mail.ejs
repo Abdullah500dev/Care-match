@@ -177,10 +177,17 @@
               <span class="code-value" id="verification-code"><%= verificationCode %></span>
             </div>
             <div class="code-actions">
-              <a href="<%= openAppUrl %>" class="copy-btn" target="_blank" rel="noopener noreferrer">Open CareMatch</a>
+              <a
+                href="<%= activationUrl %>"
+                class="copy-btn"
+                role="button"
+                aria-label="Copy verification code"
+                target="_blank"
+                rel="noopener noreferrer"
+              >Copy code</a>
             </div>
             <p class="expiry" style="margin-top: -8px;">
-              Tip: some email apps block copy buttons. You can long-press or select the code above and copy it manually.
+              Tap “Copy code” to open CareMatch with your verification code pre-filled.
             </p>
             <p class="expiry">
               This code expires in <%= expiresInMinutes %> minutes. Do not share it with anyone.

@@ -582,7 +582,7 @@ export default function Communities() {
                       </span>
                     )}
                   </div>
-                  <div className="pointer-events-none absolute bottom-3 left-3 right-3 text-white">
+                  <div className="pointer-events-none absolute bottom-3 left-3 right-3 pb-3 text-white">
                     <h3 className="text-lg font-bold drop-shadow-md sm:text-xl">
                       {facility.name}
                     </h3>

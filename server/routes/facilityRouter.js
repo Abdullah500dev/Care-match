@@ -11,6 +11,8 @@ import {
   getFacility,
   updateFacility,
   deleteFacility,
+  getMyFacility,
+  updateMyFacility,
 } from "../controllers/facilityController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
 
@@ -105,6 +107,9 @@ router.post(
   createFacilityValidation,
   createFacility
 );
+
+router.get("/me", isAutheticated, getMyFacility);
+router.put("/me", isAutheticated, updateMyFacility);
 
 /**
  * @swagger

@@ -198,6 +198,110 @@ const assertAdmin = async (userId) => {
   return admin;
 };
 
+const assertFacilityUser = async (userId) => {
+  const user = await User.findById(userId);
+  if (!user || user.role !== "facility") {
+    return null;
+  }
+  return user;
+};
+
+export const getMyFacility = catchAsyncError(async (req, res, next) => {
+  const facilityUser = await assertFacilityUser(req.user?.id);
+  if (!facilityUser) {
+    return next(new ErrorHandler("Only facility users can access this resource", 403));
+  }
+
+  const facility = await Facility.findOne({ user_id: facilityUser._id }).lean();
+  if (!facility) {
+    return next(new ErrorHandler("Facility profile not found for this account", 404));
+  }
+
+  res.status(200).json({
+    success: true,
+    facility,
+  });
+});
+
+export const updateMyFacility = catchAsyncError(async (req, res, next) => {
+  const facilityUser = await assertFacilityUser(req.user?.id);
+  if (!facilityUser) {
+    return next(new ErrorHandler("Only facility users can update this resource", 403));
+  }
+
+  const facility = await Facility.findOne({ user_id: facilityUser._id });
+  if (!facility) {
+    return next(new ErrorHandler("Facility profile not found for this account", 404));
+  }
+
+  const {
+    name,
+    phone,
+    address,
+    pricing,
+    services,
+    amenities,
+    care_levels,
+    units,
+    occupancy,
+    active_leads,
+  } = req.body;
+
+  if (name != null) {
+    const trimmed = String(name).trim();
+    if (!trimmed) return next(new ErrorHandler("Facility name cannot be empty", 400));
+    facility.name = trimmed;
+    facilityUser.name = trimmed;
+  }
+
+  if (phone != null) {
+    const trimmed = String(phone).trim();
+    if (!trimmed) return next(new ErrorHandler("Phone cannot be empty", 400));
+    facility.phone = trimmed;
+    facilityUser.phone = trimmed;
+  }
+
+  if (address != null) {
+    const trimmed = String(address).trim();
+    if (!trimmed) return next(new ErrorHandler("Address cannot be empty", 400));
+    facility.address = trimmed;
+  }
+
+  if (pricing != null) {
+    facility.pricing = String(pricing).trim();
+  }
+
+  if (services != null) {
+    facility.services = toArray(services);
+  }
+
+  if (amenities != null) {
+    facility.amenities = toArray(amenities);
+  }
+
+  if (care_levels != null) {
+    facility.care_levels = toArray(care_levels);
+  }
+
+  if (units != null && units !== "") {
+    facility.units = Math.max(0, Number(units) || 0);
+  }
+  if (occupancy != null && occupancy !== "") {
+    facility.occupancy = Math.max(0, Number(occupancy) || 0);
+  }
+  if (active_leads != null && active_leads !== "") {
+    facility.active_leads = Math.max(0, Number(active_leads) || 0);
+  }
+
+  await Promise.all([facility.save(), facilityUser.save()]);
+
+  res.status(200).json({
+    success: true,
+    message: "Facility profile updated successfully.",
+    facility,
+  });
+});
+
 export const getFacility = catchAsyncError(async (req, res, next) => {
   const admin = await assertAdmin(req.user?.id);
   if (!admin) {

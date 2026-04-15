@@ -85,13 +85,16 @@ export default function AdminMessages() {
     { role: "assistant", content: CARRIE_WELCOME },
   ]);
   const [aiSending, setAiSending] = useState(false);
-  const aiBottomRef = useRef(null);
+  const aiScrollContainerRef = useRef(null);
 
   const activeThread = threads.find((t) => t.id === activeId) ?? threads[0];
 
   useEffect(() => {
     if (activeThread.isAi) {
-      aiBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      const container = aiScrollContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
     }
   }, [activeThread.isAi, aiMessages, aiSending]);
 
@@ -180,11 +183,11 @@ export default function AdminMessages() {
 
       {/* Chat panel */}
       <div
-        className="grid min-h-[72vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+        className="grid h-[calc(100vh-11rem)] min-h-[36rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
         style={{ gridTemplateColumns: "300px 1fr" }}
       >
         {/* ── Thread list ── */}
-        <aside className="flex flex-col border-r border-slate-100">
+        <aside className="flex min-h-0 flex-col border-r border-slate-100">
           {/* Search */}
           <div className="border-b border-slate-100 p-3">
             <div className="relative">
@@ -200,7 +203,7 @@ export default function AdminMessages() {
           </div>
 
           {/* Thread rows */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
             {filteredThreads.length === 0 ? (
               <p className="px-4 py-6 text-center text-xs text-slate-400">No conversations found.</p>
             ) : (
@@ -259,7 +262,7 @@ export default function AdminMessages() {
         </aside>
 
         {/* ── Message pane ── */}
-        <section className="flex min-w-0 flex-col">
+        <section className="flex min-h-0 min-w-0 flex-col">
           {/* Pane header */}
           <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
             <div
@@ -283,7 +286,10 @@ export default function AdminMessages() {
 
           {/* Message bubbles */}
           {activeThread.isAi ? (
-            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+            <div
+              ref={aiScrollContainerRef}
+              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-5 py-4"
+            >
               {aiMessages.map((m, i) => (
                 <div
                   key={`${i}-${m.role}`}
@@ -317,10 +323,9 @@ export default function AdminMessages() {
                   </div>
                 </div>
               )}
-              <div ref={aiBottomRef} />
             </div>
           ) : (
-            <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-5 py-4">
               {activeThread.messages.map((msg, i) => (
                 <div
                   key={i}

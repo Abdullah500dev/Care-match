@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +10,7 @@ import { toastAuthError, toastAuthSuccess } from "../../../lib/authFeedback";
 
 export default function Register() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -29,6 +30,20 @@ export default function Register() {
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    const emailFromQuery = (searchParams.get("email") || "").trim();
+    const codeFromQuery = (searchParams.get("code") || "").trim();
+    if (!emailFromQuery && !codeFromQuery) return;
+
+    if (emailFromQuery) {
+      setPendingEmail(emailFromQuery);
+      setForm((prev) => ({ ...prev, email: emailFromQuery }));
+    }
+    if (codeFromQuery) {
+      setActivationCode(codeFromQuery);
+    }
+  }, [searchParams]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
