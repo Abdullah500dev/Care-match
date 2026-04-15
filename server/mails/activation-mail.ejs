@@ -112,13 +112,14 @@
         display: inline-block;
         background-color: #00B8D9;
         color: #FFFFFF;
-        border: none;
+        border: 0;
         padding: 12px 24px;
         border-radius: 10px;
         font-size: 14px;
         font-weight: 600;
         font-family: inherit;
         cursor: pointer;
+        text-decoration: none;
       }
       .copy-btn:hover {
         background-color: #006C9C;
@@ -176,8 +177,11 @@
               <span class="code-value" id="verification-code"><%= verificationCode %></span>
             </div>
             <div class="code-actions">
-              <button type="button" class="copy-btn" id="copy-code-btn" onclick="var el=document.getElementById('verification-code'); var code=el?el.textContent.trim():''; if(code && navigator.clipboard){navigator.clipboard.writeText(code).then(function(){var b=document.getElementById('copy-code-btn');if(b){b.textContent='Copied';setTimeout(function(){b.textContent='Copy code';},2000);}});} return false;">Copy code</button>
+              <a href="<%= openAppUrl %>" class="copy-btn" target="_blank" rel="noopener noreferrer">Open CareMatch</a>
             </div>
+            <p class="expiry" style="margin-top: -8px;">
+              Tip: some email apps block copy buttons. You can long-press or select the code above and copy it manually.
+            </p>
             <p class="expiry">
               This code expires in <%= expiresInMinutes %> minutes. Do not share it with anyone.
             </p>

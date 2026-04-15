@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { MessageCircle, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BudgetRangeSlider } from "@/components/ui/slider";
@@ -10,11 +10,33 @@ const availability = ["Immediate", "Within 30 Days", "Future Planning"];
 
 const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
 
-const FiltersSidebar = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [maxMiles, setMaxMiles] = useState("");
-  const [budgetMin, setBudgetMin] = useState(1000);
-  const [budgetMax, setBudgetMax] = useState(4500);
+const toggleInArray = (arr, value) =>
+  arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
+
+const FiltersSidebar = ({
+  filters,
+  onFiltersChange,
+  onReset,
+  careTypeOptions = careTypes,
+  amenityOptions = amenities,
+}) => {
+  const searchQuery = filters?.searchQuery ?? "";
+  const maxMiles = filters?.maxMiles ?? "";
+  const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
+  const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 4500;
+  const selectedCareTypes = Array.isArray(filters?.selectedCareTypes)
+    ? filters.selectedCareTypes
+    : [];
+  const selectedAvailability = Array.isArray(filters?.selectedAvailability)
+    ? filters.selectedAvailability
+    : [];
+  const selectedAmenities = Array.isArray(filters?.selectedAmenities)
+    ? filters.selectedAmenities
+    : [];
+
+  const setFilters = (patch) => {
+    onFiltersChange?.({ ...filters, ...patch });
+  };
 
   return (
     <aside className="w-full flex flex-col gap-3 sm:gap-5 min-w-0 max-w-full">
@@ -24,13 +46,13 @@ const FiltersSidebar = () => {
           <Input
             placeholder="Define your search..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => setFilters({ searchQuery: e.target.value })}
             className="pr-9 h-10 rounded-lg border-[#E2E8F0]"
           />
           {searchQuery && (
             <button
               type="button"
-              onClick={() => setSearchQuery("")}
+              onClick={() => setFilters({ searchQuery: "" })}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#364153] hover:text-[#132329]"
             >
               <X className="w-4 h-4" />
@@ -44,7 +66,7 @@ const FiltersSidebar = () => {
           inputMode="numeric"
           placeholder="Max distance (miles)"
           value={maxMiles}
-          onChange={(e) => setMaxMiles(e.target.value)}
+          onChange={(e) => setFilters({ maxMiles: e.target.value })}
           className="h-10 rounded-lg border-[#E2E8F0] mb-4"
         />
         <p className="text-xs text-[#20252c] font-bold mb-2">Monthly Budget</p>
@@ -55,8 +77,7 @@ const FiltersSidebar = () => {
           max={15000}
           step={100}
           onRangeChange={(minVal, maxVal) => {
-            setBudgetMin(minVal);
-            setBudgetMax(maxVal);
+            setFilters({ budgetMin: minVal, budgetMax: maxVal });
           }}
           className="mb-3"
         />
@@ -73,12 +94,20 @@ const FiltersSidebar = () => {
 
         <h3 className="font-semibold text-sm text-[#132329] mb-3">Care Type</h3>
         <div className="space-y-2.5">
-          {careTypes.map((type) => (
+          {careTypeOptions.map((type) => (
             <label
               key={type}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
             >
-              <Checkbox defaultChecked={type === "Assisted Living"} className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]" />
+              <Checkbox
+                checked={selectedCareTypes.includes(type)}
+                onCheckedChange={() =>
+                  setFilters({
+                    selectedCareTypes: toggleInArray(selectedCareTypes, type),
+                  })
+                }
+                className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]"
+              />
               {type}
             </label>
           ))}
@@ -93,7 +122,15 @@ const FiltersSidebar = () => {
               key={item}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
             >
-              <Checkbox defaultChecked={item === "Within 30 Days"} className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]" />
+              <Checkbox
+                checked={selectedAvailability.includes(item)}
+                onCheckedChange={() =>
+                  setFilters({
+                    selectedAvailability: toggleInArray(selectedAvailability, item),
+                  })
+                }
+                className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]"
+              />
               {item}
             </label>
           ))}
@@ -103,24 +140,27 @@ const FiltersSidebar = () => {
 
         <h3 className="font-semibold text-sm text-[#364153] mb-3">Must-Have Amenities</h3>
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
-          {amenities.map((item) => (
+          {amenityOptions.map((item) => (
             <label
               key={item}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
             >
-              <Checkbox className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]" />
+              <Checkbox
+                checked={selectedAmenities.includes(item)}
+                onCheckedChange={() =>
+                  setFilters({
+                    selectedAmenities: toggleInArray(selectedAmenities, item),
+                  })
+                }
+                className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]"
+              />
               {item}
             </label>
           ))}
         </div>
         <button
           type="button"
-          onClick={() => {
-            setSearchQuery("");
-            setMaxMiles("");
-            setBudgetMin(1000);
-            setBudgetMax(4500);
-          }}
+          onClick={onReset}
           className="mt-5 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
         >
           Reset All Filters

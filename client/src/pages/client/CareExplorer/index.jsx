@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import SEO from "../../../components/common/SEO";
@@ -34,16 +34,60 @@ const FACILITIES = [
 ];
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
+const DEFAULT_PRICE_RANGE = "$4,000 - $6,500/mo";
+
+function formatPriceRange(rawPricing) {
+  const raw = String(rawPricing || "").trim();
+  const nums = [...raw.matchAll(/(\d[\d,]*)/g)]
+    .map((m) => Number.parseInt(m[1].replace(/,/g, ""), 10))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+
+  if (nums.length === 0) return DEFAULT_PRICE_RANGE;
+  if (nums.length === 1) return `$${nums[0].toLocaleString("en-US")}/mo`;
+  const low = Math.min(...nums);
+  const high = Math.max(...nums);
+  return `$${low.toLocaleString("en-US")} - $${high.toLocaleString("en-US")}/mo`;
+}
+
+function parsePriceRangeNumbers(rawPricing) {
+  const raw = String(rawPricing || "").trim();
+  const nums = [...raw.matchAll(/(\d[\d,]*)/g)]
+    .map((m) => Number.parseInt(m[1].replace(/,/g, ""), 10))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+  if (nums.length === 0) return { min: null, max: null };
+  if (nums.length === 1) return { min: nums[0], max: nums[0] };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
+function titleCase(s) {
+  return String(s || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 const CareExplorer = () => {
   const location = useLocation();
   const carrieMatches = location.state?.carrieMatches;
+  const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
 
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState({
+    searchQuery: "",
+    maxMiles: "",
+    budgetMin: 1000,
+    budgetMax: 15000,
+    selectedCareTypes: [],
+    selectedAvailability: ["Within 30 Days"],
+    selectedAmenities: [],
+  });
 
   const liveFacilities = useMemo(() => {
     if (!Array.isArray(carrieMatches) || carrieMatches.length === 0) return null;
@@ -57,7 +101,8 @@ const CareExplorer = () => {
       const features = Array.isArray(m.reasons) && m.reasons.length
         ? m.reasons.map((r) => String(r).replace(/^[✓○]\s*/, "").trim())
         : ["Review listing details and tour to validate fit"];
-      const priceRange = m.pricing && String(m.pricing).trim() ? String(m.pricing).trim() : "Contact for pricing";
+      const priceRange = formatPriceRange(m.pricing);
+      const numericPrice = parsePriceRangeNumbers(m.pricing);
       const distance =
         m.address && String(m.address).trim()
           ? String(m.address).trim().slice(0, 48) + (String(m.address).length > 48 ? "…" : "")
@@ -69,11 +114,63 @@ const CareExplorer = () => {
         category,
         name: m.name || "Community",
         priceRange,
+        priceMin: numericPrice.min,
+        priceMax: numericPrice.max,
         distance,
         features,
+        address: m.address || "",
+        careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
+        amenities: Array.isArray(m.amenities) ? m.amenities : [],
+        services: Array.isArray(m.services) ? m.services : [],
+        availability: "Within 30 Days",
       };
     });
   }, [carrieMatches]);
+
+  const careTypeOptions = useMemo(() => {
+    const base = liveFacilities
+      ? [...new Set(liveFacilities.flatMap((f) => f.careLevels.map((x) => titleCase(x))))]
+      : ["Assisted Living"];
+    return base.length ? base : ["Assisted Living"];
+  }, [liveFacilities]);
+
+  const amenityOptions = useMemo(() => {
+    const base = liveFacilities
+      ? [
+          ...new Set(
+            liveFacilities.flatMap((f) =>
+              [...(f.amenities || []), ...(f.services || [])].map((x) => titleCase(x))
+            )
+          ),
+        ]
+      : ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
+    return base.slice(0, 12).length
+      ? base.slice(0, 12)
+      : ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
+  }, [liveFacilities]);
+
+  useEffect(() => {
+    if (!fromCarrie || !carrieFilters) return;
+    const maxBudget =
+      Number.isFinite(Number(carrieFilters.budgetMaxMonthly)) && Number(carrieFilters.budgetMaxMonthly) > 0
+        ? Number(carrieFilters.budgetMaxMonthly)
+        : 15000;
+    const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
+    setFilters((prev) => ({
+      ...prev,
+      budgetMax: safeMax,
+      selectedCareTypes: Array.isArray(carrieFilters.careLevels)
+        ? carrieFilters.careLevels.map((x) => titleCase(x))
+        : prev.selectedCareTypes,
+      selectedAmenities: Array.isArray(carrieFilters.amenityMustHaves)
+        ? carrieFilters.amenityMustHaves.map((x) => titleCase(x))
+        : prev.selectedAmenities,
+      maxMiles:
+        carrieFilters.maxDistanceMiles != null && !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
+          ? String(carrieFilters.maxDistanceMiles)
+          : prev.maxMiles,
+    }));
+  }, [fromCarrie, carrieFilters]);
 
   const scopedFacilities =
     scope === "saved" && liveFacilities
@@ -84,14 +181,94 @@ const CareExplorer = () => {
           ? FACILITIES.filter((_, idx) => idx % 2 === 0)
           : FACILITIES;
 
+  const filteredFacilities = useMemo(() => {
+    const q = String(filters.searchQuery || "").trim().toLowerCase();
+    const maxMilesNum = Number.parseFloat(String(filters.maxMiles || "").trim());
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
+    const selectedCare = new Set((filters.selectedCareTypes || []).map((x) => String(x).toLowerCase()));
+    const selectedAmenities = (filters.selectedAmenities || []).map((x) => String(x).toLowerCase());
+    const selectedAvailability = new Set(
+      (filters.selectedAvailability || []).map((x) => String(x).toLowerCase())
+    );
+
+    return scopedFacilities.filter((f) => {
+      if (q) {
+        const text = `${f.name || ""} ${f.category || ""} ${f.address || ""} ${(f.features || []).join(" ")}`.toLowerCase();
+        if (!text.includes(q)) return false;
+      }
+
+      if (f.priceMin != null || f.priceMax != null) {
+        const low = f.priceMin ?? f.priceMax;
+        const high = f.priceMax ?? f.priceMin;
+        if (low != null && high != null) {
+          const overlaps = low <= budgetMax && high >= budgetMin;
+          if (!overlaps) return false;
+        }
+      }
+
+      if (selectedCare.size > 0) {
+        const levels = (f.careLevels || []).map((x) => String(x).toLowerCase());
+        const hasCare = [...selectedCare].some((c) => levels.some((l) => l.includes(c) || c.includes(l)));
+        if (!hasCare) return false;
+      }
+
+      if (selectedAmenities.length > 0) {
+        const pool = [...(f.amenities || []), ...(f.services || []), ...(f.features || [])]
+          .map((x) => String(x).toLowerCase());
+        const hasAmenity = selectedAmenities.some((a) => pool.some((p) => p.includes(a) || a.includes(p)));
+        if (!hasAmenity) return false;
+      }
+
+      if (selectedAvailability.size > 0) {
+        const a = String(f.availability || "").toLowerCase();
+        if (a && !selectedAvailability.has(a)) return false;
+      }
+
+      if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
+        const milesMatch = String(f.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i);
+        if (milesMatch) {
+          const facilityMiles = Number.parseFloat(milesMatch[1]);
+          if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filters, scopedFacilities]);
+
   const showFullCarrieList = Boolean(liveFacilities?.length);
-  const listingItems = showFullCarrieList
-    ? scopedFacilities
-    : layout === "single"
-      ? scopedFacilities.slice(0, 3)
-      : layout === "two"
-        ? scopedFacilities.slice(0, 4)
-        : scopedFacilities.slice(0, 12);
+  const pageSize = layout === "single" ? 3 : layout === "two" ? 4 : 12;
+  const totalPages = Math.max(1, Math.ceil(filteredFacilities.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const startIdx = (currentPage - 1) * pageSize;
+  const endIdx = startIdx + pageSize;
+  const listingItems = filteredFacilities.slice(startIdx, endIdx);
+
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    if (currentPage <= 4) return [1, 2, 3, 4, 5, "...", totalPages];
+    if (currentPage >= totalPages - 3) {
+      return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    }
+    return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [layout, scope, fromCarrie, carrieMatches?.length]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
 
   return (
     <>
@@ -165,7 +342,23 @@ const CareExplorer = () => {
               </button>
             </div>
             <div className={mobileFiltersCollapsed ? "hidden lg:block" : "block"}>
-              <FiltersSidebar />
+              <FiltersSidebar
+                filters={filters}
+                onFiltersChange={setFilters}
+                onReset={() =>
+                  setFilters({
+                    searchQuery: "",
+                    maxMiles: "",
+                    budgetMin: 1000,
+                    budgetMax: 15000,
+                    selectedCareTypes: [],
+                    selectedAvailability: ["Within 30 Days"],
+                    selectedAmenities: [],
+                  })
+                }
+                careTypeOptions={careTypeOptions}
+                amenityOptions={amenityOptions}
+              />
             </div>
           </div>
 
@@ -194,6 +387,52 @@ const CareExplorer = () => {
                   />
                 </div>
               ))}
+
+              {totalPages > 1 && (
+                <div className="col-span-full mt-2 flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#132329] disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <span className="text-sm text-[#64748B]">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <div className="mx-1 flex items-center gap-1">
+                    {pageNumbers.map((p, idx) =>
+                      p === "..." ? (
+                        <span key={`ellipsis-${idx}`} className="px-1 text-sm text-[#94A3B8]">
+                          ...
+                        </span>
+                      ) : (
+                        <button
+                          key={`page-${p}`}
+                          type="button"
+                          onClick={() => setPage(Number(p))}
+                          className={`rounded-lg border px-2.5 py-1.5 text-sm ${
+                            currentPage === p
+                              ? "border-[#00CFF4] bg-[#00CFF4] text-white"
+                              : "border-[#E2E8F0] bg-white text-[#132329]"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      )
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#132329] disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             /* Map view: same template, 2x2 grid of cards (no map) */

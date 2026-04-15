@@ -46,6 +46,7 @@ export const register = catchAsyncError(async (req, res, next) => {
     await user.save({ validateBeforeSave: false });
 
     try {
+      const clientBaseUrl = resolveClientBaseUrl(req);
       await sendMail({
         email: user.email,
         subject: "Activate your account – your verification code",
@@ -54,6 +55,7 @@ export const register = catchAsyncError(async (req, res, next) => {
           user: { name: greetingNameForEmail(user) },
           verificationCode,
           expiresInMinutes: 15,
+          openAppUrl: `${clientBaseUrl}/register`,
         },
       });
 
@@ -411,6 +413,7 @@ export const resendVerificationToken = catchAsyncError(
       await user.save({ validateBeforeSave: false });
 
       try {
+        const clientBaseUrl = resolveClientBaseUrl(req);
         await sendMail({
           email: user.email,
           subject: "Activate your account – your verification code",
@@ -419,6 +422,7 @@ export const resendVerificationToken = catchAsyncError(
             user: { name: greetingNameForEmail(user) },
             verificationCode,
             expiresInMinutes: 15,
+            openAppUrl: `${clientBaseUrl}/register`,
           },
         });
 
