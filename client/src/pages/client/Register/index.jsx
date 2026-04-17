@@ -34,6 +34,8 @@ export default function Register() {
   useEffect(() => {
     const emailFromQuery = (searchParams.get("email") || "").trim();
     const codeFromQuery = (searchParams.get("code") || "").trim();
+    const activateFromQuery = (searchParams.get("activate") || "").trim();
+    const copyFromQuery = (searchParams.get("copy") || "").trim();
     if (!emailFromQuery && !codeFromQuery) return;
 
     if (emailFromQuery) {
@@ -42,6 +44,19 @@ export default function Register() {
     }
     if (codeFromQuery) {
       setActivationCode(codeFromQuery);
+    }
+
+    if (activateFromQuery) {
+      setPendingEmail((prev) => prev || emailFromQuery);
+    }
+
+    if (copyFromQuery && codeFromQuery && navigator?.clipboard?.writeText) {
+      navigator.clipboard
+        .writeText(codeFromQuery)
+        .then(() => {
+          toastAuthSuccess("Code copied", "Your verification code is copied. Paste it to activate your account.");
+        })
+        .catch(() => {});
     }
   }, [searchParams]);
 

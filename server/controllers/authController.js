@@ -47,7 +47,7 @@ export const register = catchAsyncError(async (req, res, next) => {
 
     try {
       const clientBaseUrl = resolveClientBaseUrl(req);
-      const activationUrl = `${clientBaseUrl}/register?email=${encodeURIComponent(
+      const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
         user.email
       )}&code=${encodeURIComponent(verificationCode)}`;
       await sendMail({
@@ -417,7 +417,7 @@ export const resendVerificationToken = catchAsyncError(
 
       try {
         const clientBaseUrl = resolveClientBaseUrl(req);
-        const activationUrl = `${clientBaseUrl}/register?email=${encodeURIComponent(
+        const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
           user.email
         )}&code=${encodeURIComponent(verificationCode)}`;
         await sendMail({
