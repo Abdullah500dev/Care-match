@@ -78,7 +78,6 @@ jobs:
           cd /home/ubuntu/care-match-ai/server
           if ! NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server; then
             echo "❌ Failed to start server"
-            pm2 logs care-match-server --lines 20
             exit 1
           fi
           
@@ -114,7 +113,6 @@ jobs:
           # Check server health (matches server package.json: PORT=3002)
           if ! curl -s http://localhost:3002/ > /dev/null; then
             echo "❌ Server health check failed on port 3002"
-            pm2 logs care-match-server --lines 20
             exit 1
           fi
 
