@@ -20,7 +20,7 @@ import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config(); 
+dotenv.config({path: process.env.NODE_ENV === "production" ? ".env.production" : ".env"});
 
 const app = express();
 const port = process.env.PORT;
