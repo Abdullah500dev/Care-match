@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import axios from "axios";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "../../../lib/loadGoogleMaps";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -35,6 +37,8 @@ const FACILITIES = [
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
 const DEFAULT_PRICE_RANGE = "$4,000 - $6,500/mo";
+const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
+const DEFAULT_NEARBY_RADIUS_MILES = 30;
 
 function formatPriceRange(rawPricing) {
   const raw = String(rawPricing || "").trim();
@@ -59,6 +63,27 @@ function parsePriceRangeNumbers(rawPricing) {
   return { min: Math.min(...nums), max: Math.max(...nums) };
 }
 
+function averagePriceFromText(rawPricing) {
+  const { min, max } = parsePriceRangeNumbers(rawPricing);
+  if (min != null && max != null) return Math.round((min + max) / 2);
+  if (min != null) return min;
+  if (max != null) return max;
+  return null;
+}
+
+function distanceMiles(a, b) {
+  const toRad = (n) => (n * Math.PI) / 180;
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
+}
+
 function titleCase(s) {
   return String(s || "")
     .toLowerCase()
@@ -66,6 +91,46 @@ function titleCase(s) {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function normalizeFacilityForCard(m) {
+  const firstImg = Array.isArray(m.images) && m.images.length ? m.images[0] : null;
+  const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
+  const category =
+    Array.isArray(m.care_levels) && m.care_levels.length
+      ? m.care_levels.join(" · ").toUpperCase()
+      : "SENIOR LIVING";
+  const features = Array.isArray(m.reasons) && m.reasons.length
+    ? m.reasons.map((r) => String(r).replace(/^[✓○]\s*/, "").trim())
+    : ["Review listing details and tour to validate fit"];
+  const priceRange = formatPriceRange(m.pricing);
+  const numericPrice = parsePriceRangeNumbers(m.pricing);
+  const distance =
+    m.address && String(m.address).trim()
+      ? String(m.address).trim().slice(0, 48) + (String(m.address).length > 48 ? "…" : "")
+      : "Address on file";
+  return {
+    key: m.facilityId || m._id || m.name,
+    matchPercent: typeof m.score === "number" ? m.score : 0,
+    imageSrc,
+    category,
+    name: m.name || "Community",
+    priceRange,
+    priceMin: numericPrice.min,
+    priceMax: numericPrice.max,
+    distance,
+    features,
+    address: m.address || "",
+    website: m.website || "",
+    specialty: Array.isArray(m.specialty) ? m.specialty : [],
+    description: m.description || "",
+    sourcePlatform: m.source_platform || "",
+    isExternal: Boolean(m.is_external),
+    careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
+    amenities: Array.isArray(m.amenities) ? m.amenities : [],
+    services: Array.isArray(m.services) ? m.services : [],
+    availability: "Within 30 Days",
+  };
 }
 
 const CareExplorer = () => {
@@ -88,48 +153,19 @@ const CareExplorer = () => {
     selectedAvailability: ["Within 30 Days"],
     selectedAmenities: [],
   });
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const mapMarkersRef = useRef([]);
+  const geocoderRef = useRef(null);
+  const [mapError, setMapError] = useState("");
+  const [mapsReady, setMapsReady] = useState(false);
+  const [currentCoords, setCurrentCoords] = useState(null);
+  const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
+  const [directoryFacilities, setDirectoryFacilities] = useState([]);
 
   const liveFacilities = useMemo(() => {
     if (!Array.isArray(carrieMatches) || carrieMatches.length === 0) return null;
-    return carrieMatches.map((m) => {
-      const firstImg = Array.isArray(m.images) && m.images.length ? m.images[0] : null;
-      const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
-      const category =
-        Array.isArray(m.care_levels) && m.care_levels.length
-          ? m.care_levels.join(" · ").toUpperCase()
-          : "SENIOR LIVING";
-      const features = Array.isArray(m.reasons) && m.reasons.length
-        ? m.reasons.map((r) => String(r).replace(/^[✓○]\s*/, "").trim())
-        : ["Review listing details and tour to validate fit"];
-      const priceRange = formatPriceRange(m.pricing);
-      const numericPrice = parsePriceRangeNumbers(m.pricing);
-      const distance =
-        m.address && String(m.address).trim()
-          ? String(m.address).trim().slice(0, 48) + (String(m.address).length > 48 ? "…" : "")
-          : "Address on file";
-      return {
-        key: m.facilityId || m.name,
-        matchPercent: typeof m.score === "number" ? m.score : 0,
-        imageSrc,
-        category,
-        name: m.name || "Community",
-        priceRange,
-        priceMin: numericPrice.min,
-        priceMax: numericPrice.max,
-        distance,
-        features,
-        address: m.address || "",
-        website: m.website || "",
-        specialty: Array.isArray(m.specialty) ? m.specialty : [],
-        description: m.description || "",
-        sourcePlatform: m.source_platform || "",
-        isExternal: Boolean(m.is_external),
-        careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
-        amenities: Array.isArray(m.amenities) ? m.amenities : [],
-        services: Array.isArray(m.services) ? m.services : [],
-        availability: "Within 30 Days",
-      };
-    });
+    return carrieMatches.map(normalizeFacilityForCard);
   }, [carrieMatches]);
 
   const careTypeOptions = useMemo(() => {
@@ -177,11 +213,34 @@ const CareExplorer = () => {
     }));
   }, [fromCarrie, carrieFilters]);
 
+  useEffect(() => {
+    if (fromCarrie || !API_BASE) return;
+    let cancelled = false;
+    axios
+      .get(`${API_BASE}/api/facilities`, { withCredentials: true })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.data?.facilities) ? res.data.facilities : [];
+        setDirectoryFacilities(rows.map(normalizeFacilityForCard));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDirectoryFacilities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromCarrie]);
+
   const scopedFacilities =
     scope === "saved" && liveFacilities
       ? liveFacilities.filter((_, idx) => idx % 2 === 0)
       : liveFacilities
         ? liveFacilities
+        : scope === "saved" && directoryFacilities.length
+          ? directoryFacilities.filter((_, idx) => idx % 2 === 0)
+          : directoryFacilities.length
+            ? directoryFacilities
         : scope === "saved"
           ? FACILITIES.filter((_, idx) => idx % 2 === 0)
           : FACILITIES;
@@ -242,6 +301,19 @@ const CareExplorer = () => {
     });
   }, [filters, scopedFacilities]);
 
+  const mapFacilities = useMemo(
+    () => (view === "map" ? (fromCarrie && liveFacilities ? filteredFacilities : scopedFacilities) : []),
+    [view, fromCarrie, liveFacilities, filteredFacilities, scopedFacilities]
+  );
+
+  const visibleMapFacilities = useMemo(() => {
+    if (!Array.isArray(mapFacilities)) return [];
+    if (!currentCoords) return mapFacilities;
+    if (!Array.isArray(nearbyMapFacilityKeys) || nearbyMapFacilityKeys.length === 0) return mapFacilities;
+    const allowed = new Set(nearbyMapFacilityKeys);
+    return mapFacilities.filter((f) => allowed.has(f.key));
+  }, [mapFacilities, currentCoords, nearbyMapFacilityKeys]);
+
   const showFullCarrieList = Boolean(fromCarrie && liveFacilities?.length);
   const pageSize = showFullCarrieList
     ? Math.max(filteredFacilities.length, 1)
@@ -280,6 +352,126 @@ const CareExplorer = () => {
   useEffect(() => {
     setPage(1);
   }, [filters]);
+
+  useEffect(() => {
+    if (view !== "map") return;
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) {
+      setMapError("Map is unavailable: missing VITE_GOOGLE_MAPS_API_KEY.");
+      setMapsReady(false);
+      return;
+    }
+    let cancelled = false;
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        if (cancelled) return;
+        setMapError("");
+        setMapsReady(true);
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+        mapInstanceRef.current = new window.google.maps.Map(mapContainerRef.current, {
+          center: DEFAULT_MAP_CENTER,
+          zoom: 11,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        geocoderRef.current = new window.google.maps.Geocoder();
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const coords = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              setCurrentCoords(coords);
+              mapInstanceRef.current.setCenter(coords);
+              mapInstanceRef.current.setZoom(11);
+              new window.google.maps.Marker({
+                map: mapInstanceRef.current,
+                position: coords,
+                title: "Your current location",
+                icon: {
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 7,
+                  fillColor: "#00CFF4",
+                  fillOpacity: 1,
+                  strokeColor: "#0f172a",
+                  strokeWeight: 2,
+                },
+              });
+              setFilters((prev) => ({
+                ...prev,
+                maxMiles: prev.maxMiles || String(DEFAULT_NEARBY_RADIUS_MILES),
+              }));
+            },
+            () => {
+              setCurrentCoords(null);
+              setMapError("Location access denied. Enable location to see nearby facilities.");
+            },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMapError(err?.message || "Could not load map.");
+        setMapsReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "map" || !mapsReady || !mapInstanceRef.current || !geocoderRef.current) return;
+    mapMarkersRef.current.forEach((m) => m.setMap(null));
+    mapMarkersRef.current = [];
+    setNearbyMapFacilityKeys([]);
+    const candidates = (mapFacilities || []).filter((f) => f.address);
+    if (candidates.length === 0) return;
+
+    const geocodeOne = (address) =>
+      new Promise((resolve) => {
+        geocoderRef.current.geocode({ address }, (results, status) => {
+          if (status === "OK" && results?.[0]?.geometry?.location) resolve(results[0].geometry.location);
+          else resolve(null);
+        });
+      });
+
+    Promise.all(
+      candidates.map(async (f) => {
+        const loc = await geocodeOne(f.address);
+        if (!loc) return null;
+        const latLng = { lat: loc.lat(), lng: loc.lng() };
+        if (currentCoords) {
+          const radiusMiles = Number.parseFloat(String(filters.maxMiles || ""));
+          const activeRadius =
+            !Number.isNaN(radiusMiles) && radiusMiles > 0
+              ? radiusMiles
+              : DEFAULT_NEARBY_RADIUS_MILES;
+          const d = distanceMiles(currentCoords, latLng);
+          if (d > activeRadius) return null;
+        }
+        const avgPrice = averagePriceFromText(f.priceRange);
+        const marker = new window.google.maps.Marker({
+          map: mapInstanceRef.current,
+          position: latLng,
+          title: f.name,
+          label: avgPrice ? { text: `$${Math.round(avgPrice / 100) * 100}`, color: "#0f172a", fontWeight: "700" } : undefined,
+        });
+        return { marker, loc, key: f.key };
+      })
+    ).then((placed) => {
+      const valid = placed.filter(Boolean);
+      setNearbyMapFacilityKeys(valid.map((x) => x.key));
+      valid.forEach((x) => mapMarkersRef.current.push(x.marker));
+      if (valid.length === 0) return;
+      const bounds = new window.google.maps.LatLngBounds();
+      valid.forEach((x) => bounds.extend(x.loc));
+      if (currentCoords) bounds.extend(currentCoords);
+      mapInstanceRef.current.fitBounds(bounds, 60);
+    });
+  }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
 
   return (
     <>
@@ -448,24 +640,35 @@ const CareExplorer = () => {
               )}
             </div>
           ) : (
-            /* Map view: same template, 2x2 grid of cards (no map) */
             <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
-              <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
-                {scopedFacilities.map((f) => (
-                  <FacilityCard
-                    key={f.key ?? f.matchPercent}
-                    matchPercent={f.matchPercent}
-                    imageSrc={f.imageSrc}
-                    name={f.name}
-                    category={f.category}
-                    priceRange={f.priceRange}
-                    distance={f.distance}
-                    features={f.features}
-                    website={f.website}
-                    sourcePlatform={f.sourcePlatform}
-                    compact
-                  />
-                ))}
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-3 sm:gap-4">
+                <div className="min-h-[520px] rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
+                  {mapError ? (
+                    <div className="h-full flex items-center justify-center px-6 text-sm text-[#64748b]">{mapError}</div>
+                  ) : (
+                    <div ref={mapContainerRef} className="h-full w-full" />
+                  )}
+                </div>
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-3 sm:p-4 max-h-[520px] overflow-y-auto">
+                  <p className="text-xs font-semibold text-[#64748b] mb-2">Recommended Matches</p>
+                  <div className="space-y-3">
+                    {(visibleMapFacilities || []).slice(0, 8).map((f) => (
+                      <FacilityCard
+                        key={`map-${f.key ?? f.matchPercent}`}
+                        matchPercent={f.matchPercent}
+                        imageSrc={f.imageSrc}
+                        name={f.name}
+                        category={f.category}
+                        priceRange={f.priceRange}
+                        distance={f.distance}
+                        features={f.features}
+                        website={f.website}
+                        sourcePlatform={f.sourcePlatform}
+                        compact
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
