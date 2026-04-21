@@ -6,7 +6,10 @@
 const SCRIPT_ID = "google-maps-js";
 
 export function getGoogleMapsApiKey() {
-  const k = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  const k =
+    import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
+    import.meta.env.VITE_GOOGLE_API_KEY ||
+    import.meta.env.VITE_REACT_APP_GOOGLE_API_KEY;
   return typeof k === "string" && k.trim() ? k.trim() : "";
 }
 

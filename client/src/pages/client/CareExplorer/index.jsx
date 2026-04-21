@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
-import { toast } from "sonner";
+import axios from "axios";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
-import MapViewPanel from "../../../components/client/CareExplorer/MapViewPanel";
+import {
+  getGoogleMapsApiKey,
+  loadGoogleMapsScript,
+} from "../../../lib/loadGoogleMaps";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -73,6 +76,8 @@ const FACILITIES = [
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
 const DEFAULT_PRICE_RANGE = "$4,000 - $6,500/mo";
+const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
+const DEFAULT_NEARBY_RADIUS_MILES = 30;
 
 function formatPriceRange(rawPricing) {
   const raw = String(rawPricing || "").trim();
@@ -97,6 +102,27 @@ function parsePriceRangeNumbers(rawPricing) {
   return { min: Math.min(...nums), max: Math.max(...nums) };
 }
 
+function averagePriceFromText(rawPricing) {
+  const { min, max } = parsePriceRangeNumbers(rawPricing);
+  if (min != null && max != null) return Math.round((min + max) / 2);
+  if (min != null) return min;
+  if (max != null) return max;
+  return null;
+}
+
+function distanceMiles(a, b) {
+  const toRad = (n) => (n * Math.PI) / 180;
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
+}
+
 function titleCase(s) {
   return String(s || "")
     .toLowerCase()
@@ -106,10 +132,55 @@ function titleCase(s) {
     .join(" ");
 }
 
+function normalizeFacilityForCard(m) {
+  const firstImg =
+    Array.isArray(m.images) && m.images.length ? m.images[0] : null;
+  const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
+  const category =
+    Array.isArray(m.care_levels) && m.care_levels.length
+      ? m.care_levels.join(" · ").toUpperCase()
+      : "SENIOR LIVING";
+  const features =
+    Array.isArray(m.reasons) && m.reasons.length
+      ? m.reasons.map((r) =>
+          String(r)
+            .replace(/^[✓○]\s*/, "")
+            .trim(),
+        )
+      : ["Review listing details and tour to validate fit"];
+  const priceRange = formatPriceRange(m.pricing);
+  const numericPrice = parsePriceRangeNumbers(m.pricing);
+  const distance =
+    m.address && String(m.address).trim()
+      ? String(m.address).trim().slice(0, 48) +
+        (String(m.address).length > 48 ? "…" : "")
+      : "Address on file";
+  return {
+    key: m.facilityId || m._id || m.name,
+    matchPercent: typeof m.score === "number" ? m.score : 0,
+    imageSrc,
+    category,
+    name: m.name || "Community",
+    priceRange,
+    priceMin: numericPrice.min,
+    priceMax: numericPrice.max,
+    distance,
+    features,
+    address: m.address || "",
+    website: m.website || "",
+    specialty: Array.isArray(m.specialty) ? m.specialty : [],
+    description: m.description || "",
+    sourcePlatform: m.source_platform || "",
+    isExternal: Boolean(m.is_external),
+    careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
+    amenities: Array.isArray(m.amenities) ? m.amenities : [],
+    services: Array.isArray(m.services) ? m.services : [],
+    availability: "Within 30 Days",
+  };
+}
+
 const CareExplorer = () => {
-  const FAVORITES_STORAGE_KEY = "carematch_favorite_facilities";
   const location = useLocation();
-  const navigate = useNavigate();
   const carrieMatches = location.state?.carrieMatches;
   const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
@@ -119,7 +190,6 @@ const CareExplorer = () => {
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
-  const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
   const [filters, setFilters] = useState({
     searchQuery: "",
     maxMiles: "",
@@ -129,58 +199,31 @@ const CareExplorer = () => {
     selectedAvailability: ["Within 30 Days"],
     selectedAmenities: [],
   });
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const mapMarkersRef = useRef([]);
+  const geocoderRef = useRef(null);
+  const [mapError, setMapError] = useState("");
+  const [mapsReady, setMapsReady] = useState(false);
+  const [currentCoords, setCurrentCoords] = useState(null);
+  const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
+  const [directoryFacilities, setDirectoryFacilities] = useState([]);
 
   const liveFacilities = useMemo(() => {
-    if (!Array.isArray(carrieMatches) || carrieMatches.length === 0) return null;
-    return carrieMatches.map((m) => {
-      const firstImg = Array.isArray(m.images) && m.images.length ? m.images[0] : null;
-      const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
-      const category =
-        Array.isArray(m.care_levels) && m.care_levels.length
-          ? m.care_levels.join(" · ").toUpperCase()
-          : "SENIOR LIVING";
-      const features = Array.isArray(m.reasons) && m.reasons.length
-        ? m.reasons.map((r) => String(r).replace(/^[✓○]\s*/, "").trim())
-        : ["Review listing details and tour to validate fit"];
-      const priceRange = formatPriceRange(m.pricing);
-      const numericPrice = parsePriceRangeNumbers(m.pricing);
-      const distance =
-        Number.isFinite(Number(m.distanceMiles)) && Number(m.distanceMiles) > 0
-          ? `${Math.round(Number(m.distanceMiles))} miles away`
-          : `${Math.max(2, Math.round((100 - (Number(m.score) || 75)) / 4))} miles away`;
-      const distanceMiles =
-        Number.isFinite(Number(m.distanceMiles)) && Number(m.distanceMiles) > 0
-          ? Math.round(Number(m.distanceMiles))
-          : Math.max(2, Math.round((100 - (Number(m.score) || 75)) / 4));
-      return {
-        key: m.facilityId || m.name,
-        matchPercent: typeof m.score === "number" ? m.score : 0,
-        imageSrc,
-        category,
-        name: m.name || "Community",
-        priceRange,
-        priceMin: numericPrice.min,
-        priceMax: numericPrice.max,
-        distance,
-        distanceMiles,
-        features,
-        address: m.address || "",
-        website: m.website || "",
-        specialty: Array.isArray(m.specialty) ? m.specialty : [],
-        description: m.description || "",
-        sourcePlatform: m.source_platform || "",
-        isExternal: Boolean(m.is_external),
-        careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
-        amenities: Array.isArray(m.amenities) ? m.amenities : [],
-        services: Array.isArray(m.services) ? m.services : [],
-        availability: "Within 30 Days",
-      };
-    });
+    if (!Array.isArray(carrieMatches) || carrieMatches.length === 0)
+      return null;
+    return carrieMatches.map(normalizeFacilityForCard);
   }, [carrieMatches]);
 
   const careTypeOptions = useMemo(() => {
     const base = liveFacilities
-      ? [...new Set(liveFacilities.flatMap((f) => f.careLevels.map((x) => titleCase(x))))]
+      ? [
+          ...new Set(
+            liveFacilities.flatMap((f) =>
+              f.careLevels.map((x) => titleCase(x)),
+            ),
+          ),
+        ]
       : ["Assisted Living"];
     return base.length ? base : ["Assisted Living"];
   }, [liveFacilities]);
@@ -190,8 +233,10 @@ const CareExplorer = () => {
       ? [
           ...new Set(
             liveFacilities.flatMap((f) =>
-              [...(f.amenities || []), ...(f.services || [])].map((x) => titleCase(x))
-            )
+              [...(f.amenities || []), ...(f.services || [])].map((x) =>
+                titleCase(x),
+              ),
+            ),
           ),
         ]
       : ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
@@ -203,7 +248,8 @@ const CareExplorer = () => {
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
     const maxBudget =
-      Number.isFinite(Number(carrieFilters.budgetMaxMonthly)) && Number(carrieFilters.budgetMaxMonthly) > 0
+      Number.isFinite(Number(carrieFilters.budgetMaxMonthly)) &&
+      Number(carrieFilters.budgetMaxMonthly) > 0
         ? Number(carrieFilters.budgetMaxMonthly)
         : 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
@@ -217,64 +263,70 @@ const CareExplorer = () => {
         ? carrieFilters.amenityMustHaves.map((x) => titleCase(x))
         : prev.selectedAmenities,
       maxMiles:
-        carrieFilters.maxDistanceMiles != null && !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
+        carrieFilters.maxDistanceMiles != null &&
+        !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
           ? String(carrieFilters.maxDistanceMiles)
           : prev.maxMiles,
     }));
   }, [fromCarrie, carrieFilters]);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) setFavoriteFacilityIds(parsed.map((x) => String(x)));
-    } catch {
-      // Ignore malformed storage.
-    }
-  }, []);
-
-  const updateFavorites = (next) => {
-    setFavoriteFacilityIds(next);
-    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
-  };
-
-  const handleToggleFavorite = (facilityId) => {
-    const id = String(facilityId || "");
-    if (!id) return;
-    const exists = favoriteFacilityIds.includes(id);
-    const next = exists
-      ? favoriteFacilityIds.filter((x) => x !== id)
-      : [...favoriteFacilityIds, id];
-    updateFavorites(next);
-    toast.success(exists ? "Removed from favorites" : "Added to favorites");
-  };
-
-  const handleAskCarrie = () => {
-    navigate("/");
-  };
+    if (fromCarrie || !API_BASE) return;
+    let cancelled = false;
+    axios
+      .get(`${API_BASE}/api/facilities`, { withCredentials: true })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.data?.facilities)
+          ? res.data.facilities
+          : [];
+        setDirectoryFacilities(rows.map(normalizeFacilityForCard));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDirectoryFacilities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromCarrie]);
 
   const scopedFacilities =
-    scope === "saved"
-      ? (liveFacilities || FACILITIES).filter((f) =>
-          favoriteFacilityIds.includes(String(f.key || f.facilityId || f.name))
-        )
-      : liveFacilities || FACILITIES;
+    scope === "saved" && liveFacilities
+      ? liveFacilities.filter((_, idx) => idx % 2 === 0)
+      : liveFacilities
+        ? liveFacilities
+        : scope === "saved" && directoryFacilities.length
+          ? directoryFacilities.filter((_, idx) => idx % 2 === 0)
+          : directoryFacilities.length
+            ? directoryFacilities
+            : scope === "saved"
+              ? FACILITIES.filter((_, idx) => idx % 2 === 0)
+              : FACILITIES;
 
   const filteredFacilities = useMemo(() => {
-    const q = String(filters.searchQuery || "").trim().toLowerCase();
-    const maxMilesNum = Number.parseFloat(String(filters.maxMiles || "").trim());
+    const q = String(filters.searchQuery || "")
+      .trim()
+      .toLowerCase();
+    const maxMilesNum = Number.parseFloat(
+      String(filters.maxMiles || "").trim(),
+    );
     const budgetMin = Number(filters.budgetMin) || 1000;
     const budgetMax = Number(filters.budgetMax) || 15000;
-    const selectedCare = new Set((filters.selectedCareTypes || []).map((x) => String(x).toLowerCase()));
-    const selectedAmenities = (filters.selectedAmenities || []).map((x) => String(x).toLowerCase());
+    const selectedCare = new Set(
+      (filters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
+    );
+    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
+      String(x).toLowerCase(),
+    );
     const selectedAvailability = new Set(
-      (filters.selectedAvailability || []).map((x) => String(x).toLowerCase())
+      (filters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
     );
 
     return scopedFacilities.filter((f) => {
       if (q) {
-        const text = `${f.name || ""} ${f.category || ""} ${f.address || ""} ${(f.features || []).join(" ")}`.toLowerCase();
+        const text =
+          `${f.name || ""} ${f.category || ""} ${f.address || ""} ${(f.features || []).join(" ")}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
 
@@ -289,14 +341,21 @@ const CareExplorer = () => {
 
       if (selectedCare.size > 0) {
         const levels = (f.careLevels || []).map((x) => String(x).toLowerCase());
-        const hasCare = [...selectedCare].some((c) => levels.some((l) => l.includes(c) || c.includes(l)));
+        const hasCare = [...selectedCare].some((c) =>
+          levels.some((l) => l.includes(c) || c.includes(l)),
+        );
         if (!hasCare) return false;
       }
 
       if (selectedAmenities.length > 0) {
-        const pool = [...(f.amenities || []), ...(f.services || []), ...(f.features || [])]
-          .map((x) => String(x).toLowerCase());
-        const hasAmenity = selectedAmenities.some((a) => pool.some((p) => p.includes(a) || a.includes(p)));
+        const pool = [
+          ...(f.amenities || []),
+          ...(f.services || []),
+          ...(f.features || []),
+        ].map((x) => String(x).toLowerCase());
+        const hasAmenity = selectedAmenities.some((a) =>
+          pool.some((p) => p.includes(a) || a.includes(p)),
+        );
         if (!hasAmenity) return false;
       }
 
@@ -307,15 +366,43 @@ const CareExplorer = () => {
 
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
         const facilityMiles =
-          Number.isFinite(Number(f.distanceMiles)) && Number(f.distanceMiles) > 0
+          Number.isFinite(Number(f.distanceMiles)) &&
+          Number(f.distanceMiles) > 0
             ? Number(f.distanceMiles)
-            : Number.parseFloat(String(f.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1]);
-        if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum) return false;
+            : Number.parseFloat(
+                String(f.distance || "").match(
+                  /(\d+(?:\.\d+)?)\s*miles?/i,
+                )?.[1],
+              );
+        if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
+          return false;
       }
 
       return true;
     });
   }, [filters, scopedFacilities]);
+
+  const mapFacilities = useMemo(
+    () =>
+      view === "map"
+        ? fromCarrie && liveFacilities
+          ? filteredFacilities
+          : scopedFacilities
+        : [],
+    [view, fromCarrie, liveFacilities, filteredFacilities, scopedFacilities],
+  );
+
+  const visibleMapFacilities = useMemo(() => {
+    if (!Array.isArray(mapFacilities)) return [];
+    if (!currentCoords) return mapFacilities;
+    if (
+      !Array.isArray(nearbyMapFacilityKeys) ||
+      nearbyMapFacilityKeys.length === 0
+    )
+      return mapFacilities;
+    const allowed = new Set(nearbyMapFacilityKeys);
+    return mapFacilities.filter((f) => allowed.has(f.key));
+  }, [mapFacilities, currentCoords, nearbyMapFacilityKeys]);
 
   const showFullCarrieList = Boolean(fromCarrie && liveFacilities?.length);
   const pageSize = showFullCarrieList
@@ -328,7 +415,10 @@ const CareExplorer = () => {
   const matchCountForHeader = filteredFacilities.length;
   const locationLabelForHeader =
     String(carrieFilters?.locationQuery || "").trim() || "your area";
-  const totalPages = Math.max(1, Math.ceil(filteredFacilities.length / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredFacilities.length / pageSize),
+  );
   const currentPage = Math.min(page, totalPages);
   const startIdx = (currentPage - 1) * pageSize;
   const endIdx = startIdx + pageSize;
@@ -340,9 +430,25 @@ const CareExplorer = () => {
     }
     if (currentPage <= 4) return [1, 2, 3, 4, 5, "...", totalPages];
     if (currentPage >= totalPages - 3) {
-      return [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+      return [
+        1,
+        "...",
+        totalPages - 4,
+        totalPages - 3,
+        totalPages - 2,
+        totalPages - 1,
+        totalPages,
+      ];
     }
-    return [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages];
+    return [
+      1,
+      "...",
+      currentPage - 1,
+      currentPage,
+      currentPage + 1,
+      "...",
+      totalPages,
+    ];
   }, [currentPage, totalPages]);
 
   useEffect(() => {
@@ -359,13 +465,152 @@ const CareExplorer = () => {
     setPage(1);
   }, [filters]);
 
+  useEffect(() => {
+    if (view !== "map") return;
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) {
+      setMapError("Map is unavailable: missing VITE_GOOGLE_MAPS_API_KEY.");
+      setMapsReady(false);
+      return;
+    }
+    let cancelled = false;
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        if (cancelled) return;
+        setMapError("");
+        setMapsReady(true);
+        if (!mapContainerRef.current || mapInstanceRef.current) return;
+        mapInstanceRef.current = new window.google.maps.Map(
+          mapContainerRef.current,
+          {
+            center: DEFAULT_MAP_CENTER,
+            zoom: 11,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+          },
+        );
+        geocoderRef.current = new window.google.maps.Geocoder();
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              const coords = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+              setCurrentCoords(coords);
+              mapInstanceRef.current.setCenter(coords);
+              mapInstanceRef.current.setZoom(11);
+              new window.google.maps.Marker({
+                map: mapInstanceRef.current,
+                position: coords,
+                title: "Your current location",
+                icon: {
+                  path: window.google.maps.SymbolPath.CIRCLE,
+                  scale: 7,
+                  fillColor: "#00CFF4",
+                  fillOpacity: 1,
+                  strokeColor: "#0f172a",
+                  strokeWeight: 2,
+                },
+              });
+              setFilters((prev) => ({
+                ...prev,
+                maxMiles: prev.maxMiles || String(DEFAULT_NEARBY_RADIUS_MILES),
+              }));
+            },
+            () => {
+              setCurrentCoords(null);
+              setMapError(
+                "Location access denied. Enable location to see nearby facilities.",
+              );
+            },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
+          );
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMapError(err?.message || "Could not load map.");
+        setMapsReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (
+      view !== "map" ||
+      !mapsReady ||
+      !mapInstanceRef.current ||
+      !geocoderRef.current
+    )
+      return;
+    mapMarkersRef.current.forEach((m) => m.setMap(null));
+    mapMarkersRef.current = [];
+    setNearbyMapFacilityKeys([]);
+    const candidates = (mapFacilities || []).filter((f) => f.address);
+    if (candidates.length === 0) return;
+
+    const geocodeOne = (address) =>
+      new Promise((resolve) => {
+        geocoderRef.current.geocode({ address }, (results, status) => {
+          if (status === "OK" && results?.[0]?.geometry?.location)
+            resolve(results[0].geometry.location);
+          else resolve(null);
+        });
+      });
+
+    Promise.all(
+      candidates.map(async (f) => {
+        const loc = await geocodeOne(f.address);
+        if (!loc) return null;
+        const latLng = { lat: loc.lat(), lng: loc.lng() };
+        if (currentCoords) {
+          const radiusMiles = Number.parseFloat(String(filters.maxMiles || ""));
+          const activeRadius =
+            !Number.isNaN(radiusMiles) && radiusMiles > 0
+              ? radiusMiles
+              : DEFAULT_NEARBY_RADIUS_MILES;
+          const d = distanceMiles(currentCoords, latLng);
+          if (d > activeRadius) return null;
+        }
+        const avgPrice = averagePriceFromText(f.priceRange);
+        const marker = new window.google.maps.Marker({
+          map: mapInstanceRef.current,
+          position: latLng,
+          title: f.name,
+          label: avgPrice
+            ? {
+                text: `$${Math.round(avgPrice / 100) * 100}`,
+                color: "#0f172a",
+                fontWeight: "700",
+              }
+            : undefined,
+        });
+        return { marker, loc, key: f.key };
+      }),
+    ).then((placed) => {
+      const valid = placed.filter(Boolean);
+      setNearbyMapFacilityKeys(valid.map((x) => x.key));
+      valid.forEach((x) => mapMarkersRef.current.push(x.marker));
+      if (valid.length === 0) return;
+      const bounds = new window.google.maps.LatLngBounds();
+      valid.forEach((x) => bounds.extend(x.loc));
+      if (currentCoords) bounds.extend(currentCoords);
+      mapInstanceRef.current.fitBounds(bounds, 60);
+    });
+  }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
+
   return (
     <>
       <SEO title="Care Explorer - CareMatch AI" />
       <div
         className="min-w-0 bg-no-repeat overflow-x-hidden"
         style={{
-          backgroundImage: "url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
+          backgroundImage:
+            "url(/assets/images/overlay-searchbg.svg), url(/assets/images/seacrh-bg-img.png)",
           backgroundSize: "55% 70%, cover",
           backgroundPosition: "145% 100%, center",
         }}
@@ -389,25 +634,41 @@ const CareExplorer = () => {
                 <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#155DFC]/20 text-[#155DFC]">
                   <Info className="h-3 w-3" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-wide text-[#155DFC]">Transparency</span>
+                <span className="text-xs font-bold uppercase tracking-wide text-[#155DFC]">
+                  Transparency
+                </span>
               </div>
-              <h2 className="text-sm sm:text-base font-bold text-[#132329]">How we matched these</h2>
+              <h2 className="text-sm sm:text-base font-bold text-[#132329]">
+                How we matched these
+              </h2>
             </div>
             <div className="md:border-l-2 md:border-[#E2E8F0] md:pl-8 flex-1 flex items-center justify-center min-w-0 max-w-5xl w-full">
               <p className="text-xs sm:text-sm text-[#64748b] text-center sm:text-left md:text-center">
                 {fromCarrie && liveFacilities ? (
                   <>
                     These communities are{" "}
-                    <span className="font-semibold text-[#132329]">ranked from your chat with Carrie</span>{" "}
-                    using care level fit, must-have amenities, budget vs listed pricing, location keywords, and
-                    visitation-friendly signals. Always confirm details on a tour.
+                    <span className="font-semibold text-[#132329]">
+                      ranked from your chat with Carrie
+                    </span>{" "}
+                    using care level fit, must-have amenities, budget vs listed
+                    pricing, location keywords, and visitation-friendly signals.
+                    Always confirm details on a tour.
                   </>
                 ) : (
                   <>
                     Prioritized for{" "}
-                    <span className="font-semibold text-[#132329]">Assisted Living</span>, budget around{" "}
-                    <span className="font-semibold text-[#132329]">$3,000/mo</span>, and your specific{" "}
-                    <span className="font-semibold text-[#222c2e]">mobility needs</span>.
+                    <span className="font-semibold text-[#132329]">
+                      Assisted Living
+                    </span>
+                    , budget around{" "}
+                    <span className="font-semibold text-[#132329]">
+                      $3,000/mo
+                    </span>
+                    , and your specific{" "}
+                    <span className="font-semibold text-[#222c2e]">
+                      mobility needs
+                    </span>
+                    .
                   </>
                 )}
               </p>
@@ -432,7 +693,9 @@ const CareExplorer = () => {
                 )}
               </button>
             </div>
-            <div className={mobileFiltersCollapsed ? "hidden lg:block" : "block"}>
+            <div
+              className={mobileFiltersCollapsed ? "hidden lg:block" : "block"}
+            >
               <FiltersSidebar
                 filters={filters}
                 onFiltersChange={setFilters}
@@ -465,7 +728,12 @@ const CareExplorer = () => {
               }`}
             >
               {listingItems.map((f) => (
-                <div key={f.key ?? f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
+                <div
+                  key={f.key ?? f.matchPercent}
+                  className={
+                    layout !== "single" ? "min-w-0 overflow-hidden" : undefined
+                  }
+                >
                   <FacilityCard
                     facilityId={f.key ?? f.facilityId ?? f.name}
                     matchPercent={f.matchPercent}
@@ -479,7 +747,9 @@ const CareExplorer = () => {
                     sourcePlatform={f.sourcePlatform}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
-                    isFavorite={favoriteFacilityIds.includes(String(f.key ?? f.facilityId ?? f.name))}
+                    isFavorite={favoriteFacilityIds.includes(
+                      String(f.key ?? f.facilityId ?? f.name),
+                    )}
                     onToggleFavorite={handleToggleFavorite}
                   />
                 </div>
@@ -501,7 +771,10 @@ const CareExplorer = () => {
                   <div className="mx-1 flex items-center gap-1">
                     {pageNumbers.map((p, idx) =>
                       p === "..." ? (
-                        <span key={`ellipsis-${idx}`} className="px-1 text-sm text-[#94A3B8]">
+                        <span
+                          key={`ellipsis-${idx}`}
+                          className="px-1 text-sm text-[#94A3B8]"
+                        >
                           ...
                         </span>
                       ) : (
@@ -517,7 +790,7 @@ const CareExplorer = () => {
                         >
                           {p}
                         </button>
-                      )
+                      ),
                     )}
                   </div>
                   <button
@@ -533,27 +806,37 @@ const CareExplorer = () => {
             </div>
           ) : (
             <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
-              <div className="space-y-4">
-                <MapViewPanel facilities={filteredFacilities} />
-                <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
-                  {filteredFacilities.slice(0, 6).map((f) => (
-                  <FacilityCard
-                    facilityId={f.key ?? f.facilityId ?? f.name}
-                    key={f.key ?? f.matchPercent}
-                    matchPercent={f.matchPercent}
-                    imageSrc={f.imageSrc}
-                    name={f.name}
-                    category={f.category}
-                    priceRange={f.priceRange}
-                    distance={f.distance}
-                    features={f.features}
-                    website={f.website}
-                    sourcePlatform={f.sourcePlatform}
-                    compact
-                    isFavorite={favoriteFacilityIds.includes(String(f.key ?? f.facilityId ?? f.name))}
-                    onToggleFavorite={handleToggleFavorite}
-                  />
-                  ))}
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-3 sm:gap-4">
+                <div className="min-h-[520px] rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
+                  {mapError ? (
+                    <div className="h-full flex items-center justify-center px-6 text-sm text-[#64748b]">
+                      {mapError}
+                    </div>
+                  ) : (
+                    <div ref={mapContainerRef} className="h-full w-full" />
+                  )}
+                </div>
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-3 sm:p-4 max-h-[520px] overflow-y-auto">
+                  <p className="text-xs font-semibold text-[#64748b] mb-2">
+                    Recommended Matches
+                  </p>
+                  <div className="space-y-3">
+                    {(visibleMapFacilities || []).slice(0, 8).map((f) => (
+                      <FacilityCard
+                        key={`map-${f.key ?? f.matchPercent}`}
+                        matchPercent={f.matchPercent}
+                        imageSrc={f.imageSrc}
+                        name={f.name}
+                        category={f.category}
+                        priceRange={f.priceRange}
+                        distance={f.distance}
+                        features={f.features}
+                        website={f.website}
+                        sourcePlatform={f.sourcePlatform}
+                        compact
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
