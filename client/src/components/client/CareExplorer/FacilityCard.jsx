@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=280&fit=crop";
+const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
 
 const FacilityCard = ({
   facilityId,
@@ -39,6 +40,19 @@ const FacilityCard = ({
 
   const requireLoginForFacilityAction = () => {
     if (isLoggedIn) return true;
+    try {
+      sessionStorage.setItem(
+        POST_LOGIN_REDIRECT_KEY,
+        JSON.stringify({
+          pathname: location.pathname || "/care-explorer",
+          search: location.search || "",
+          hash: location.hash || "",
+          state: location.state,
+        }),
+      );
+    } catch {
+      // Ignore storage failures and still route to sign in.
+    }
     toast.info("Please sign in to continue", {
       description: "Sign in is required to save data or interact with facilities.",
     });
