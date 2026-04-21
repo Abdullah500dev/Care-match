@@ -12,6 +12,7 @@ import {
   resendVerificationToken,
   forgotPassword,
   resetPassword,
+  getActivationStatus,
 } from "../controllers/authController.js";
 
 import {
@@ -399,6 +400,7 @@ router.get("/refresh-token", updateAccessToken);
  *                   example: 400
  */
 router.post("/request/token/new", resendVerificationToken);
+router.get("/activation-status", getActivationStatus);
 
 // User profile management (protected routes)
 /**

@@ -22,7 +22,7 @@ export const register = catchAsyncError(async (req, res, next) => {
 
     if (password !== confirmPassword) {
       return next(
-        new ErrorHandler("Password and Confirm Password does not match!", 400)
+        new ErrorHandler("Password and Confirm Password does not match!", 400),
       );
     }
 
@@ -48,7 +48,7 @@ export const register = catchAsyncError(async (req, res, next) => {
     try {
       const clientBaseUrl = resolveClientBaseUrl(req);
       const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
-        user.email
+        user.email,
       )}&code=${encodeURIComponent(verificationCode)}`;
       await sendMail({
         email: user.email,
@@ -83,11 +83,14 @@ export const activateUser = catchAsyncError(async (req, res, next) => {
 
     if (!email || !code) {
       return next(
-        new ErrorHandler("Email and verification code are required", 400)
+        new ErrorHandler("Email and verification code are required", 400),
       );
     }
 
-    const hashedCode = crypto.createHash("sha256").update(String(code)).digest("hex");
+    const hashedCode = crypto
+      .createHash("sha256")
+      .update(String(code))
+      .digest("hex");
 
     const user = await User.findOne({ email });
 
@@ -95,8 +98,14 @@ export const activateUser = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("Invalid email or verification code", 400));
     }
 
-    if (user.token !== hashedCode || !user.tokenExpire || user.tokenExpire < Date.now()) {
-      return next(new ErrorHandler("Invalid or expired verification code", 400));
+    if (
+      user.token !== hashedCode ||
+      !user.tokenExpire ||
+      user.tokenExpire < Date.now()
+    ) {
+      return next(
+        new ErrorHandler("Invalid or expired verification code", 400),
+      );
     }
 
     user.is_verified = true;
@@ -138,8 +147,8 @@ export const login = catchAsyncError(async (req, res, next) => {
       return next(
         new ErrorHandler(
           "Please verify your email to access your account!",
-          403
-        )
+          403,
+        ),
       );
     }
 
@@ -198,7 +207,7 @@ export const updateAccessToken = catchAsyncError(async (req, res, next) => {
     const accessToken = jwt.sign(
       { id: user._id },
       process.env.ACCESS_TOKEN || "",
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.cookie("access_token", accessToken, {
@@ -356,14 +365,14 @@ export const resetPassword = catchAsyncError(async (req, res, next) => {
       return next(
         new ErrorHandler(
           "Token, new password and confirm password are required",
-          400
-        )
+          400,
+        ),
       );
     }
 
     if (newPassword !== confirmPassword) {
       return next(
-        new ErrorHandler("Password and confirm password do not match", 400)
+        new ErrorHandler("Password and confirm password do not match", 400),
       );
     }
 
@@ -418,7 +427,7 @@ export const resendVerificationToken = catchAsyncError(
       try {
         const clientBaseUrl = resolveClientBaseUrl(req);
         const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
-          user.email
+          user.email,
         )}&code=${encodeURIComponent(verificationCode)}`;
         await sendMail({
           email: user.email,
@@ -446,5 +455,29 @@ export const resendVerificationToken = catchAsyncError(
     } catch (error) {
       return next(new ErrorHandler(error.message, 400));
     }
-  }
+  },
 );
+
+// Check if a registered email has been activated yet.
+export const getActivationStatus = catchAsyncError(async (req, res, next) => {
+  try {
+    const email = String(req.query?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!email) {
+      return next(new ErrorHandler("Email is required", 400));
+    }
+
+    const user = await User.findOne({ email }).select("is_verified");
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      isVerified: Boolean(user.is_verified),
+    });
+  } catch (error) {
+    return next(new ErrorHandler(error.message, 400));
+  }
+});

@@ -1,5 +1,5 @@
-﻿import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useForm } from "react-hook-form";
 import { authServices, clearPersistedAuthTokens, persistAuthTokens } from "../../services/authServices";
@@ -8,11 +8,35 @@ import { Eye, EyeOff } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import SEO from "../../components/common/SEO";
 
+const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
+
 function Signin() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
+    const location = useLocation();
     const [showPassword, setShowPassword] = useState(false);
-    const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
+    const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
+
+    React.useEffect(() => {
+      const stateEmail = location.state?.email || "";
+      const statePassword = location.state?.password || "";
+
+      if (stateEmail) setValue("email", stateEmail);
+      if (statePassword) setValue("password", statePassword);
+
+      if (!stateEmail || !statePassword) {
+        const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
+        if (savedPrefill) {
+          try {
+            const parsed = JSON.parse(savedPrefill);
+            if (!stateEmail && parsed?.email) setValue("email", parsed.email);
+            if (!statePassword && parsed?.password) setValue("password", parsed.password);
+          } catch {
+            // Ignore storage parsing errors.
+          }
+        }
+      }
+    }, [location.state, setValue]);
 
     const onSubmit = async (data) => {
         try {
@@ -39,12 +63,13 @@ function Signin() {
 
             persistAuthTokens({ accessToken, refreshToken });
             dispatch(setUser({ user, token: accessToken, tokenExpire: null }));
+            sessionStorage.removeItem(SIGNUP_PREFILL_KEY);
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
             if (role === "facility") {
               navigate("/facility");
             } else {
-              navigate("/portal");
+              navigate("/");
             }
         } catch (error) {
             toastAuthError(error, {

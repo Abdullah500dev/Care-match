@@ -24,6 +24,7 @@ export default function SearchBar() {
   const chatComposerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const speechRecognitionRef = useRef(null);
   const audioChunksRef = useRef([]);
   const typingTimerRef = useRef(null);
   const recordingToastIdRef = useRef(null);
@@ -166,6 +167,12 @@ export default function SearchBar() {
       if (mediaRecorderRef.current?.state === "recording") {
         mediaRecorderRef.current.stop();
       }
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.onresult = null;
+        speechRecognitionRef.current.onerror = null;
+        speechRecognitionRef.current.onend = null;
+        speechRecognitionRef.current.stop?.();
+      }
       if (recordingToastIdRef.current) {
         toast.dismiss(recordingToastIdRef.current);
       }
@@ -198,8 +205,8 @@ export default function SearchBar() {
 
   const transcribeAudio = async (audioBlob) => {
     if (!OPENAI_API_KEY) {
-      const message = "Missing OpenAI key. Add VITE_OPENAI_API_KEY in your env.";
-      toast.error("Voice input unavailable", { description: message });
+      const message = "Missing OpenAI key. Use browser voice recognition instead.";
+      toast.error("Voice transcription unavailable", { description: message });
       return;
     }
 
@@ -263,8 +270,68 @@ export default function SearchBar() {
     }
   };
 
+  const startBrowserSpeechRecognition = () => {
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error("Voice input unavailable", {
+        description: "Speech recognition is not supported in this browser.",
+      });
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    speechRecognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    setIsRecording(true);
+    recordingToastIdRef.current = toast.loading("Listening... speak now");
+
+    recognition.onresult = (event) => {
+      const transcript = event?.results?.[0]?.[0]?.transcript?.trim() || "";
+      if (!transcript) return;
+      if (isChatOpenRef.current) {
+        setChatComposer((prev) => (prev ? `${prev.trim()} ${transcript}` : transcript));
+        focusChatComposer();
+      } else {
+        typeTextWithAnimation(transcript);
+      }
+      toast.success("Voice captured", {
+        description: isChatOpenRef.current ? "Transcript added to chat." : "Transcript added to search bar.",
+      });
+    };
+
+    recognition.onerror = (event) => {
+      toast.error("Voice input failed", {
+        description: event?.error || "Please allow mic access and try again.",
+      });
+    };
+
+    recognition.onend = () => {
+      setIsRecording(false);
+      if (recordingToastIdRef.current) {
+        toast.dismiss(recordingToastIdRef.current);
+        recordingToastIdRef.current = null;
+      }
+    };
+
+    recognition.start();
+  };
+
   const startRecording = async () => {
     clearTypingAnimation();
+
+    if (!OPENAI_API_KEY) {
+      startBrowserSpeechRecognition();
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined") {
+      startBrowserSpeechRecognition();
+      return;
+    }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       const message = "This browser does not support voice input.";
@@ -301,6 +368,10 @@ export default function SearchBar() {
 
   const stopRecording = () => {
     openChatPanel();
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop?.();
+      speechRecognitionRef.current = null;
+    }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop();
     }

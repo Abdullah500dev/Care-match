@@ -8,6 +8,8 @@ import { authServices } from "../../../services/authServices";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../../lib/authFeedback";
 
+const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
+
 export default function Register() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -50,15 +52,97 @@ export default function Register() {
       setPendingEmail((prev) => prev || emailFromQuery);
     }
 
-    if (copyFromQuery && codeFromQuery && navigator?.clipboard?.writeText) {
-      navigator.clipboard
-        .writeText(codeFromQuery)
-        .then(() => {
-          toastAuthSuccess("Code copied", "Your verification code is copied. Paste it to activate your account.");
-        })
-        .catch(() => {});
+    if (copyFromQuery && codeFromQuery) {
+      const copyWithFallback = async () => {
+        try {
+          if (navigator?.clipboard?.writeText) {
+            await navigator.clipboard.writeText(codeFromQuery);
+            toastAuthSuccess(
+              "Code copied",
+              "Your verification code is copied. Paste it to activate your account."
+            );
+            return;
+          }
+          throw new Error("Clipboard API unavailable");
+        } catch {
+          try {
+            const tempInput = document.createElement("textarea");
+            tempInput.value = codeFromQuery;
+            tempInput.setAttribute("readonly", "");
+            tempInput.style.position = "absolute";
+            tempInput.style.left = "-9999px";
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            const copied = document.execCommand("copy");
+            document.body.removeChild(tempInput);
+            if (copied) {
+              toastAuthSuccess(
+                "Code copied",
+                "Your verification code is copied. Paste it to activate your account."
+              );
+              return;
+            }
+          } catch {
+            // Keep silent and use the fallback notification below.
+          }
+          toastAuthSuccess(
+            "Code ready",
+            "We prefilled your verification code on this page. Tap Activate Account to continue."
+          );
+        }
+      };
+
+      copyWithFallback();
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!pendingEmail) return;
+
+    let cancelled = false;
+    let timerId = null;
+
+    const checkActivationStatus = async () => {
+      try {
+        const response = await authServices.activationStatus(pendingEmail);
+        const isVerified = Boolean(response?.data?.isVerified);
+        if (!cancelled && isVerified) {
+          const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
+          let nextState = { email: pendingEmail };
+          if (savedPrefill) {
+            try {
+              const parsed = JSON.parse(savedPrefill);
+              nextState = {
+                email: parsed?.email || pendingEmail,
+                password: parsed?.password || "",
+              };
+            } catch {
+              // Ignore parsing errors and continue with email only.
+            }
+          }
+          toastAuthSuccess(
+            "Account activated",
+            "Your account was activated successfully. Please sign in to continue."
+          );
+          navigate("/signin", { state: nextState });
+          return;
+        }
+      } catch {
+        // Keep polling quietly; temporary API/network errors should not break signup flow.
+      }
+
+      if (!cancelled) {
+        timerId = window.setTimeout(checkActivationStatus, 4000);
+      }
+    };
+
+    timerId = window.setTimeout(checkActivationStatus, 4000);
+
+    return () => {
+      cancelled = true;
+      if (timerId) window.clearTimeout(timerId);
+    };
+  }, [pendingEmail, navigate]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -112,6 +196,13 @@ export default function Register() {
         password: form.password,
         confirmPassword: form.confirmPassword,
       });
+      sessionStorage.setItem(
+        SIGNUP_PREFILL_KEY,
+        JSON.stringify({
+          email: form.email,
+          password: form.password,
+        })
+      );
       setPendingEmail(form.email);
       toastAuthSuccess(
         "Account created",
@@ -148,7 +239,20 @@ export default function Register() {
         "Account verified",
         response?.data?.message || "Your account is active. You can now sign in."
       );
-      navigate("/signin");
+      const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
+      let nextState = { email: pendingEmail };
+      if (savedPrefill) {
+        try {
+          const parsed = JSON.parse(savedPrefill);
+          nextState = {
+            email: parsed?.email || pendingEmail,
+            password: parsed?.password || "",
+          };
+        } catch {
+          // Ignore parsing errors and continue with email only.
+        }
+      }
+      navigate("/signin", { state: nextState });
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Verification failed",

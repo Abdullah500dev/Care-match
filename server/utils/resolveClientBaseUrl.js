@@ -16,6 +16,9 @@ const originFromUrl = (value) => {
 };
 
 const resolveRequestBase = (req) => {
+  const explicitClientBase = trimTrailingSlashes(req?.headers?.["x-client-base-url"]);
+  if (explicitClientBase) return explicitClientBase;
+
   const requestOrigin = trimTrailingSlashes(req?.headers?.origin);
   if (requestOrigin) return requestOrigin;
 
@@ -35,6 +38,7 @@ const resolveRequestBase = (req) => {
 
 export const resolveClientBaseUrl = (req) => {
   const configuredBase = [
+    process.env.MAIL_CLIENT_BASE_URL,
     process.env.CLIENT_BASE_URL,
     process.env.FRONTEND_URL,
     process.env.APP_BASE_URL,
