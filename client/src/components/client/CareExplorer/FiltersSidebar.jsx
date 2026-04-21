@@ -19,6 +19,7 @@ const FiltersSidebar = ({
   onReset,
   careTypeOptions = careTypes,
   amenityOptions = amenities,
+  onAskCarrie,
 }) => {
   const searchQuery = filters?.searchQuery ?? "";
   const maxMiles = filters?.maxMiles ?? "";
@@ -214,6 +215,7 @@ const FiltersSidebar = ({
           </div>
           <button
             type="button"
+            onClick={() => onAskCarrie?.()}
             className="w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={{ boxShadow: "0 4px 14px rgba(0, 0, 0, 0.25)" }}
           >

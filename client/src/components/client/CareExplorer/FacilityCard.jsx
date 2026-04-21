@@ -1,10 +1,12 @@
 import React from "react";
 import { Heart, Star, ArrowRight, MapPin, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=280&fit=crop";
 
 const FacilityCard = ({
+  facilityId,
   matchPercent = 96,
   category = "ASSISTED LIVING & MEMORY CARE",
   name = "Sunrise Senior Living",
@@ -23,8 +25,28 @@ const FacilityCard = ({
   sourcePlatform = "",
   compact = false,
   gridView = false,
+  isFavorite = false,
+  onToggleFavorite,
 }) => {
   const hasWebsite = typeof website === "string" && /^https?:\/\//i.test(website);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isLoggedIn = Boolean(localStorage.getItem("access_token"));
+
+  const requireLoginForFacilityAction = () => {
+    if (isLoggedIn) return true;
+    toast.info("Please sign in to continue", {
+      description: "Sign in is required to save data or interact with facilities.",
+    });
+    navigate("/signin", {
+      state: { from: location },
+    });
+    return false;
+  };
+  const handleFavoriteClick = () => {
+    if (!requireLoginForFacilityAction()) return;
+    onToggleFavorite?.(facilityId || name);
+  };
   // Dedicated, simplified card for grid view (4-per-row) – matches provided design
   if (gridView) {
     return (
@@ -48,8 +70,13 @@ const FacilityCard = ({
             type="button"
             className="absolute right-3 top-3 flex items-center justify-center rounded-full border border-white/60 bg-white/70 backdrop-blur-sm hover:bg-white/90 transition-colors h-8 w-8"
             aria-label="Save to favorites"
+            onClick={handleFavoriteClick}
           >
-            <Heart className="text-[#132329] stroke-[2] h-4 w-4" />
+            <Heart
+              className={`stroke-[2] h-4 w-4 ${
+                isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
+              }`}
+            />
           </button>
         </div>
 
@@ -72,25 +99,32 @@ const FacilityCard = ({
           {/* Buttons */}
           <div className="mt-2 sm:mt-2.5 flex gap-2 sm:gap-2.5">
             {hasWebsite ? (
-              <a
-                href={website}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={() => {
+                  if (!requireLoginForFacilityAction()) return;
+                  window.open(website, "_blank", "noopener,noreferrer");
+                }}
                 className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
               >
                 Explore
-              </a>
+              </button>
             ) : (
-              <Link
-                to="/contact"
+              <button
+                type="button"
+                onClick={() => {
+                  if (!requireLoginForFacilityAction()) return;
+                  navigate("/contact");
+                }}
                 className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
               >
                 Explore
-              </Link>
+              </button>
             )}
             <button
               type="button"
               className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
+              onClick={requireLoginForFacilityAction}
             >
               Request a Tour
             </button>
@@ -119,8 +153,13 @@ const FacilityCard = ({
           type="button"
           className={`absolute right-3 top-3 flex items-center justify-center rounded-full border border-white/60 bg-white/70 backdrop-blur-sm hover:bg-white/90 transition-colors ${compact ? "h-7 w-7" : "h-9 w-9"}`}
           aria-label="Save to favorites"
+          onClick={handleFavoriteClick}
         >
-          <Heart className={`text-[#132329] stroke-[2] ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
+          <Heart
+            className={`stroke-[2] ${compact ? "h-3.5 w-3.5" : "h-4 w-4"} ${
+              isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
+            }`}
+          />
         </button>
         {/* Distance - light backdrop blur + opacity, no border */}
         <div
@@ -225,28 +264,35 @@ const FacilityCard = ({
         {/* Buttons - full width on mobile, flex on larger */}
         <div className={`flex flex-col sm:flex-row flex-wrap ${compact ? "mt-2 gap-2 sm:gap-3" : "mt-4 sm:mt-5 gap-3 sm:gap-4"}`}>
           {hasWebsite ? (
-            <a
-              href={website}
-              target="_blank"
-              rel="noreferrer"
+            <button
+              type="button"
+              onClick={() => {
+                if (!requireLoginForFacilityAction()) return;
+                window.open(website, "_blank", "noopener,noreferrer");
+              }}
               className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
               style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
             >
               Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
-            </a>
+            </button>
           ) : (
-            <Link
-              to="/contact"
+            <button
+              type="button"
+              onClick={() => {
+                if (!requireLoginForFacilityAction()) return;
+                navigate("/contact");
+              }}
               className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
               style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
             >
               Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
-            </Link>
+            </button>
           )}
           <button
             type="button"
             className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
             style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
+            onClick={requireLoginForFacilityAction}
           >
             {sourcePlatform ? `Visit ${sourcePlatform}` : "Request a Tour"}
           </button>

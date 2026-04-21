@@ -234,7 +234,11 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const msg = data?.error?.message || `OpenAI error (${response.status})`;
+      const rawMsg = String(data?.error?.message || "").trim();
+      const isInvalidKey = /incorrect api key|invalid api key|api key/i.test(rawMsg);
+      const msg = isInvalidKey
+        ? "Carrie is temporarily unavailable due to OpenAI configuration. Please contact support."
+        : rawMsg || `OpenAI error (${response.status})`;
       throw new ErrorHandler(msg, response.status >= 500 ? 502 : 400);
     }
     return data;

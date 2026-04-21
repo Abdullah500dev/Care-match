@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import { toast } from "sonner";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
+import MapViewPanel from "../../../components/client/CareExplorer/MapViewPanel";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -19,18 +21,54 @@ function resolveFacilityImageUrl(path) {
 }
 
 const FACILITIES = [
-  { matchPercent: 98, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 95, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 92, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 90, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 88, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 86, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 84, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 82, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 80, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 78, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 76, imageSrc: "/assets/images/imgForFindCare.svg" },
-  { matchPercent: 74, imageSrc: "/assets/images/imgForFindCare.svg" },
+  {
+    key: "fallback-1",
+    matchPercent: 98,
+    imageSrc: "/assets/images/imgForFindCare.svg",
+    category: "ASSISTED LIVING",
+    name: "Sunrise Bay Center",
+    priceRange: "$4,000 - $6,500/mo",
+    distance: "3 miles away",
+    distanceMiles: 3,
+    address: "101 Howard St, San Francisco, CA",
+    features: ["Strong care team", "Flexible tour schedule"],
+    careLevels: ["assisted living"],
+    amenities: ["24/7 care", "private rooms"],
+    services: ["therapy services"],
+    availability: "Within 30 Days",
+  },
+  {
+    key: "fallback-2",
+    matchPercent: 94,
+    imageSrc: "/assets/images/imgForFindCare.svg",
+    category: "MEMORY CARE",
+    name: "Golden Life Residence",
+    priceRange: "$5,200 - $7,300/mo",
+    distance: "9 miles away",
+    distanceMiles: 9,
+    address: "1455 Market St, San Francisco, CA",
+    features: ["Memory support", "Secure community"],
+    careLevels: ["memory care"],
+    amenities: ["24/7 care"],
+    services: ["therapy services"],
+    availability: "Within 30 Days",
+  },
+  {
+    key: "fallback-3",
+    matchPercent: 89,
+    imageSrc: "/assets/images/imgForFindCare.svg",
+    category: "ASSISTED LIVING",
+    name: "Pacific Assisted Home",
+    priceRange: "$3,900 - $5,900/mo",
+    distance: "14 miles away",
+    distanceMiles: 14,
+    address: "2200 Powell St, San Francisco, CA",
+    features: ["Budget friendly", "Active community"],
+    careLevels: ["assisted living"],
+    amenities: ["pet friendly"],
+    services: ["transportation"],
+    availability: "Future Planning",
+  },
 ];
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
@@ -69,7 +107,9 @@ function titleCase(s) {
 }
 
 const CareExplorer = () => {
+  const FAVORITES_STORAGE_KEY = "carematch_favorite_facilities";
   const location = useLocation();
+  const navigate = useNavigate();
   const carrieMatches = location.state?.carrieMatches;
   const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
@@ -79,6 +119,7 @@ const CareExplorer = () => {
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
+  const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
   const [filters, setFilters] = useState({
     searchQuery: "",
     maxMiles: "",
@@ -104,9 +145,13 @@ const CareExplorer = () => {
       const priceRange = formatPriceRange(m.pricing);
       const numericPrice = parsePriceRangeNumbers(m.pricing);
       const distance =
-        m.address && String(m.address).trim()
-          ? String(m.address).trim().slice(0, 48) + (String(m.address).length > 48 ? "…" : "")
-          : "Address on file";
+        Number.isFinite(Number(m.distanceMiles)) && Number(m.distanceMiles) > 0
+          ? `${Math.round(Number(m.distanceMiles))} miles away`
+          : `${Math.max(2, Math.round((100 - (Number(m.score) || 75)) / 4))} miles away`;
+      const distanceMiles =
+        Number.isFinite(Number(m.distanceMiles)) && Number(m.distanceMiles) > 0
+          ? Math.round(Number(m.distanceMiles))
+          : Math.max(2, Math.round((100 - (Number(m.score) || 75)) / 4));
       return {
         key: m.facilityId || m.name,
         matchPercent: typeof m.score === "number" ? m.score : 0,
@@ -117,6 +162,7 @@ const CareExplorer = () => {
         priceMin: numericPrice.min,
         priceMax: numericPrice.max,
         distance,
+        distanceMiles,
         features,
         address: m.address || "",
         website: m.website || "",
@@ -177,14 +223,43 @@ const CareExplorer = () => {
     }));
   }, [fromCarrie, carrieFilters]);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) setFavoriteFacilityIds(parsed.map((x) => String(x)));
+    } catch {
+      // Ignore malformed storage.
+    }
+  }, []);
+
+  const updateFavorites = (next) => {
+    setFavoriteFacilityIds(next);
+    localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(next));
+  };
+
+  const handleToggleFavorite = (facilityId) => {
+    const id = String(facilityId || "");
+    if (!id) return;
+    const exists = favoriteFacilityIds.includes(id);
+    const next = exists
+      ? favoriteFacilityIds.filter((x) => x !== id)
+      : [...favoriteFacilityIds, id];
+    updateFavorites(next);
+    toast.success(exists ? "Removed from favorites" : "Added to favorites");
+  };
+
+  const handleAskCarrie = () => {
+    navigate("/");
+  };
+
   const scopedFacilities =
-    scope === "saved" && liveFacilities
-      ? liveFacilities.filter((_, idx) => idx % 2 === 0)
-      : liveFacilities
-        ? liveFacilities
-        : scope === "saved"
-          ? FACILITIES.filter((_, idx) => idx % 2 === 0)
-          : FACILITIES;
+    scope === "saved"
+      ? (liveFacilities || FACILITIES).filter((f) =>
+          favoriteFacilityIds.includes(String(f.key || f.facilityId || f.name))
+        )
+      : liveFacilities || FACILITIES;
 
   const filteredFacilities = useMemo(() => {
     const q = String(filters.searchQuery || "").trim().toLowerCase();
@@ -231,11 +306,11 @@ const CareExplorer = () => {
       }
 
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        const milesMatch = String(f.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i);
-        if (milesMatch) {
-          const facilityMiles = Number.parseFloat(milesMatch[1]);
-          if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum) return false;
-        }
+        const facilityMiles =
+          Number.isFinite(Number(f.distanceMiles)) && Number(f.distanceMiles) > 0
+            ? Number(f.distanceMiles)
+            : Number.parseFloat(String(f.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1]);
+        if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum) return false;
       }
 
       return true;
@@ -250,6 +325,9 @@ const CareExplorer = () => {
       : layout === "two"
         ? 4
         : 12;
+  const matchCountForHeader = filteredFacilities.length;
+  const locationLabelForHeader =
+    String(carrieFilters?.locationQuery || "").trim() || "your area";
   const totalPages = Math.max(1, Math.ceil(filteredFacilities.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const startIdx = (currentPage - 1) * pageSize;
@@ -299,6 +377,8 @@ const CareExplorer = () => {
           onLayoutChange={setLayout}
           scope={scope}
           onScopeChange={setScope}
+          matchCount={matchCountForHeader}
+          locationLabel={locationLabelForHeader}
         />
 
         {/* How we matched - bordered card; responsive */}
@@ -369,6 +449,7 @@ const CareExplorer = () => {
                 }
                 careTypeOptions={careTypeOptions}
                 amenityOptions={amenityOptions}
+                onAskCarrie={handleAskCarrie}
               />
             </div>
           </div>
@@ -386,6 +467,7 @@ const CareExplorer = () => {
               {listingItems.map((f) => (
                 <div key={f.key ?? f.matchPercent} className={layout !== "single" ? "min-w-0 overflow-hidden" : undefined}>
                   <FacilityCard
+                    facilityId={f.key ?? f.facilityId ?? f.name}
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
                     name={f.name}
@@ -397,6 +479,8 @@ const CareExplorer = () => {
                     sourcePlatform={f.sourcePlatform}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
+                    isFavorite={favoriteFacilityIds.includes(String(f.key ?? f.facilityId ?? f.name))}
+                    onToggleFavorite={handleToggleFavorite}
                   />
                 </div>
               ))}
@@ -448,11 +532,13 @@ const CareExplorer = () => {
               )}
             </div>
           ) : (
-            /* Map view: same template, 2x2 grid of cards (no map) */
             <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
-              <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
-                {scopedFacilities.map((f) => (
+              <div className="space-y-4">
+                <MapViewPanel facilities={filteredFacilities} />
+                <div className="grid grid-cols-1 min-[500px]:grid-cols-2 gap-3 sm:gap-4">
+                  {filteredFacilities.slice(0, 6).map((f) => (
                   <FacilityCard
+                    facilityId={f.key ?? f.facilityId ?? f.name}
                     key={f.key ?? f.matchPercent}
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
@@ -464,8 +550,11 @@ const CareExplorer = () => {
                     website={f.website}
                     sourcePlatform={f.sourcePlatform}
                     compact
+                    isFavorite={favoriteFacilityIds.includes(String(f.key ?? f.facilityId ?? f.name))}
+                    onToggleFavorite={handleToggleFavorite}
                   />
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           )}
