@@ -90,6 +90,38 @@ const inferBudgetFromMessages = (msgs) => {
   return null;
 };
 
+const inferCareLevelsFromMessages = (msgs) => {
+  const text = msgs
+    .filter((m) => m.role === "user")
+    .map((m) => String(m.content || ""))
+    .join(" \n ")
+    .toLowerCase();
+  const levels = new Set();
+  if (/\bskilled nursing|snf|nursing home|subacute\b/i.test(text)) levels.add("skilled nursing");
+  if (/\bmemory care|dementia|alzheimer\b/i.test(text)) levels.add("memory care");
+  if (/\bassisted living|assisted\b/i.test(text)) levels.add("assisted living");
+  if (/\bindependent living|independent\b/i.test(text)) levels.add("independent living");
+  return [...levels];
+};
+
+const inferLocationFromMessages = (msgs) => {
+  const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
+  for (let i = users.length - 1; i >= 0; i -= 1) {
+    const text = users[i];
+    const m = text.match(
+      /\b(?:in|near|around|close to|within)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}(?:\s*,\s*[A-Z]{2})?)/g
+    );
+    if (!m || m.length === 0) continue;
+    const last = m[m.length - 1].match(
+      /\b(?:in|near|around|close to|within)\s+(.+)$/i
+    );
+    if (!last?.[1]) continue;
+    const candidate = last[1].trim().replace(/[.?!,;:]+$/, "");
+    if (candidate.length >= 3) return candidate;
+  }
+  return "";
+};
+
 /**
  * POST /api/chat
  * Body: { messages: { role: "user"|"assistant", content: string }[] }
@@ -139,13 +171,29 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     /\b(match|recommend|recommendation|rank|best fit|find|looking for|need|help me find|facility near|near me)\b/i.test(
       fullThreadText
     );
-  const explicitMatchNow = /\b(show|give|get)\s+(me\s+)?(my\s+)?(matches|results|rankings?|recommendations?)\b/i.test(
-    latestUserText
-  );
+  const explicitMatchNow =
+    /\b(show|give|get)\s+(me\s+|my\s+|our\s+)?(?:best\s+|top\s+|ranked\s+)?(matches|results|rankings?|recommendations?)\b/i.test(
+      latestUserText
+    ) ||
+    /\b(show|give|get).{0,60}\b(matches|results|rankings?|recommendations?)\b/i.test(
+      latestUserText
+    );
 
   const preludeUsed = hasMatchIntent ? 0 : Math.min(PRELUDE_MAX_USER_MESSAGES, userMessageCount);
   const intakeAnswerCount = Math.max(0, userMessageCount - preludeUsed);
-  const shouldReturnResults = intakeAnswerCount > QUESTION_COUNT || explicitMatchNow;
+  const inferredBudget = inferBudgetFromMessages(sanitized);
+  const inferredCareLevels = inferCareLevelsFromMessages(sanitized);
+  const inferredLocation = inferLocationFromMessages(sanitized);
+  const missingEssentials = [
+    ...(inferredCareLevels.length > 0 ? [] : ["care needs"]),
+    ...(inferredLocation ? [] : ["location"]),
+    ...(inferredBudget ? [] : ["budget"]),
+  ];
+  const essentialPointCount = 3 - missingEssentials.length;
+  const shouldReturnResults =
+    explicitMatchNow ||
+    essentialPointCount >= 3 ||
+    intakeAnswerCount >= QUESTION_COUNT;
 
   const callOpenAI = async (payload) => {
     let response;
@@ -181,9 +229,13 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     const stageRules =
       `CONVERSATION_RULES (server):\n` +
       `- User messages so far: ${userMessageCount}.\n` +
+      `- Collected essential intake points: ${essentialPointCount}/3 (care needs, location, budget).\n` +
+      `- Missing essentials (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
       `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until the user has sent **at least ${minMessagesBeforeJson}** messages, **unless** they clearly insist on seeing matches right now and you can honestly fill the JSON from the thread.\n` +
       `- If you are not outputting that JSON block yet, **do not** include those delimiters at all.\n` +
-      `- Keep replies feeling human; one gentle question max when you need info.`;
+      `- Keep replies feeling human; one gentle question max when you need info.\n` +
+      `- If essentials are missing, ask ONLY about one missing essential from the list above; do not ask unrelated follow-ups.\n` +
+      `- If essentials are all present, do not ask more intake questions; tell the user to say "show results" or "show matches" to proceed immediately.`;
 
     const conversationSystem =
       process.env.CAREMATCH_CHAT_SYSTEM_PROMPT?.trim() ||
@@ -265,7 +317,6 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   let matchedPreferences = null;
   if (rawPrefs) {
     const prefs = normalizeIntakePreferences(rawPrefs);
-    const inferredBudget = inferBudgetFromMessages(sanitized);
     if (prefs && (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) && inferredBudget) {
       prefs.budgetMaxMonthly = inferredBudget;
     }
