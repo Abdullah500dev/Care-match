@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
+import { postMatchRecommendations } from "@/services/matchService";
 
 const BUDGET_SLIDER_MIN = 2000;
 const BUDGET_SLIDER_MAX = 15000;
@@ -134,6 +135,33 @@ const defaultFormData = {
 };
 
 const FINDING_MATCHES_DURATION_MS = 4000;
+const TIMELINE_TO_AVAILABILITY = {
+  immediately: "Immediate",
+  within30: "Within 30 Days",
+  within60: "Future Planning",
+  noRush: "Future Planning",
+};
+const LEVEL_TO_CARE_LEVEL = {
+  assisted: "assisted living",
+  independent: "independent living",
+  memory: "memory care",
+  snf: "skilled nursing",
+};
+const CARE_TO_AMENITY = {
+  dailyActivities: "24/7 Care",
+  memoryCare: "Memory Care",
+  medication: "Medication Management",
+  mobilityAssist: "Mobility Assistance",
+  medicalMonitoring: "Medical Monitoring",
+  socialEngagement: "Social Engagement",
+};
+const SPECIAL_NEED_TO_AMENITY = {
+  privateRoom: "Private Rooms",
+  petFriendly: "Pet Friendly",
+  physicalTherapy: "Therapy Services",
+  respiratory: "Respiratory Support",
+  dialysis: "Dialysis Access",
+};
 
 export default function IntakeSearch() {
   const navigate = useNavigate();
@@ -145,12 +173,89 @@ export default function IntakeSearch() {
 
   useEffect(() => {
     if (!isFindingMatches) return;
-    const t = setTimeout(() => {
-      console.log("Search criteria:", formData);
-      navigate("/care-explorer");
-    }, FINDING_MATCHES_DURATION_MS);
-    return () => clearTimeout(t);
-  }, [isFindingMatches, navigate]);
+    let cancelled = false;
+    const runMatch = async () => {
+      const careLevels = [];
+      if (formData.levelOfCare && LEVEL_TO_CARE_LEVEL[formData.levelOfCare]) {
+        careLevels.push(LEVEL_TO_CARE_LEVEL[formData.levelOfCare]);
+      }
+
+      const amenityMustHaves = [
+        ...(formData.lovedOneCare || []).map((id) => CARE_TO_AMENITY[id]).filter(Boolean),
+        ...(formData.specialNeedsPreferences || [])
+          .map((id) => SPECIAL_NEED_TO_AMENITY[id])
+          .filter(Boolean),
+      ];
+
+      const matcherPayload = {
+        careLevels: [...new Set(careLevels)],
+        amenityMustHaves: [...new Set(amenityMustHaves)],
+        budgetMaxMonthly: Number(formData.budgetMax) || null,
+        searchLocation: String(formData.location || "").trim(),
+        maxDistanceMiles: Number(formData.maxTravelMiles) || null,
+        visitationImportance: "medium",
+        personalityNotes: "",
+        snfReadiness: formData.levelOfCare === "snf",
+      };
+
+      const startedAt = Date.now();
+      try {
+        const { data } = await postMatchRecommendations(matcherPayload);
+        if (cancelled) return;
+
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
+        window.setTimeout(() => {
+          if (cancelled) return;
+          const mappedFilters = {
+            locationQuery: matcherPayload.searchLocation,
+            budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
+            maxDistanceMiles: matcherPayload.maxDistanceMiles,
+            careLevels: matcherPayload.careLevels,
+            amenityMustHaves: matcherPayload.amenityMustHaves,
+            availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+          };
+          const recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
+          navigate("/care-explorer", {
+            state: {
+              fromCarrie: true,
+              carrieMatches: recs,
+              carrieFilters: mappedFilters,
+            },
+          });
+        }, remaining);
+      } catch {
+        if (cancelled) return;
+        const elapsed = Date.now() - startedAt;
+        const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
+        window.setTimeout(() => {
+          if (cancelled) return;
+          navigate("/care-explorer", {
+            state: {
+              fromCarrie: true,
+              carrieMatches: [],
+              carrieFilters: {
+                locationQuery: String(formData.location || "").trim(),
+                budgetMaxMonthly: Number(formData.budgetMax) || null,
+                maxDistanceMiles: Number(formData.maxTravelMiles) || null,
+                careLevels:
+                  formData.levelOfCare && LEVEL_TO_CARE_LEVEL[formData.levelOfCare]
+                    ? [LEVEL_TO_CARE_LEVEL[formData.levelOfCare]]
+                    : [],
+                amenityMustHaves: [],
+                availability:
+                  TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+              },
+            },
+          });
+        }, remaining);
+      }
+    };
+    runMatch();
+    return () => {
+      cancelled = true;
+    };
+  }, [isFindingMatches, navigate, formData]);
 
   const goBack = () => {
     if (step > 1) setStep((s) => s - 1);
