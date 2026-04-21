@@ -9,6 +9,8 @@ export const authServices = {
   login: (payload) => apiClient.post(`${AUTH_BASE}/login`, payload),
   resendVerificationCode: (payload) =>
     apiClient.post(`${AUTH_BASE}/request/token/new`, payload),
+  activationStatus: (email) =>
+    apiClient.get(`${AUTH_BASE}/activation-status`, { params: { email } }),
   forgotPassword: (payload) =>
     apiClient.post(`${AUTH_BASE}/password/reset`, payload),
   resetPassword: ({ token, ...payload }) =>

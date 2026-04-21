@@ -1,6 +1,12 @@
-﻿import { Suspense, lazy, useRef, useState, useEffect } from "react";
+import { Suspense, lazy, useRef, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useLocation,
+  Navigate,
+} from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { ChevronUp } from "lucide-react";
 
@@ -40,29 +46,47 @@ const lazyWithRetry = (importFn) =>
   });
 
 // dashboard pages (lazy - less frequently used)
-const DashboardHome = lazyWithRetry(() => import("../pages/dashboard/DashboardHome"));
-const DashboardResidents = lazyWithRetry(() => import("../pages/dashboard/Residents"));
-const DashboardCommunities = lazyWithRetry(() => import("../pages/dashboard/Communities"));
-const DashboardSNFPartners = lazyWithRetry(() =>
-  import("../pages/dashboard/SNFPartners/index")
+const DashboardHome = lazyWithRetry(
+  () => import("../pages/dashboard/DashboardHome"),
 );
-const DashboardMessages = lazyWithRetry(() => import("../pages/dashboard/Messages"));
-const DashboardSettings = lazyWithRetry(() => import("../pages/dashboard/Settings"));
-const DashboardCalendar = lazyWithRetry(() => import("../pages/dashboard/Calendar"));
-const DashboardAnalytics = lazyWithRetry(() => import("../pages/dashboard/Analytics"));
-const UserDashboardHome = lazyWithRetry(() => import("../pages/userDashboard/UserDashboardHome"));
-const UserDashboardMessages = lazyWithRetry(() =>
-  import("../pages/userDashboard/UserDashboardMessages")
+const DashboardResidents = lazyWithRetry(
+  () => import("../pages/dashboard/Residents"),
 );
-const UserDashboardSettings = lazyWithRetry(() =>
-  import("../pages/userDashboard/UserDashboardSettings")
+const DashboardCommunities = lazyWithRetry(
+  () => import("../pages/dashboard/Communities"),
 );
-const UserDashboardFacilities = lazyWithRetry(() =>
-  import("../pages/userDashboard/UserDashboardFacilities")
+const DashboardSNFPartners = lazyWithRetry(
+  () => import("../pages/dashboard/SNFPartners/index"),
 );
-const FacilityDashboardHome = lazyWithRetry(() => import("../pages/facilityDashboard/FacilityDashboardHome"));
-const FacilityDashboardFacilities = lazyWithRetry(() =>
-  import("../pages/facilityDashboard/FacilityDashboardFacilities")
+const DashboardMessages = lazyWithRetry(
+  () => import("../pages/dashboard/Messages"),
+);
+const DashboardSettings = lazyWithRetry(
+  () => import("../pages/dashboard/Settings"),
+);
+const DashboardCalendar = lazyWithRetry(
+  () => import("../pages/dashboard/Calendar"),
+);
+const DashboardAnalytics = lazyWithRetry(
+  () => import("../pages/dashboard/Analytics"),
+);
+const UserDashboardHome = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardHome"),
+);
+const UserDashboardMessages = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardMessages"),
+);
+const UserDashboardSettings = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardSettings"),
+);
+const UserDashboardFacilities = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardFacilities"),
+);
+const FacilityDashboardHome = lazyWithRetry(
+  () => import("../pages/facilityDashboard/FacilityDashboardHome"),
+);
+const FacilityDashboardFacilities = lazyWithRetry(
+  () => import("../pages/facilityDashboard/FacilityDashboardFacilities"),
 );
 
 import Header from "../components/client/Header";
@@ -93,7 +117,9 @@ const RequireAuth = ({ children }) => {
   const dispatch = useDispatch();
   const location = useLocation();
   const currentToken = token || localStorage.getItem("access_token");
-  const canAccessDashboard = Boolean(isAuthenticated && currentToken && !isJwtExpired(currentToken));
+  const canAccessDashboard = Boolean(
+    isAuthenticated && currentToken && !isJwtExpired(currentToken),
+  );
 
   if (!canAccessDashboard) {
     clearPersistedAuthTokens();
@@ -108,19 +134,29 @@ const getHomeByRole = (userData) => {
   const role = userData?.role;
   const userType = userData?.user_type;
 
-  if (["admin", "authenticator", "moderator"].includes(userType)) return "/admin";
+  if (["admin", "authenticator", "moderator"].includes(userType))
+    return "/admin";
   if (role === "facility") return "/facility";
-  if (role === "user") return "/portal";
-  return "/admin";
+  if (role === "user") return "/";
+  // Default unknown/non-staff users to website home to avoid accidental admin redirects.
+  return "/";
 };
 
 const RequireUserRole = ({ children }) => {
   const { userData } = useSelector(getUser);
   const location = useLocation();
-  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userData?.user_type);
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(
+    userData?.user_type,
+  );
 
   if (isAdminStaff || userData?.role !== "user") {
-    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to={getHomeByRole(userData)}
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   return children;
@@ -129,10 +165,18 @@ const RequireUserRole = ({ children }) => {
 const RequireFacilityRole = ({ children }) => {
   const { userData } = useSelector(getUser);
   const location = useLocation();
-  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userData?.user_type);
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(
+    userData?.user_type,
+  );
 
   if (isAdminStaff || userData?.role !== "facility") {
-    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to={getHomeByRole(userData)}
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   return children;
@@ -142,10 +186,18 @@ const RequireAdminDashboard = ({ children }) => {
   const { userData } = useSelector(getUser);
   const location = useLocation();
   const userType = userData?.user_type;
-  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(userType);
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(
+    userType,
+  );
 
   if (!isAdminStaff) {
-    return <Navigate to={getHomeByRole(userData)} replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to={getHomeByRole(userData)}
+        replace
+        state={{ from: location }}
+      />
+    );
   }
 
   return children;
@@ -163,56 +215,38 @@ const Layout = ({ children }) => {
   const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Button only when user has scrolled past the trigger (never on hero).
-  const showScrollToTop = !isDashboardRoute && scrollPastThreshold && !isChatOpen;
+  const showScrollToTop = scrollPastThreshold && !isChatOpen;
 
-  // On home: trigger is below hero; use bottom rootMargin so button stays hidden when trigger is just below fold.
-  // Defer observer setup on home so #scroll-to-top-trigger (rendered by Home) exists in the DOM; reset state when landing on home.
+  const getCurrentScrollTop = () =>
+    window.scrollY ||
+    document.documentElement.scrollTop ||
+    document.scrollingElement?.scrollTop ||
+    document.body.scrollTop ||
+    0;
+
+  // Keep scroll-to-top visibility tied directly to current scroll position.
   useEffect(() => {
-    if (isDashboardRoute) return;
-    if (isHomePage) setScrollPastThreshold(false);
-
-    const triggerId = isHomePage ? "scroll-to-top-trigger" : "page-top";
-
-    const setupObserver = () => {
-      const el = document.getElementById(triggerId);
-      if (!el) return null;
-      // Larger bottom margin on home so the button only shows after scrolling well past the Gallery (trigger must be above viewport).
-      const rootMargin = isHomePage ? "0px 0px 100% 0px" : "0px";
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.target.id !== triggerId) return;
-            // On home: once user scrolls past the trigger, keep the button visible (don't hide when trigger re-enters view).
-            if (isHomePage) {
-              if (!entry.isIntersecting) setScrollPastThreshold(true);
-            } else {
-              setScrollPastThreshold(!entry.isIntersecting);
-            }
-          });
-        },
-        { threshold: 0, rootMargin }
-      );
-      observer.observe(el);
-      return observer;
+    const getDashboardScrollTop = () => {
+      const dashboardMain = document.querySelector("main.overflow-y-auto");
+      return dashboardMain?.scrollTop || 0;
     };
 
-    let observer = null;
-    let retryId = null;
-    if (isHomePage) {
-      const trySetup = () => {
-        observer = setupObserver();
-        if (!observer) retryId = setTimeout(trySetup, 80);
-      };
-      const t = setTimeout(trySetup, 0);
-      return () => {
-        clearTimeout(t);
-        if (retryId) clearTimeout(retryId);
-        observer?.disconnect();
-      };
-    }
-    observer = setupObserver();
-    return () => observer?.disconnect();
-  }, [location.pathname, isDashboardRoute, isHomePage]);
+    const onScroll = () => {
+      const top = Math.max(getCurrentScrollTop(), getDashboardScrollTop());
+      setScrollPastThreshold(top > 24);
+    };
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [location.pathname]);
 
   useEffect(() => {
     const onChatOpenChange = (event) => {
@@ -220,13 +254,21 @@ const Layout = ({ children }) => {
     };
     window.addEventListener("carematch:chat-open-change", onChatOpenChange);
     return () => {
-      window.removeEventListener("carematch:chat-open-change", onChatOpenChange);
+      window.removeEventListener(
+        "carematch:chat-open-change",
+        onChatOpenChange,
+      );
     };
   }, []);
 
   const scrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    topAnchorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    document
+      .getElementById("page-top")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
     document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
     document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
     document.body.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -253,7 +295,7 @@ const Layout = ({ children }) => {
           >
             <ChevronUp className="h-7 w-7" />
           </button>,
-          document.body
+          document.body,
         )}
     </>
   );
@@ -282,7 +324,10 @@ export default function Navigation() {
               <Route path="/signin" element={<Signin />} />
               <Route path="/login" element={<Signin />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/api/auth/reset-password" element={<ResetPassword />} />
+              <Route
+                path="/api/auth/reset-password"
+                element={<ResetPassword />}
+              />
               <Route path="/reset-password" element={<ResetPassword />} />
 
               <Route path="/admin/login" element={<AdminSignin />} />
@@ -320,7 +365,10 @@ export default function Navigation() {
                 }
               >
                 <Route index element={<UserDashboardHome />} />
-                <Route path="communities" element={<UserDashboardFacilities />} />
+                <Route
+                  path="communities"
+                  element={<UserDashboardFacilities />}
+                />
                 <Route path="messages" element={<UserDashboardMessages />} />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
@@ -337,7 +385,10 @@ export default function Navigation() {
                 }
               >
                 <Route index element={<FacilityDashboardHome />} />
-                <Route path="communities" element={<FacilityDashboardFacilities />} />
+                <Route
+                  path="communities"
+                  element={<FacilityDashboardFacilities />}
+                />
                 <Route path="messages" element={<UserDashboardMessages />} />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>

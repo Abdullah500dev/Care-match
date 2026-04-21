@@ -18,6 +18,9 @@ export const getAuthToken = () => localStorage.getItem("access_token");
 apiClient.interceptors.request.use((config) => {
   const token = getAuthToken();
   if (token) config.headers["access-token"] = token;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    config.headers["x-client-base-url"] = window.location.origin;
+  }
 
   // Let browser set multipart boundary for FormData requests.
   if (typeof FormData !== "undefined" && config.data instanceof FormData) {
