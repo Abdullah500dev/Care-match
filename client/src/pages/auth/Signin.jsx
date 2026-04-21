@@ -9,6 +9,7 @@ import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import SEO from "../../components/common/SEO";
 
 const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
+const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
 
 function Signin() {
     const dispatch = useDispatch();
@@ -16,6 +17,60 @@ function Signin() {
     const location = useLocation();
     const [showPassword, setShowPassword] = useState(false);
     const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
+    const fromState = location.state?.from;
+
+    const getPostLoginRedirect = () => {
+      if (!fromState) return null;
+      if (typeof fromState === "string") {
+        if (
+          fromState.startsWith("/signin") ||
+          fromState.startsWith("/register") ||
+          fromState.startsWith("/admin/login")
+        ) {
+          return null;
+        }
+        return { pathname: fromState, search: "", hash: "", state: undefined };
+      }
+      if (typeof fromState === "object" && typeof fromState.pathname === "string") {
+        if (
+          fromState.pathname.startsWith("/signin") ||
+          fromState.pathname.startsWith("/register") ||
+          fromState.pathname.startsWith("/admin/login")
+        ) {
+          return null;
+        }
+        return {
+          pathname: fromState.pathname,
+          search: fromState.search || "",
+          hash: fromState.hash || "",
+          state: fromState.state,
+        };
+      }
+      return null;
+    };
+    const getStoredPostLoginRedirect = () => {
+      try {
+        const raw = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed.pathname !== "string") return null;
+        if (
+          parsed.pathname.startsWith("/signin") ||
+          parsed.pathname.startsWith("/register") ||
+          parsed.pathname.startsWith("/admin/login")
+        ) {
+          return null;
+        }
+        return {
+          pathname: parsed.pathname,
+          search: parsed.search || "",
+          hash: parsed.hash || "",
+          state: parsed.state,
+        };
+      } catch {
+        return null;
+      }
+    };
 
     React.useEffect(() => {
       const stateEmail = location.state?.email || "";
@@ -66,10 +121,26 @@ function Signin() {
             sessionStorage.removeItem(SIGNUP_PREFILL_KEY);
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
+            const redirect = getPostLoginRedirect() || getStoredPostLoginRedirect();
+            sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
             if (role === "facility") {
-              navigate("/facility");
+              navigate(redirect ? redirect.pathname : "/facility", {
+                replace: true,
+                state: redirect?.state,
+              });
             } else {
-              navigate("/");
+              if (redirect) {
+                navigate(
+                  {
+                    pathname: redirect.pathname,
+                    search: redirect.search,
+                    hash: redirect.hash,
+                  },
+                  { replace: true, state: redirect.state },
+                );
+              } else {
+                navigate("/", { replace: true });
+              }
             }
         } catch (error) {
             toastAuthError(error, {
