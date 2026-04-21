@@ -8,6 +8,8 @@ const CareExplorerBar = ({
   onLayoutChange,
   scope = "all",
   onScopeChange,
+  matchCount = 0,
+  locationLabel = "your area",
 }) => {
   const isListing = view === "listing";
   const isMapView = view === "map";
@@ -27,8 +29,8 @@ const CareExplorerBar = ({
           <div className="min-w-0">
             <h2 className="font-bold text-[#132329] text-sm sm:text-base truncate">Care Explorer</h2>
             <p className="text-xs text-[#64748b] truncate">
-              5 personalized matches in{" "}
-              <span className="text-[#16191d] font-bold">San Francisco</span>
+              {matchCount} personalized {matchCount === 1 ? "match" : "matches"} in{" "}
+              <span className="text-[#16191d] font-bold">{locationLabel}</span>
             </p>
           </div>
         </div>

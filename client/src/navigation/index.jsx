@@ -224,6 +224,22 @@ const Layout = ({ children }) => {
     document.body.scrollTop ||
     0;
 
+  const getCurrentScrollPercent = () => {
+    const scrollTop = getCurrentScrollTop();
+    const doc = document.documentElement;
+    const body = document.body;
+    const scrollHeight = Math.max(
+      doc?.scrollHeight || 0,
+      body?.scrollHeight || 0,
+      doc?.offsetHeight || 0,
+      body?.offsetHeight || 0,
+    );
+    const viewportHeight = window.innerHeight || doc?.clientHeight || 0;
+    const scrollableHeight = Math.max(scrollHeight - viewportHeight, 0);
+    if (scrollableHeight <= 0) return 0;
+    return scrollTop / scrollableHeight;
+  };
+
   // Keep scroll-to-top visibility tied directly to current scroll position.
   useEffect(() => {
     const getDashboardScrollTop = () => {
@@ -233,7 +249,9 @@ const Layout = ({ children }) => {
 
     const onScroll = () => {
       const top = Math.max(getCurrentScrollTop(), getDashboardScrollTop());
-      setScrollPastThreshold(top > 24);
+      const percent = getCurrentScrollPercent();
+      const homeThresholdPercent = 0.12; // show around 10-15% page scroll
+      setScrollPastThreshold(top > 24 && percent >= homeThresholdPercent);
     };
 
     onScroll();
