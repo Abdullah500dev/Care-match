@@ -42,6 +42,20 @@ const toArray = (value) => {
   return [];
 };
 
+const toOptionalString = (value) => {
+  if (value == null) return "";
+  return String(value).trim();
+};
+
+const syntheticExternalEmail = (sourcePlatform, externalRef) => {
+  const seed = `${sourcePlatform || "external"}-${externalRef || Date.now()}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  return `${seed || "external-facility"}@external.carematch.local`;
+};
+
 const generateTemporaryPassword = () => {
   const random = crypto.randomBytes(8).toString("base64url").slice(0, 8);
   return `CmAI!${random}9`;
@@ -60,6 +74,9 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    website,
+    specialty,
+    description,
     services,
     amenities,
     care_levels,
@@ -86,6 +103,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
   const temporaryPassword = generateTemporaryPassword();
   const normalizedServices = toArray(services);
   const normalizedAmenities = toArray(amenities);
+  const normalizedSpecialty = toArray(specialty);
   const normalizedUnits = Number(units) || 0;
   const normalizedOccupancy = Number(occupancy) || 0;
   const normalizedActiveLeads = Number(active_leads) || 0;
@@ -109,6 +127,9 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    website: toOptionalString(website),
+    specialty: normalizedSpecialty,
+    description: toOptionalString(description),
     services: normalizedServices,
     amenities: normalizedAmenities,
     care_levels: normalizedCareLevels,
@@ -239,6 +260,9 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
     phone,
     address,
     pricing,
+    website,
+    specialty,
+    description,
     services,
     amenities,
     care_levels,
@@ -269,6 +293,16 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
 
   if (pricing != null) {
     facility.pricing = String(pricing).trim();
+  }
+
+  if (website != null) {
+    facility.website = toOptionalString(website);
+  }
+  if (specialty != null) {
+    facility.specialty = toArray(specialty);
+  }
+  if (description != null) {
+    facility.description = toOptionalString(description);
   }
 
   if (services != null) {
@@ -335,6 +369,9 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    website,
+    specialty,
+    description,
     services,
     amenities,
     care_levels,
@@ -353,6 +390,7 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   const normalizedServices = toArray(services);
   const normalizedAmenities = toArray(amenities);
   const normalizedCareLevels = toArray(care_levels);
+  const normalizedSpecialty = toArray(specialty);
   const normalizedUnits = Number(units) || 0;
   const normalizedOccupancy = Number(occupancy) || 0;
   const normalizedActiveLeads = Number(active_leads) || 0;
@@ -414,6 +452,9 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   facility.email = normalizedEmail;
   facility.phone = phone;
   facility.address = address;
+  facility.website = toOptionalString(website);
+  facility.specialty = normalizedSpecialty;
+  facility.description = toOptionalString(description);
   facility.services = normalizedServices;
   facility.amenities = normalizedAmenities;
   facility.care_levels = normalizedCareLevels;
@@ -444,11 +485,89 @@ export const deleteFacility = catchAsyncError(async (req, res, next) => {
 
   (facility.images || []).forEach((p) => safeRemoveFacilityImageFile(p));
 
-  await User.deleteOne({ _id: facility.user_id });
+  if (facility.user_id) {
+    await User.deleteOne({ _id: facility.user_id });
+  }
   await Facility.deleteOne({ _id: facility._id });
 
   res.status(200).json({
     success: true,
     message: "Facility deleted successfully.",
+  });
+});
+
+export const importExternalFacilities = catchAsyncError(async (req, res, next) => {
+  const admin = await assertAdmin(req.user?.id);
+  if (!admin) {
+    return next(new ErrorHandler("Only admins can import external facilities", 403));
+  }
+
+  const records = Array.isArray(req.body?.facilities) ? req.body.facilities : [];
+  if (records.length === 0) {
+    return next(new ErrorHandler("facilities array is required", 400));
+  }
+
+  const prepared = records
+    .map((row) => {
+      const name = toOptionalString(row?.name);
+      const address = toOptionalString(row?.address);
+      if (!name || !address) return null;
+      const website = toOptionalString(row?.website);
+      const sourcePlatform = toOptionalString(row?.source_platform || row?.source || "external");
+      const externalRef =
+        toOptionalString(row?.external_ref) ||
+        toOptionalString(row?.id) ||
+        `${name}::${address}`;
+      return {
+        is_external: true,
+        source_platform: sourcePlatform,
+        external_ref: externalRef,
+        email: syntheticExternalEmail(sourcePlatform, externalRef),
+        name,
+        phone: toOptionalString(row?.phone || "N/A"),
+        address,
+        website,
+        specialty: toArray(row?.specialty || row?.care_levels || row?.services),
+        description: toOptionalString(row?.description),
+        services: toArray(row?.services),
+        amenities: toArray(row?.amenities),
+        care_levels: toArray(row?.care_levels || row?.specialty),
+        pricing: toOptionalString(row?.pricing),
+        images: Array.isArray(row?.images)
+          ? row.images.map((x) => toOptionalString(x)).filter(Boolean)
+          : [],
+      };
+    })
+    .filter(Boolean);
+
+  if (prepared.length === 0) {
+    return next(new ErrorHandler("No valid external facilities to import", 400));
+  }
+
+  let created = 0;
+  let updated = 0;
+
+  for (const item of prepared) {
+    const existing = await Facility.findOne({
+      is_external: true,
+      source_platform: item.source_platform,
+      external_ref: item.external_ref,
+    });
+    if (existing) {
+      Object.assign(existing, item);
+      await existing.save();
+      updated += 1;
+    } else {
+      await Facility.create(item);
+      created += 1;
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "External facilities import completed.",
+    created,
+    updated,
+    totalProcessed: prepared.length,
   });
 });

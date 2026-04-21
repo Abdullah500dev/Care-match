@@ -2,6 +2,20 @@ import mongoose from "mongoose";
 
 const facilitySchema = new mongoose.Schema(
   {
+    is_external: {
+      type: Boolean,
+      default: false,
+    },
+    source_platform: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    external_ref: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     name: {
       type: String,
       required: [true, "Facility name is required"],
@@ -9,10 +23,13 @@ const facilitySchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, "Facility email is required"],
+      required: function requiredEmail() {
+        return !this.is_external;
+      },
       trim: true,
       lowercase: true,
       unique: true,
+      sparse: true,
     },
     phone: {
       type: String,
@@ -22,6 +39,20 @@ const facilitySchema = new mongoose.Schema(
     address: {
       type: String,
       required: [true, "Facility address is required"],
+      trim: true,
+    },
+    website: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    specialty: {
+      type: [String],
+      default: [],
+    },
+    description: {
+      type: String,
+      default: "",
       trim: true,
     },
     services: {
@@ -65,12 +96,16 @@ const facilitySchema = new mongoose.Schema(
     created_by: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: function requiredCreator() {
+        return !this.is_external;
+      },
     },
     user_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: function requiredFacilityUser() {
+        return !this.is_external;
+      },
     },
   },
   {

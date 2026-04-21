@@ -119,6 +119,11 @@ const CareExplorer = () => {
         distance,
         features,
         address: m.address || "",
+        website: m.website || "",
+        specialty: Array.isArray(m.specialty) ? m.specialty : [],
+        description: m.description || "",
+        sourcePlatform: m.source_platform || "",
+        isExternal: Boolean(m.is_external),
         careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
         amenities: Array.isArray(m.amenities) ? m.amenities : [],
         services: Array.isArray(m.services) ? m.services : [],
@@ -237,8 +242,14 @@ const CareExplorer = () => {
     });
   }, [filters, scopedFacilities]);
 
-  const showFullCarrieList = Boolean(liveFacilities?.length);
-  const pageSize = layout === "single" ? 3 : layout === "two" ? 4 : 12;
+  const showFullCarrieList = Boolean(fromCarrie && liveFacilities?.length);
+  const pageSize = showFullCarrieList
+    ? Math.max(filteredFacilities.length, 1)
+    : layout === "single"
+      ? 3
+      : layout === "two"
+        ? 4
+        : 12;
   const totalPages = Math.max(1, Math.ceil(filteredFacilities.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const startIdx = (currentPage - 1) * pageSize;
@@ -382,13 +393,15 @@ const CareExplorer = () => {
                     priceRange={f.priceRange}
                     distance={f.distance}
                     features={f.features}
+                    website={f.website}
+                    sourcePlatform={f.sourcePlatform}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
                   />
                 </div>
               ))}
 
-              {totalPages > 1 && (
+              {!showFullCarrieList && totalPages > 1 && (
                 <div className="col-span-full mt-2 flex items-center justify-center gap-2">
                   <button
                     type="button"
@@ -448,6 +461,8 @@ const CareExplorer = () => {
                     priceRange={f.priceRange}
                     distance={f.distance}
                     features={f.features}
+                    website={f.website}
+                    sourcePlatform={f.sourcePlatform}
                     compact
                   />
                 ))}

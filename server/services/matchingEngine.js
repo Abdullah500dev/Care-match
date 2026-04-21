@@ -485,6 +485,11 @@ export function scoreFacility(facility, prefs) {
     address: facility.address,
     pricing: facility.pricing,
     care_levels: fcLevels,
+    website: facility.website || "",
+    specialty: Array.isArray(facility.specialty) ? facility.specialty : [],
+    description: facility.description || "",
+    source_platform: facility.source_platform || "",
+    is_external: Boolean(facility.is_external),
     images: Array.isArray(facility.images) ? facility.images : [],
     score: score100,
     reasons: reasons.slice(0, 6),
@@ -741,6 +746,7 @@ export function formatRecommendationsForChat(facilities, prefs) {
     lines.push(r.reasons.map((x) => `  ${x}`).join("\n"));
     if (r.address) lines.push(`  _${r.address}_`);
     if (r.pricing) lines.push(`  _Pricing (listing): ${r.pricing}_`);
+    if (r.website) lines.push(`  _Website: ${r.website}_`);
   });
   lines.push(
     "\n_Next step: schedule tours and ask each community about care assessments, waitlists, and true all-in monthly cost._"
