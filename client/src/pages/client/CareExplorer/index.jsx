@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import axios from "axios";
 import SEO from "../../../components/common/SEO";
@@ -10,6 +10,7 @@ import {
   getGoogleMapsApiKey,
   loadGoogleMapsScript,
 } from "../../../lib/loadGoogleMaps";
+import { scrollToCarrieHeroThenOpenChat } from "../../../utils/scrollToCarrieHeroTagline";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -78,6 +79,7 @@ const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
 const DEFAULT_PRICE_RANGE = "$4,000 - $6,500/mo";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
+const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
 
 function formatPriceRange(rawPricing) {
   const raw = String(rawPricing || "").trim();
@@ -181,6 +183,7 @@ function normalizeFacilityForCard(m) {
 
 const CareExplorer = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const carrieMatches = location.state?.carrieMatches;
   const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
@@ -208,6 +211,43 @@ const CareExplorer = () => {
   const [currentCoords, setCurrentCoords] = useState(null);
   const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
   const [directoryFacilities, setDirectoryFacilities] = useState([]);
+  const [favoriteFacilityIds, setFavoriteFacilityIds] = useState(() => {
+    try {
+      const raw = localStorage.getItem(FAVORITE_FACILITY_IDS_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleAskCarrie = () => {
+    if (location.pathname !== "/") {
+      navigate("/");
+      window.setTimeout(() => {
+        scrollToCarrieHeroThenOpenChat({ source: "care-explorer" });
+      }, 120);
+      return;
+    }
+    scrollToCarrieHeroThenOpenChat({ source: "care-explorer" });
+  };
+
+  const handleToggleFavorite = (facilityId) => {
+    const safeId = String(facilityId || "").trim();
+    if (!safeId) return;
+    setFavoriteFacilityIds((prev) =>
+      prev.includes(safeId)
+        ? prev.filter((id) => id !== safeId)
+        : [...prev, safeId],
+    );
+  };
+
+  useEffect(() => {
+    localStorage.setItem(
+      FAVORITE_FACILITY_IDS_STORAGE_KEY,
+      JSON.stringify(favoriteFacilityIds),
+    );
+  }, [favoriteFacilityIds]);
 
   const liveFacilities = useMemo(() => {
     if (!Array.isArray(carrieMatches) || carrieMatches.length === 0)
