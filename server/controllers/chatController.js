@@ -108,6 +108,10 @@ const inferLocationFromMessages = (msgs) => {
   const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
   for (let i = users.length - 1; i >= 0; i -= 1) {
     const text = users[i];
+    const zipMatch = text.match(/\b(?:zip(?:\s*code)?|zipcode)\s*(?:is|=|:)?\s*(\d{5})(?:-\d{4})?\b/i);
+    if (zipMatch?.[1]) return zipMatch[1];
+    const standaloneZip = text.match(/\b(\d{5})(?:-\d{4})?\b/);
+    if (standaloneZip?.[1]) return standaloneZip[1];
     const m = text.match(
       /\b(?:in|near|around|close to|within)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}(?:\s*,\s*[A-Z]{2})?)/g
     );
@@ -120,6 +124,21 @@ const inferLocationFromMessages = (msgs) => {
     if (candidate.length >= 3) return candidate;
   }
   return "";
+};
+
+const inferMaxDistanceFromMessages = (msgs) => {
+  const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
+  for (let i = users.length - 1; i >= 0; i -= 1) {
+    const text = users[i].toLowerCase();
+    const milesPattern =
+      /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:mile|miles|mi)\b/;
+    const m = text.match(milesPattern);
+    if (m?.[1]) {
+      const value = Number.parseInt(m[1], 10);
+      if (!Number.isNaN(value) && value > 0) return value;
+    }
+  }
+  return null;
 };
 
 /**
@@ -184,15 +203,18 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const inferredBudget = inferBudgetFromMessages(sanitized);
   const inferredCareLevels = inferCareLevelsFromMessages(sanitized);
   const inferredLocation = inferLocationFromMessages(sanitized);
+  const inferredMaxDistance = inferMaxDistanceFromMessages(sanitized);
   const missingEssentials = [
     ...(inferredCareLevels.length > 0 ? [] : ["care needs"]),
     ...(inferredLocation ? [] : ["location"]),
+    ...(inferredLocation && inferredMaxDistance == null ? ["max distance from location"] : []),
     ...(inferredBudget ? [] : ["budget"]),
   ];
-  const essentialPointCount = 3 - missingEssentials.length;
+  const essentialTotalPoints = inferredLocation ? 4 : 3;
+  const essentialPointCount = essentialTotalPoints - missingEssentials.length;
   const shouldReturnResults =
     explicitMatchNow ||
-    essentialPointCount >= 3 ||
+    essentialPointCount >= essentialTotalPoints ||
     intakeAnswerCount >= QUESTION_COUNT;
 
   const callOpenAI = async (payload) => {
@@ -229,13 +251,14 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     const stageRules =
       `CONVERSATION_RULES (server):\n` +
       `- User messages so far: ${userMessageCount}.\n` +
-      `- Collected essential intake points: ${essentialPointCount}/3 (care needs, location, budget).\n` +
+      `- Collected essential intake points: ${essentialPointCount}/${essentialTotalPoints}.\n` +
       `- Missing essentials (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
       `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until the user has sent **at least ${minMessagesBeforeJson}** messages, **unless** they clearly insist on seeing matches right now and you can honestly fill the JSON from the thread.\n` +
       `- If you are not outputting that JSON block yet, **do not** include those delimiters at all.\n` +
       `- Keep replies feeling human; one gentle question max when you need info.\n` +
       `- If essentials are missing, ask ONLY about one missing essential from the list above; do not ask unrelated follow-ups.\n` +
-      `- If essentials are all present, do not ask more intake questions; tell the user to say "show results" or "show matches" to proceed immediately.`;
+      `- If location is known but max distance is missing, ask specifically: how far from that location (in miles) is acceptable.\n` +
+      `- If essentials are all present, do not ask more intake questions; proceed to show matches.`;
 
     const conversationSystem =
       process.env.CAREMATCH_CHAT_SYSTEM_PROMPT?.trim() ||
@@ -319,6 +342,20 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     const prefs = normalizeIntakePreferences(rawPrefs);
     if (prefs && (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) && inferredBudget) {
       prefs.budgetMaxMonthly = inferredBudget;
+    }
+    if (
+      prefs &&
+      (!prefs.searchLocation || prefs.searchLocation.trim().length < 3) &&
+      inferredLocation
+    ) {
+      prefs.searchLocation = inferredLocation;
+    }
+    if (
+      prefs &&
+      (prefs.maxDistanceMiles == null || Number.isNaN(Number(prefs.maxDistanceMiles))) &&
+      inferredMaxDistance != null
+    ) {
+      prefs.maxDistanceMiles = inferredMaxDistance;
     }
     const facilities = await Facility.find().lean();
     const matchSection = formatRecommendationsForChat(facilities, prefs);

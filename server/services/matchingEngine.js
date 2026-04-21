@@ -722,9 +722,9 @@ export function formatRecommendationsForChat(facilities, prefs) {
   if (ranked.length === 0) {
     const emptyDir = !facilities || facilities.length === 0;
     const msg = emptyDir
-      ? "No communities are in the directory yet. Ask your CareMatch admin to add facilities, then try again."
-      : "No communities in our directory satisfy **all** of your stated care level, must-have amenities, budget cap, and location requirements. Try relaxing one constraint or ask your admin to add more listings.";
-    return `\n\n---\n**Matches (rule-based MVP)**\n${msg}\n`;
+      ? "No facilities matched your criteria. Please broaden your search criteria."
+      : "No facilities matched your criteria. Please broaden your search criteria.";
+    return `\n\n---\n**Your matches**\n${msg}\n`;
   }
 
   const lines = [

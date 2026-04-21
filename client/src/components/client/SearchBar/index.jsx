@@ -110,7 +110,7 @@ export default function SearchBar() {
         ]);
         const matches = data?.matchedFacilities;
         const matchedPreferences = data?.matchedPreferences;
-        if (Array.isArray(matches) && matches.length > 0) {
+        if (Array.isArray(matches)) {
           setIsChatOpen(false);
           navigate("/care-explorer", {
             state: { carrieMatches: matches, carrieFilters: matchedPreferences, fromCarrie: true },
