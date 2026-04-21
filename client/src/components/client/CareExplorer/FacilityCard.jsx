@@ -23,12 +23,16 @@ const FacilityCard = ({
   imageSrc = DEFAULT_IMAGE,
   website = "",
   sourcePlatform = "",
+  isExternal = false,
+  externalSourceUrl = "",
   compact = false,
   gridView = false,
   isFavorite = false,
   onToggleFavorite,
 }) => {
   const hasWebsite = typeof website === "string" && /^https?:\/\//i.test(website);
+  const hasExternalSourceUrl =
+    typeof externalSourceUrl === "string" && /^https?:\/\//i.test(externalSourceUrl);
   const navigate = useNavigate();
   const location = useLocation();
   const isLoggedIn = Boolean(localStorage.getItem("access_token"));
@@ -46,6 +50,27 @@ const FacilityCard = ({
   const handleFavoriteClick = () => {
     if (!requireLoginForFacilityAction()) return;
     onToggleFavorite?.(facilityId || name);
+  };
+  const openExploreDestination = () => {
+    if (!requireLoginForFacilityAction()) return;
+    if (hasWebsite) {
+      window.open(website, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (hasExternalSourceUrl) {
+      window.open(externalSourceUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const query = [name, sourcePlatform, distance].filter(Boolean).join(" ").trim();
+    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query || `${name} senior living`)}`;
+    window.open(googleUrl, "_blank", "noopener,noreferrer");
+  };
+  const handleRequestTourClick = () => {
+    if (isExternal) return;
+    if (!requireLoginForFacilityAction()) return;
+    navigate("/portal/messages", {
+      state: { facilityId: facilityId || name, facilityName: name },
+    });
   };
   // Dedicated, simplified card for grid view (4-per-row) – matches provided design
   if (gridView) {
@@ -98,33 +123,23 @@ const FacilityCard = ({
 
           {/* Buttons */}
           <div className="mt-2 sm:mt-2.5 flex gap-2 sm:gap-2.5">
-            {hasWebsite ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!requireLoginForFacilityAction()) return;
-                  window.open(website, "_blank", "noopener,noreferrer");
-                }}
-                className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
-              >
-                Explore
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (!requireLoginForFacilityAction()) return;
-                  navigate("/contact");
-                }}
-                className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
-              >
-                Explore
-              </button>
-            )}
             <button
               type="button"
-              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
-              onClick={requireLoginForFacilityAction}
+              onClick={openExploreDestination}
+              className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
+            >
+              Explore
+            </button>
+            <button
+              type="button"
+              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleRequestTourClick}
+              disabled={isExternal}
+              title={
+                isExternal
+                  ? "Messaging is available only for facilities added in admin panel."
+                  : "Request a tour / message this facility"
+              }
             >
               Request a Tour
             </button>
@@ -263,38 +278,27 @@ const FacilityCard = ({
 
         {/* Buttons - full width on mobile, flex on larger */}
         <div className={`flex flex-col sm:flex-row flex-wrap ${compact ? "mt-2 gap-2 sm:gap-3" : "mt-4 sm:mt-5 gap-3 sm:gap-4"}`}>
-          {hasWebsite ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (!requireLoginForFacilityAction()) return;
-                window.open(website, "_blank", "noopener,noreferrer");
-              }}
-              className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
-              style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
-            >
-              Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                if (!requireLoginForFacilityAction()) return;
-                navigate("/contact");
-              }}
-              className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
-              style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
-            >
-              Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
-            </button>
-          )}
           <button
             type="button"
-            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+            onClick={openExploreDestination}
+            className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
             style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
-            onClick={requireLoginForFacilityAction}
           >
-            {sourcePlatform ? `Visit ${sourcePlatform}` : "Request a Tour"}
+            Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
+          </button>
+          <button
+            type="button"
+            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+            style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
+            onClick={handleRequestTourClick}
+            disabled={isExternal}
+            title={
+              isExternal
+                ? "Messaging is available only for facilities added in admin panel."
+                : "Request a tour / message this facility"
+            }
+          >
+            Request a Tour
           </button>
         </div>
       </div>

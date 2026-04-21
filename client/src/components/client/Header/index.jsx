@@ -5,7 +5,6 @@ import {
   Menu,
   X,
   User,
-  Search,
   LogOut,
   ChevronDown,
   LayoutDashboard,
@@ -34,6 +33,81 @@ export default function Header() {
   const location = useLocation();
   const dispatch = useDispatch();
   const { isAuthenticated, userData } = useSelector(getUser);
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(
+    userData?.user_type,
+  );
+  const isFacilityUser = userData?.role === "facility";
+  const accountBasePath = isAdminStaff
+    ? "/admin"
+    : isFacilityUser
+      ? "/facility"
+      : "/portal";
+  const accountMenuItems = isAdminStaff
+    ? [
+        {
+          key: "overview",
+          label: "Overview",
+          to: "/admin",
+          icon: LayoutDashboard,
+        },
+        { key: "leads", label: "Leads", to: "/admin/residents", icon: Users },
+        {
+          key: "facilities",
+          label: "Facilities",
+          to: "/admin/communities",
+          icon: Building2,
+        },
+        {
+          key: "calendar",
+          label: "Calendar",
+          to: "/admin/calendar",
+          icon: CalendarDays,
+        },
+        {
+          key: "messages",
+          label: "Messages",
+          to: "/admin/messages",
+          icon: MessageSquareText,
+        },
+        {
+          key: "analytics",
+          label: "Analytics",
+          to: "/admin/analytics",
+          icon: BarChart3,
+        },
+        {
+          key: "settings",
+          label: "Settings",
+          to: "/admin/settings",
+          icon: Settings,
+        },
+      ]
+    : [
+        {
+          key: "overview",
+          label: "Overview",
+          to: accountBasePath,
+          icon: LayoutDashboard,
+        },
+        {
+          key: "facilities",
+          label: "Facilities",
+          to: `${accountBasePath}/communities`,
+          icon: Building2,
+        },
+        {
+          key: "messages",
+          label: "Messages",
+          to: `${accountBasePath}/messages`,
+          icon: MessageSquareText,
+        },
+        {
+          key: "settings",
+          label: "Settings",
+          to: `${accountBasePath}/settings`,
+          icon: Settings,
+        },
+      ];
 
   const menuItems = [
     // { label: "How it Works", target: "how-it-works", isScroll: true },
@@ -135,7 +209,7 @@ export default function Header() {
               )}
             </div>
             <Link
-              to="/admin"
+              to={accountBasePath}
             className="rounded-full bg-[#00B8DB] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 md:px-5 md:py-2.5 min-[1024px]:px-4 min-[1024px]:py-2 min-[1024px]:text-sm min-[1280px]:px-4 min-[1280px]:py-2 min-[1280px]:text-sm min-[1536px]:px-5 min-[1536px]:py-2.5"
             >
               Facilities
@@ -152,7 +226,6 @@ export default function Header() {
                     className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-[#364153] transition-colors hover:bg-slate-50 hover:text-[#132329]"
                     aria-label="Open account menu"
                   >
-                    <Search className="h-4 w-4 text-[#364153]" />
                     <span className="flex h-8 w-8 items-center justify-center rounded-full">
                       <User className="h-4 w-4 text-[#364153]" />
                     </span>
@@ -163,48 +236,17 @@ export default function Header() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin" className="flex items-center gap-2">
-                      <LayoutDashboard className="h-4 w-4" />
-                      Overview
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/residents" className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Leads
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/communities" className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Facilities
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/calendar" className="flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4" />
-                      Calendar
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/messages" className="flex items-center gap-2">
-                      <MessageSquareText className="h-4 w-4" />
-                      Messages
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/analytics" className="flex items-center gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      Analytics
-                    </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link to="/admin/settings" className="flex items-center gap-2">
-                      <Settings className="h-4 w-4" />
-                      Settings
-                    </Link>
-                  </DropdownMenuItem>
+                  {accountMenuItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <DropdownMenuItem key={item.key} asChild>
+                        <Link to={item.to} className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {item.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-red-600 focus:text-red-600"
@@ -290,55 +332,16 @@ export default function Header() {
                     <div className="px-1 text-sm font-semibold text-slate-900">
                       {userData.name || "Account"}
                     </div>
-                    <Link
-                      to="/admin"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Overview
-                    </Link>
-                    <Link
-                      to="/admin/residents"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Leads
-                    </Link>
-                    <Link
-                      to="/admin/communities"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Facilities
-                    </Link>
-                    <Link
-                      to="/admin/calendar"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Calendar
-                    </Link>
-                    <Link
-                      to="/admin/messages"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Messages
-                    </Link>
-                    <Link
-                      to="/admin/analytics"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Analytics
-                    </Link>
-                    <Link
-                      to="/admin/settings"
-                      className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
-                      onClick={() => setIsMenuOpen(false)}
-                    >
-                      Settings
-                    </Link>
+                    {accountMenuItems.map((item) => (
+                      <Link
+                        key={item.key}
+                        to={item.to}
+                        className="px-1 font-medium text-gray-700 text-sm sm:text-base hover:text-[#132329]"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
                     <button
                       type="button"
                       onClick={handleLogout}
@@ -367,7 +370,7 @@ export default function Header() {
                   </div>
                 )}
                 <Link
-                  to="/admin"
+                  to={accountBasePath}
                   className="mt-1 inline-flex justify-center rounded-full bg-[#00B8DB] px-5 py-2.5 text-sm font-medium text-white"
                   onClick={() => setIsMenuOpen(false)}
                 >

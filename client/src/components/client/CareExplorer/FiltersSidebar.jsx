@@ -19,9 +19,11 @@ const FiltersSidebar = ({
   onReset,
   careTypeOptions = careTypes,
   amenityOptions = amenities,
+  availabilityOptions = availability,
   onAskCarrie,
 }) => {
   const searchQuery = filters?.searchQuery ?? "";
+  const locationQuery = filters?.locationQuery ?? "";
   const maxMiles = filters?.maxMiles ?? "";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
   const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 4500;
@@ -44,6 +46,12 @@ const FiltersSidebar = ({
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
         <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-3">Filters</h3>
         <div className="relative mb-4">
+          <Input
+            placeholder="Searched area (city or state)"
+            value={locationQuery}
+            onChange={(e) => setFilters({ locationQuery: e.target.value })}
+            className="pr-9 h-10 rounded-lg border-[#E2E8F0] mb-3"
+          />
           <Input
             placeholder="Define your search..."
             value={searchQuery}
@@ -118,7 +126,7 @@ const FiltersSidebar = ({
 
         <h3 className="font-semibold text-sm text-[#364153] mb-3">Availability</h3>
         <div className="space-y-2.5">
-          {availability.map((item) => (
+          {availabilityOptions.map((item) => (
             <label
               key={item}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
