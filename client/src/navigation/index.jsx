@@ -5,10 +5,12 @@ import {
   Routes,
   Route,
   useLocation,
+  useNavigate,
   Navigate,
 } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { ChevronUp } from "lucide-react";
+import { toast } from "sonner";
 
 import ScrollToTop from "../utils/scroll-top";
 import PreLoader from "../components/common/PreLoader";
@@ -204,6 +206,7 @@ const RequireAdminDashboard = ({ children }) => {
 };
 
 const Layout = ({ children }) => {
+  const navigate = useNavigate();
   const location = useLocation();
   const isDashboardRoute =
     location.pathname.startsWith("/admin") ||
@@ -211,6 +214,8 @@ const Layout = ({ children }) => {
     location.pathname.startsWith("/facility");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
+  const inactivityTimerRef = useRef(null);
+  const reminderToastIdRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -279,6 +284,63 @@ const Layout = ({ children }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const INACTIVITY_MS = 60 * 1000;
+    const activityEvents = [
+      "mousemove",
+      "mousedown",
+      "keydown",
+      "touchstart",
+      "scroll",
+    ];
+
+    const clearInactivityTimer = () => {
+      if (inactivityTimerRef.current) {
+        window.clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+    };
+
+    const showHelpReminder = () => {
+      if (isChatOpen) return;
+      reminderToastIdRef.current = toast("Do you need any help?", {
+        id: "carematch-help-reminder",
+        duration: 10000,
+        position: "bottom-right",
+        action: {
+          label: "Ask Carrie",
+          onClick: () => {
+            navigate("/", { state: { scrollTo: "search-bar" } });
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+            }, 250);
+          },
+        },
+      });
+    };
+
+    const scheduleReminder = () => {
+      clearInactivityTimer();
+      inactivityTimerRef.current = window.setTimeout(showHelpReminder, INACTIVITY_MS);
+    };
+
+    // Trigger reminder 1 minute after landing and also after fresh inactivity windows.
+    scheduleReminder();
+    for (const eventName of activityEvents) {
+      window.addEventListener(eventName, scheduleReminder, { passive: true });
+    }
+
+    return () => {
+      clearInactivityTimer();
+      if (reminderToastIdRef.current) {
+        toast.dismiss(reminderToastIdRef.current);
+      }
+      for (const eventName of activityEvents) {
+        window.removeEventListener(eventName, scheduleReminder);
+      }
+    };
+  }, [isChatOpen, navigate, location.pathname]);
+
   const scrollToTop = () => {
     topAnchorRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -303,18 +365,34 @@ const Layout = ({ children }) => {
       {children}
       {!isDashboardRoute && <Footer />}
       {/* Scroll to top - visible across the entire site */}
-      {showScrollToTop &&
-        createPortal(
-          <button
-            type="button"
-            onClick={scrollToTop}
-            className="fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-[#00CFF4] text-white shadow-xl transition-all duration-300 hover:bg-[#00b8d8] hover:scale-110 focus:outline-none focus:ring-2 focus:ring-[#00CFF4] focus:ring-offset-2"
-            aria-label="Scroll to top"
-          >
-            <ChevronUp className="h-7 w-7" />
-          </button>,
-          document.body,
-        )}
+      {createPortal(
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className={`group fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-[#00E5FF] via-[#00CFF4] to-[#00A9D6] text-white shadow-[0_12px_30px_rgba(0,207,244,0.45)] transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 hover:shadow-[0_16px_36px_rgba(0,207,244,0.55)] focus:outline-none focus:ring-2 focus:ring-[#00CFF4] focus:ring-offset-2 ${
+            showScrollToTop
+              ? "translate-y-0 scale-100 opacity-100 pointer-events-auto animate-[floatUp_2.8s_ease-in-out_infinite]"
+              : "translate-y-6 scale-90 opacity-0 pointer-events-none"
+          }`}
+          aria-label="Scroll to top"
+        >
+          <span className="absolute inset-0 rounded-full bg-white/20 opacity-0 blur-sm transition-opacity duration-500 group-hover:opacity-100" />
+          <ChevronUp className="relative h-7 w-7 transition-transform duration-300 group-hover:-translate-y-0.5" />
+        </button>,
+        document.body,
+      )}
+      <style>
+        {`
+          @keyframes floatUp {
+            0%, 100% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(-4px);
+            }
+          }
+        `}
+      </style>
     </>
   );
 };
