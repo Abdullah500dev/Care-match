@@ -4,6 +4,7 @@ Backend API for **CareMatch AI**. A comprehensive Node.js authentication and use
 
 ## ✨ Features
 
+
 - **🔐 JWT Authentication** - Secure token-based authentication
 - **📧 Email Verification** - Account activation via 6-digit code sent by email
 - **🔄 Token Refresh** - Automatic token refresh mechanism
@@ -29,6 +30,7 @@ Backend API for **CareMatch AI**. A comprehensive Node.js authentication and use
 
    ```bash
    git clone <your-repo-url>
+   
    cd care-match-ai/server
    ```
 
