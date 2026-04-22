@@ -8,16 +8,22 @@ import {
 import {
   createFacility,
   listFacilities,
+  listPublicFacilities,
   getFacility,
   updateFacility,
   deleteFacility,
   getMyFacility,
   importExternalFacilities,
+  importFacilitiesFromApify,
   updateMyFacility,
 } from "../controllers/facilityController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
+import { getApifySchedulerStatus } from "../controllers/apifySyncController.js";
 
 const router = express.Router();
+
+router.get("/public", listPublicFacilities);
+router.get("/apify-sync-status", isAutheticated, getApifySchedulerStatus);
 
 /**
  * @swagger
@@ -110,6 +116,7 @@ router.post(
 );
 
 router.post("/import-external", isAutheticated, importExternalFacilities);
+router.post("/import-apify", isAutheticated, importFacilitiesFromApify);
 
 router.get("/me", isAutheticated, getMyFacility);
 router.put("/me", isAutheticated, updateMyFacility);

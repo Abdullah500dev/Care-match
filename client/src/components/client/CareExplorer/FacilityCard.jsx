@@ -13,6 +13,7 @@ const FacilityCard = ({
   name = "Sunrise Senior Living",
   rating = 4.8,
   reviewCount = 127,
+  ratingLabel = "family reviews",
   priceRange = "$5,200 - $7,800",
   distance = "2.3 MILES AWAY",
   features = [
@@ -224,7 +225,7 @@ const FacilityCard = ({
                 <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
                 <span className="font-semibold text-[#132329]">{rating}</span>
               </div>
-              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{reviewCount} family reviews</span>
+              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{reviewCount} {ratingLabel}</span>
             </div>
           </div>
           {/* Monthly Investment - grid view: full width so it doesn't steal space from name */}

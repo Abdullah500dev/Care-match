@@ -490,6 +490,12 @@ export function scoreFacility(facility, prefs) {
     description: facility.description || "",
     source_platform: facility.source_platform || "",
     is_external: Boolean(facility.is_external),
+    amenities: Array.isArray(facility.amenities) ? facility.amenities : [],
+    services: Array.isArray(facility.services) ? facility.services : [],
+    external_data:
+      facility.external_data && typeof facility.external_data === "object"
+        ? facility.external_data
+        : {},
     images: Array.isArray(facility.images) ? facility.images : [],
     score: score100,
     reasons: reasons.slice(0, 6),
@@ -689,6 +695,14 @@ export function rankFacilities(facilities, prefs, opts = {}) {
     pricing: x.pricing,
     care_levels: x.care_levels,
     images: x.images,
+    website: x.website || "",
+    specialty: Array.isArray(x.specialty) ? x.specialty : [],
+    description: x.description || "",
+    source_platform: x.source_platform || "",
+    is_external: Boolean(x.is_external),
+    amenities: Array.isArray(x.amenities) ? x.amenities : [],
+    services: Array.isArray(x.services) ? x.services : [],
+    external_data: x.external_data || {},
     score: x.score,
     reasons: x.reasons,
     criteriaMatched: x.criteriaMatched,

@@ -16,6 +16,7 @@ import facilityRouter from "./routes/facilityRouter.js";
 import matchRouter from "./routes/matchRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
+import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,3 +114,4 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(port, () => console.log(`Server is running on port ${port}!`));
+startApifySyncScheduler();

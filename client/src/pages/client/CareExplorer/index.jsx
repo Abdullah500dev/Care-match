@@ -135,6 +135,10 @@ function titleCase(s) {
 }
 
 function normalizeFacilityForCard(m) {
+  const externalData =
+    m && typeof m.external_data === "object" && m.external_data
+      ? m.external_data
+      : {};
   const firstImg =
     Array.isArray(m.images) && m.images.length ? m.images[0] : null;
   const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
@@ -152,6 +156,12 @@ function normalizeFacilityForCard(m) {
       : ["Review listing details and tour to validate fit"];
   const priceRange = formatPriceRange(m.pricing);
   const numericPrice = parsePriceRangeNumbers(m.pricing);
+  const overallRating =
+    externalData.overall_rating != null &&
+    !Number.isNaN(Number(externalData.overall_rating))
+      ? Number(externalData.overall_rating)
+      : null;
+  const providerUrl = String(externalData.provider_url || "").trim();
   const distance =
     m.address && String(m.address).trim()
       ? String(m.address).trim().slice(0, 48) +
@@ -170,11 +180,14 @@ function normalizeFacilityForCard(m) {
     features,
     address: m.address || "",
     website: m.website || "",
+    rating: overallRating != null ? overallRating : 4.8,
+    reviewCount: overallRating != null ? 1 : 127,
+    ratingLabel: overallRating != null ? "CMS rating" : "family reviews",
     specialty: Array.isArray(m.specialty) ? m.specialty : [],
     description: m.description || "",
     sourcePlatform: m.source_platform || "",
     isExternal: Boolean(m.is_external),
-    externalSourceUrl: m.external_source_url || "",
+    externalSourceUrl: m.external_source_url || providerUrl,
     careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
     amenities: Array.isArray(m.amenities) ? m.amenities : [],
     services: Array.isArray(m.services) ? m.services : [],
@@ -334,7 +347,7 @@ const CareExplorer = () => {
     if (fromCarrie || !API_BASE) return;
     let cancelled = false;
     axios
-      .get(`${API_BASE}/api/facilities`, { withCredentials: true })
+      .get(`${API_BASE}/api/facilities/public`, { withCredentials: true })
       .then((res) => {
         if (cancelled) return;
         const rows = Array.isArray(res?.data?.facilities)
@@ -831,6 +844,9 @@ const CareExplorer = () => {
                     imageSrc={f.imageSrc}
                     name={f.name}
                     category={f.category}
+                    rating={f.rating}
+                    reviewCount={f.reviewCount}
+                    ratingLabel={f.ratingLabel}
                     priceRange={f.priceRange}
                     distance={f.distance}
                     features={f.features}
@@ -922,6 +938,9 @@ const CareExplorer = () => {
                         imageSrc={f.imageSrc}
                         name={f.name}
                         category={f.category}
+                        rating={f.rating}
+                        reviewCount={f.reviewCount}
+                        ratingLabel={f.ratingLabel}
                         priceRange={f.priceRange}
                         distance={f.distance}
                         features={f.features}

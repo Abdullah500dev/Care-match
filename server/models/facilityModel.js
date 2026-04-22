@@ -76,6 +76,46 @@ const facilitySchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    external_data: {
+      provider_name: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      city: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      state: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      zip_code: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      phone_number: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+      overall_rating: {
+        type: Number,
+        default: null,
+      },
+      total_fines_amount: {
+        type: Number,
+        default: null,
+      },
+      provider_url: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
 
     units: {
       type: Number,

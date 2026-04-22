@@ -61,6 +61,216 @@ const generateTemporaryPassword = () => {
   return `CmAI!${random}9`;
 };
 
+const APIFY_ACTOR_ID = "parseforge/cms-nursing-home-ratings-scraper";
+const APIFY_BASE_URL = "https://api.apify.com/v2";
+
+const pickFirstNonEmpty = (obj, keys) => {
+  for (const key of keys) {
+    const value = obj?.[key];
+    if (value != null && String(value).trim() !== "") return value;
+  }
+  return "";
+};
+
+const toNumberOrNull = (value) => {
+  if (value == null || value === "") return null;
+  const parsed = Number(String(value).replace(/[^\d.-]+/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const normalizeApifyNursingHomeRow = (row = {}) => {
+  const providerName = toOptionalString(
+    pickFirstNonEmpty(row, ["providerName", "name", "Provider Name"])
+  );
+  const city = toOptionalString(pickFirstNonEmpty(row, ["city", "City"]));
+  const state = toOptionalString(pickFirstNonEmpty(row, ["state", "State"]));
+  const zipCode = toOptionalString(
+    pickFirstNonEmpty(row, ["zipCode", "zip", "zipcode", "ZIP Code"])
+  );
+  const phoneNumber = toOptionalString(
+    pickFirstNonEmpty(row, ["phoneNumber", "phone", "Phone Number"])
+  );
+  const providerUrl = toOptionalString(
+    pickFirstNonEmpty(row, ["providerUrl", "providerURL", "url", "Provider URL", "profileUrl"])
+  );
+  const overallRatingRaw = pickFirstNonEmpty(row, [
+    "overallRating",
+    "overall_star_rating",
+    "Overall Rating",
+  ]);
+  const finesRaw = pickFirstNonEmpty(row, [
+    "totalFinesAmount",
+    "totalFines",
+    "total_fines_amount",
+    "Total Fines Amount",
+  ]);
+  const overallRating = toNumberOrNull(overallRatingRaw);
+  const totalFinesAmount = toNumberOrNull(finesRaw);
+
+  return {
+    providerName,
+    city,
+    state,
+    zipCode,
+    phoneNumber,
+    overallRating,
+    totalFinesAmount,
+    providerUrl,
+  };
+};
+
+const toExternalFacilityDoc = (normalizedRow) => {
+  const {
+    providerName,
+    city,
+    state,
+    zipCode,
+    phoneNumber,
+    overallRating,
+    totalFinesAmount,
+    providerUrl,
+  } = normalizedRow;
+
+  const locationParts = [city, state, zipCode].filter(Boolean);
+  const address = locationParts.join(", ") || "N/A";
+  const externalRef = providerUrl || `${providerName}::${city}::${state}::${zipCode}`;
+  const ratingText = overallRating == null ? "N/A" : String(overallRating);
+  const finesText = totalFinesAmount == null ? "N/A" : `$${totalFinesAmount.toLocaleString("en-US")}`;
+
+  return {
+    is_external: true,
+    source_platform: "apify",
+    external_ref: externalRef,
+    email: syntheticExternalEmail("apify", externalRef),
+    name: providerName || "Unknown Provider",
+    phone: phoneNumber || "N/A",
+    address,
+    website: providerUrl,
+    specialty: ["Skilled Nursing"],
+    description: `CMS overall rating: ${ratingText}. Total fines amount: ${finesText}.`,
+    services: [],
+    amenities: [],
+    care_levels: [],
+    pricing: "",
+    images: [],
+    external_data: {
+      provider_name: providerName,
+      city,
+      state,
+      zip_code: zipCode,
+      phone_number: phoneNumber,
+      overall_rating: overallRating,
+      total_fines_amount: totalFinesAmount,
+      provider_url: providerUrl,
+    },
+  };
+};
+
+const upsertExternalFacilities = async (records) => {
+  let created = 0;
+  let updated = 0;
+
+  for (const item of records) {
+    const existing = await Facility.findOne({
+      is_external: true,
+      source_platform: item.source_platform,
+      external_ref: item.external_ref,
+    });
+
+    if (existing) {
+      Object.assign(existing, item);
+      await existing.save();
+      updated += 1;
+    } else {
+      await Facility.create(item);
+      created += 1;
+    }
+  }
+
+  return { created, updated };
+};
+
+export const syncFacilitiesFromApify = async (actorInput = {}) => {
+  const apifyToken = process.env.APIFY_TOKEN;
+  if (!apifyToken) {
+    throw new Error("APIFY_TOKEN is required in environment variables");
+  }
+
+  const safeActorInput =
+    actorInput && typeof actorInput === "object" ? actorInput : {};
+  const runUrl = `${APIFY_BASE_URL}/acts/${encodeURIComponent(APIFY_ACTOR_ID)}/runs?token=${encodeURIComponent(apifyToken)}`;
+
+  const runResponse = await fetch(runUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(safeActorInput),
+  });
+
+  if (!runResponse.ok) {
+    const errorText = await runResponse.text();
+    throw new Error(`Failed to start Apify actor run: ${errorText}`);
+  }
+
+  const runPayload = await runResponse.json();
+  const runId = runPayload?.data?.id;
+  if (!runId) {
+    throw new Error("Apify run started but run id is missing");
+  }
+
+  const waitUrl = `${APIFY_BASE_URL}/actor-runs/${encodeURIComponent(runId)}?waitForFinish=120&token=${encodeURIComponent(apifyToken)}`;
+  const waitResponse = await fetch(waitUrl);
+  if (!waitResponse.ok) {
+    const errorText = await waitResponse.text();
+    throw new Error(`Failed while waiting for Apify run: ${errorText}`);
+  }
+
+  const waitPayload = await waitResponse.json();
+  const runStatus = waitPayload?.data?.status;
+  const datasetId = waitPayload?.data?.defaultDatasetId;
+  if (runStatus !== "SUCCEEDED" || !datasetId) {
+    throw new Error(
+      `Apify run did not succeed. Current status: ${runStatus || "UNKNOWN"}`
+    );
+  }
+
+  const datasetUrl = `${APIFY_BASE_URL}/datasets/${encodeURIComponent(datasetId)}/items?clean=true&token=${encodeURIComponent(apifyToken)}`;
+  const datasetResponse = await fetch(datasetUrl);
+  if (!datasetResponse.ok) {
+    const errorText = await datasetResponse.text();
+    throw new Error(`Failed to fetch Apify dataset items: ${errorText}`);
+  }
+
+  const rows = await datasetResponse.json();
+  const normalized = Array.isArray(rows)
+    ? rows.map(normalizeApifyNursingHomeRow).filter((item) => item.providerName)
+    : [];
+
+  if (normalized.length === 0) {
+    throw new Error("Apify returned no valid nursing home records");
+  }
+
+  const prepared = normalized.map(toExternalFacilityDoc);
+  const { created, updated } = await upsertExternalFacilities(prepared);
+
+  return {
+    actor: APIFY_ACTOR_ID,
+    runId,
+    totalScraped: normalized.length,
+    created,
+    updated,
+    fields: normalized.map((item) => ({
+      provider_name: item.providerName,
+      city: item.city,
+      state: item.state,
+      zip_code: item.zipCode,
+      phone_number: item.phoneNumber,
+      overall_rating: item.overallRating,
+      total_fines_amount: item.totalFinesAmount,
+      provider_url: item.providerUrl,
+    })),
+  };
+};
+
 export const createFacility = catchAsyncError(async (req, res, next) => {
   const adminId = req.user?.id;
   const admin = await User.findById(adminId);
@@ -208,6 +418,24 @@ export const listFacilities = catchAsyncError(async (req, res, next) => {
       hasNextPage: page < totalPages,
       hasPrevPage: page > 1,
     },
+  });
+});
+
+export const listPublicFacilities = catchAsyncError(async (req, res) => {
+  const parsedLimit = Number.parseInt(req.query.limit, 10);
+  const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 100 : Math.min(parsedLimit, 500);
+  const externalOnly = String(req.query.externalOnly || "").toLowerCase() === "true";
+  const query = externalOnly ? { is_external: true } : {};
+
+  const facilities = await Facility.find(query)
+    .sort({ updatedAt: -1 })
+    .limit(limit)
+    .lean();
+
+  res.status(200).json({
+    success: true,
+    count: facilities.length,
+    facilities,
   });
 });
 
@@ -496,6 +724,29 @@ export const deleteFacility = catchAsyncError(async (req, res, next) => {
   });
 });
 
+export const importFacilitiesFromApify = catchAsyncError(async (req, res, next) => {
+  const admin = await assertAdmin(req.user?.id);
+  if (!admin) {
+    return next(new ErrorHandler("Only admins can import external facilities", 403));
+  }
+
+  const actorInput =
+    req.body?.actorInput && typeof req.body.actorInput === "object"
+      ? req.body.actorInput
+      : {};
+
+  try {
+    const result = await syncFacilitiesFromApify(actorInput);
+    res.status(200).json({
+      success: true,
+      message: "Apify facilities import completed.",
+      ...result,
+    });
+  } catch (error) {
+    return next(new ErrorHandler(error.message || "Apify import failed", 502));
+  }
+});
+
 export const importExternalFacilities = catchAsyncError(async (req, res, next) => {
   const admin = await assertAdmin(req.user?.id);
   if (!admin) {
@@ -544,24 +795,7 @@ export const importExternalFacilities = catchAsyncError(async (req, res, next) =
     return next(new ErrorHandler("No valid external facilities to import", 400));
   }
 
-  let created = 0;
-  let updated = 0;
-
-  for (const item of prepared) {
-    const existing = await Facility.findOne({
-      is_external: true,
-      source_platform: item.source_platform,
-      external_ref: item.external_ref,
-    });
-    if (existing) {
-      Object.assign(existing, item);
-      await existing.save();
-      updated += 1;
-    } else {
-      await Facility.create(item);
-      created += 1;
-    }
-  }
+  const { created, updated } = await upsertExternalFacilities(prepared);
 
   res.status(200).json({
     success: true,
