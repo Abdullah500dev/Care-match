@@ -120,6 +120,84 @@ const facilitySchema = new mongoose.Schema(
         default: "",
         trim: true,
       },
+      google_places: {
+        category: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        subtitle: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        place_id: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        maps_url: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        website: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        plus_code: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        latitude: {
+          type: Number,
+          default: null,
+        },
+        longitude: {
+          type: Number,
+          default: null,
+        },
+        total_score: {
+          type: Number,
+          default: null,
+        },
+        review_count: {
+          type: Number,
+          default: null,
+        },
+        price_bracket: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        closed_status: {
+          type: String,
+          default: "",
+          trim: true,
+        },
+        opening_hours: {
+          type: [String],
+          default: [],
+        },
+        additional_info: {
+          type: [String],
+          default: [],
+        },
+        social_profiles: {
+          type: [String],
+          default: [],
+        },
+        people_also_search: {
+          type: [String],
+          default: [],
+        },
+      },
+    },
+    apify_raw: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
     },
 
     units: {

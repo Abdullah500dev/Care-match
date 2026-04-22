@@ -22,6 +22,20 @@ const toPositiveInt = (value, fallback) => {
   return n;
 };
 
+const parseActorInputFromEnv = () => {
+  const raw = String(process.env.APIFY_SYNC_ACTOR_INPUT_JSON || "").trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    console.error(
+      "[apify-sync] APIFY_SYNC_ACTOR_INPUT_JSON is invalid JSON; using empty input"
+    );
+    return {};
+  }
+};
+
 
 export const startApifySyncScheduler = () => {
   const enabled = String(process.env.APIFY_SYNC_ENABLED || "").toLowerCase() === "true";
@@ -31,6 +45,8 @@ export const startApifySyncScheduler = () => {
   const everyMinutes = toPositiveInt(process.env.APIFY_SYNC_INTERVAL_MINUTES, 360);
   const initialDelaySeconds = toPositiveInt(process.env.APIFY_SYNC_INITIAL_DELAY_SECONDS, 20);
   const maxItems = toPositiveInt(process.env.APIFY_SYNC_MAX_ITEMS, 200);
+  const actorId = String(process.env.APIFY_ACTOR_ID || "").trim();
+  const actorInputFromEnv = parseActorInputFromEnv();
   syncStatus.intervalMinutes = everyMinutes;
   syncStatus.maxItems = maxItems;
 
@@ -40,7 +56,11 @@ export const startApifySyncScheduler = () => {
     syncStatus.isRunning = true;
     syncStatus.lastRunAt = new Date().toISOString();
     try {
-      const result = await syncFacilitiesFromApify({ maxItems });
+      const result = await syncFacilitiesFromApify({
+        ...(actorId ? { actorId } : {}),
+        ...actorInputFromEnv,
+        maxItems,
+      });
       syncStatus.lastSuccessAt = new Date().toISOString();
       syncStatus.lastErrorAt = null;
       syncStatus.lastErrorMessage = "";
@@ -72,7 +92,7 @@ export const startApifySyncScheduler = () => {
   setTimeout(runOnce, initialDelaySeconds * 1000);
   timerId = setInterval(runOnce, everyMinutes * 60 * 1000);
   console.log(
-    `[apify-sync] scheduler enabled every ${everyMinutes} minutes (maxItems=${maxItems})`
+    `[apify-sync] scheduler enabled every ${everyMinutes} minutes (maxItems=${maxItems}, actor=${actorId || "default"})`
   );
 };
 

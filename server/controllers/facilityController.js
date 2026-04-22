@@ -48,12 +48,18 @@ const toOptionalString = (value) => {
 };
 
 const syntheticExternalEmail = (sourcePlatform, externalRef) => {
-  const seed = `${sourcePlatform || "external"}-${externalRef || Date.now()}`
+  const rawSeed = `${sourcePlatform || "external"}-${externalRef || Date.now()}`;
+  const seed = rawSeed
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40);
-  return `${seed || "external-facility"}@external.carematch.local`;
+    .slice(0, 28);
+  const hash = crypto
+    .createHash("sha1")
+    .update(rawSeed)
+    .digest("hex")
+    .slice(0, 10);
+  return `${seed || "external-facility"}-${hash}@external.carematch.local`;
 };
 
 const generateTemporaryPassword = () => {
@@ -61,7 +67,8 @@ const generateTemporaryPassword = () => {
   return `CmAI!${random}9`;
 };
 
-const APIFY_ACTOR_ID = "parseforge/cms-nursing-home-ratings-scraper";
+const APIFY_DEFAULT_ACTOR_ID =
+  process.env.APIFY_ACTOR_ID || "compass/crawler-google-places";
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 
 const pickFirstNonEmpty = (obj, keys) => {
@@ -87,20 +94,100 @@ const toMonthlyPricingText = (rawValue) => {
   return `$${parsed.toLocaleString("en-US")}/mo`;
 };
 
-const normalizeApifyNursingHomeRow = (row = {}) => {
-  const providerName = toOptionalString(
-    pickFirstNonEmpty(row, ["providerName", "name", "Provider Name"])
+const toOptionalNumber = (value) => {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const splitAddressCityStateZip = (addressText) => {
+  const raw = toOptionalString(addressText);
+  if (!raw) return { city: "", state: "", zipCode: "" };
+  const parts = raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return { city: "", state: "", zipCode: "" };
+  const city = parts[parts.length - 2] || "";
+  const stateZipPart = parts[parts.length - 1] || "";
+  const stateMatch = stateZipPart.match(/\b([A-Z]{2})\b/i);
+  const zipMatch = stateZipPart.match(/\b(\d{5}(?:-\d{4})?)\b/);
+  return {
+    city,
+    state: stateMatch ? stateMatch[1].toUpperCase() : "",
+    zipCode: zipMatch ? zipMatch[1] : "",
+  };
+};
+
+const toIntOrZero = (value) => {
+  if (value == null || value === "") return 0;
+  const parsed = Number.parseInt(String(value).replace(/[^\d-]+/g, ""), 10);
+  if (Number.isNaN(parsed) || parsed < 0) return 0;
+  return parsed;
+};
+
+const pushIfPresent = (arr, label, value) => {
+  if (value == null || value === "") return;
+  arr.push(`${label}: ${value}`);
+};
+
+const toStringArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((x) => String(x || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([k, v]) => `${String(k)}: ${String(v ?? "").trim()}`.trim())
+      .filter((x) => x && !x.endsWith(":"));
+  }
+  const single = String(value).trim();
+  return single ? [single] : [];
+};
+
+const parseJsonEnvObject = (envName) => {
+  const raw = String(process.env[envName] || "").trim();
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizeApifyFacilityRow = (row = {}) => {
+  const parsedAddress = splitAddressCityStateZip(
+    pickFirstNonEmpty(row, ["address", "formattedAddress", "fullAddress"])
   );
-  const city = toOptionalString(pickFirstNonEmpty(row, ["city", "City"]));
-  const state = toOptionalString(pickFirstNonEmpty(row, ["state", "State"]));
+  const providerName = toOptionalString(
+    pickFirstNonEmpty(row, ["providerName", "name", "title", "placeName", "Provider Name"])
+  );
+  const city = toOptionalString(pickFirstNonEmpty(row, ["city", "City"])) || parsedAddress.city;
+  const state =
+    toOptionalString(pickFirstNonEmpty(row, ["state", "State"])) || parsedAddress.state;
   const zipCode = toOptionalString(
-    pickFirstNonEmpty(row, ["zipCode", "zip", "zipcode", "ZIP Code"])
+    pickFirstNonEmpty(row, ["zipCode", "zip", "zipcode", "postalCode", "ZIP Code"])
   );
   const phoneNumber = toOptionalString(
-    pickFirstNonEmpty(row, ["phoneNumber", "phone", "Phone Number"])
+    pickFirstNonEmpty(row, [
+      "phoneNumber",
+      "phone",
+      "internationalPhoneNumber",
+      "formattedPhoneNumber",
+      "Phone Number",
+    ])
   );
   const providerUrl = toOptionalString(
-    pickFirstNonEmpty(row, ["providerUrl", "providerURL", "url", "Provider URL", "profileUrl"])
+    pickFirstNonEmpty(row, [
+      "providerUrl",
+      "providerURL",
+      "url",
+      "website",
+      "googleMapsUrl",
+      "Provider URL",
+      "profileUrl",
+    ])
   );
   const overallRatingRaw = pickFirstNonEmpty(row, [
     "overallRating",
@@ -113,7 +200,9 @@ const normalizeApifyNursingHomeRow = (row = {}) => {
     "total_fines_amount",
     "Total Fines Amount",
   ]);
-  const overallRating = toNumberOrNull(overallRatingRaw);
+  const overallRating =
+    toNumberOrNull(overallRatingRaw) ??
+    toOptionalNumber(pickFirstNonEmpty(row, ["rating", "stars"]));
   const totalFinesAmount = toNumberOrNull(finesRaw);
   const pricingRaw = pickFirstNonEmpty(row, [
     "pricing",
@@ -131,6 +220,162 @@ const normalizeApifyNursingHomeRow = (row = {}) => {
     "Estimated Monthly Cost",
   ]);
   const pricing = toMonthlyPricingText(pricingRaw);
+  const certifiedBeds = toIntOrZero(
+    pickFirstNonEmpty(row, ["certifiedBeds", "Certified Beds"])
+  );
+  const licensedBeds = toIntOrZero(
+    pickFirstNonEmpty(row, ["licensedBeds", "Licensed Beds"])
+  );
+  const medicareCertifiedBeds = toIntOrZero(
+    pickFirstNonEmpty(row, ["medicareCertifiedBeds", "Medicare Certified Beds"])
+  );
+  const medicaidCertifiedBeds = toIntOrZero(
+    pickFirstNonEmpty(row, ["medicaidCertifiedBeds", "Medicaid Certified Beds"])
+  );
+  const continuingCareBeds = toIntOrZero(
+    pickFirstNonEmpty(row, ["continuingCareBeds", "Continuing Care Beds"])
+  );
+  const totalResidentCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["totalResidentCount", "Total Resident Count"])
+  );
+  const residentsLess90Days = toIntOrZero(
+    pickFirstNonEmpty(row, ["residentsLess90Days", "residents<90Days", "Residents <90 Days"])
+  );
+  const residents90PlusDays = toIntOrZero(
+    pickFirstNonEmpty(row, ["residents90PlusDays", "residents90+Days", "Residents 90+ Days"])
+  );
+
+  const staffingRating = pickFirstNonEmpty(row, ["staffingRating", "Staffing Rating"]);
+  const healthInspectionRating = pickFirstNonEmpty(row, [
+    "healthInspectionRating",
+    "Health Inspection Rating",
+  ]);
+  const qualityMeasureRating = pickFirstNonEmpty(row, [
+    "qualityMeasureRating",
+    "Quality Measure Rating",
+  ]);
+  const ownershipType = toOptionalString(
+    pickFirstNonEmpty(row, ["ownershipType", "Ownership Type"])
+  );
+  const ownershipInformation = toOptionalString(
+    pickFirstNonEmpty(row, ["ownershipInformation", "Ownership Information"])
+  );
+  const deficiencyCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["deficiencyCount", "Deficiency Count"])
+  );
+  const severeDeficiencyCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["severeDeficiencyCount", "Severe Deficiency Count"])
+  );
+  const totalPenaltiesCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["totalPenaltiesCount", "Total Penalties Count"])
+  );
+  const seriousBodilyInjuryCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["seriousBodilyInjuryCount", "Serious Bodily Injury Count"])
+  );
+
+  const units =
+    certifiedBeds ||
+    licensedBeds ||
+    medicareCertifiedBeds ||
+    medicaidCertifiedBeds ||
+    continuingCareBeds ||
+    0;
+  const occupancy =
+    units > 0 && totalResidentCount > 0
+      ? Math.min(100, Math.round((totalResidentCount / units) * 100))
+      : 0;
+  const activeLeads =
+    residentsLess90Days ||
+    (totalPenaltiesCount > 0 ? Math.min(totalPenaltiesCount, 100) : 0);
+
+  const services = [];
+  pushIfPresent(services, "Health Inspection Rating", healthInspectionRating);
+  pushIfPresent(services, "Quality Measure Rating", qualityMeasureRating);
+  pushIfPresent(services, "Staffing Rating", staffingRating);
+  if (totalResidentCount > 0) services.push(`Total Residents: ${totalResidentCount}`);
+  if (residentsLess90Days > 0) services.push(`Residents <90 Days: ${residentsLess90Days}`);
+  if (residents90PlusDays > 0) services.push(`Residents 90+ Days: ${residents90PlusDays}`);
+
+  const amenities = [];
+  if (ownershipType) amenities.push(`Ownership: ${ownershipType}`);
+  if (ownershipInformation) amenities.push(`Ownership Info: ${ownershipInformation}`);
+  if (deficiencyCount > 0) amenities.push(`Deficiency Count: ${deficiencyCount}`);
+  if (severeDeficiencyCount > 0)
+    amenities.push(`Severe Deficiency Count: ${severeDeficiencyCount}`);
+  if (totalFinesAmount != null && totalFinesAmount > 0) {
+    amenities.push(`Total Fines: $${totalFinesAmount.toLocaleString("en-US")}`);
+  }
+  if (seriousBodilyInjuryCount > 0) {
+    amenities.push(`Serious Bodily Injury Count: ${seriousBodilyInjuryCount}`);
+  }
+  if (medicareCertifiedBeds > 0) {
+    amenities.push(`Medicare Certified Beds: ${medicareCertifiedBeds}`);
+  }
+  if (medicaidCertifiedBeds > 0) {
+    amenities.push(`Medicaid Certified Beds: ${medicaidCertifiedBeds}`);
+  }
+
+  const placeTypes = Array.isArray(row?.types)
+    ? row.types.map((x) => String(x || "").toLowerCase())
+    : [];
+  const careLevels = ["Skilled Nursing"];
+  if (placeTypes.some((t) => /assisted|retirement|senior_living|memory/i.test(t))) {
+    careLevels.push("Senior Living");
+  }
+  if (continuingCareBeds > 0) careLevels.push("Continuing Care");
+
+  const mapsUrl = toOptionalString(
+    pickFirstNonEmpty(row, ["googleMapsUrl", "mapsUrl", "url"])
+  );
+  const placeId = toOptionalString(
+    pickFirstNonEmpty(row, ["placeId", "place_id", "id"])
+  );
+  const category = toOptionalString(
+    pickFirstNonEmpty(row, ["categoryName", "category", "subtitle"])
+  );
+  const subtitle = toOptionalString(pickFirstNonEmpty(row, ["subtitle"]));
+  const website = toOptionalString(pickFirstNonEmpty(row, ["website"]));
+  const plusCode = toOptionalString(pickFirstNonEmpty(row, ["plusCode", "plus_code"]));
+  const latitude =
+    toOptionalNumber(pickFirstNonEmpty(row, ["latitude", "lat"])) ??
+    toOptionalNumber(row?.coordinates?.lat);
+  const longitude =
+    toOptionalNumber(pickFirstNonEmpty(row, ["longitude", "lng", "lon"])) ??
+    toOptionalNumber(row?.coordinates?.lng);
+  const totalScore =
+    toOptionalNumber(pickFirstNonEmpty(row, ["totalScore", "rating", "stars"])) ??
+    null;
+  const reviewCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["reviewsCount", "reviewCount", "totalReviews"])
+  );
+  const priceBracket = toOptionalString(
+    pickFirstNonEmpty(row, ["priceBracket", "priceLevel"])
+  );
+  const closedStatus = toOptionalString(
+    pickFirstNonEmpty(row, ["temporarilyClosed", "permanentlyClosed", "closed"])
+  );
+  const openingHours = toStringArray(
+    pickFirstNonEmpty(row, ["openingHours", "opening_hours", "workingHours"])
+  );
+  const additionalInfo = toStringArray(
+    pickFirstNonEmpty(row, ["additionalInfo", "additional_info"])
+  );
+  const socialProfiles = toStringArray(
+    pickFirstNonEmpty(row, ["socialMedia", "socialProfiles", "social_profiles"])
+  );
+  const peopleAlsoSearch = toStringArray(
+    pickFirstNonEmpty(row, ["peopleAlsoSearch", "people_also_search"])
+  );
+  const menuItems = toStringArray(pickFirstNonEmpty(row, ["menu", "menus"]));
+  const questionsAndAnswers = toStringArray(
+    pickFirstNonEmpty(row, ["questionsAndAnswers", "qaUpdates", "qna"])
+  );
+  const images = toStringArray(pickFirstNonEmpty(row, ["images", "imageUrls", "photos"]));
+
+  // Enrich display fields from Google Places if source values are missing.
+  if (!providerUrl && (website || mapsUrl)) {
+    // no-op: this is used in return object below
+  }
 
   return {
     providerName,
@@ -142,10 +387,38 @@ const normalizeApifyNursingHomeRow = (row = {}) => {
     totalFinesAmount,
     providerUrl,
     pricing,
+    services,
+    amenities,
+    careLevels,
+    units,
+    occupancy,
+    activeLeads,
+    googlePlaces: {
+      category,
+      subtitle,
+      place_id: placeId,
+      maps_url: mapsUrl,
+      website,
+      plus_code: plusCode,
+      latitude,
+      longitude,
+      total_score: totalScore,
+      review_count: reviewCount || null,
+      price_bracket: priceBracket,
+      closed_status: closedStatus,
+      opening_hours: openingHours,
+      additional_info: additionalInfo,
+      social_profiles: socialProfiles,
+      people_also_search: peopleAlsoSearch,
+    },
+    rawRow: row,
+    menuItems,
+    questionsAndAnswers,
+    mappedImages: images,
   };
 };
 
-const toExternalFacilityDoc = (normalizedRow) => {
+const toExternalFacilityDoc = (normalizedRow, actorId = APIFY_DEFAULT_ACTOR_ID) => {
   const {
     providerName,
     city,
@@ -156,6 +429,17 @@ const toExternalFacilityDoc = (normalizedRow) => {
     totalFinesAmount,
     providerUrl,
     pricing,
+    services,
+    amenities,
+    careLevels,
+    units,
+    occupancy,
+    activeLeads,
+    googlePlaces,
+    rawRow,
+    menuItems,
+    questionsAndAnswers,
+    mappedImages,
   } = normalizedRow;
 
   const locationParts = [city, state, zipCode].filter(Boolean);
@@ -172,14 +456,20 @@ const toExternalFacilityDoc = (normalizedRow) => {
     name: providerName || "Unknown Provider",
     phone: phoneNumber || "N/A",
     address,
-    website: providerUrl,
-    specialty: ["Skilled Nursing"],
+    website: providerUrl || googlePlaces?.website || googlePlaces?.maps_url || "",
+    specialty: actorId.includes("google-places")
+      ? ["Senior Care"]
+      : ["Skilled Nursing"],
     description: `CMS overall rating: ${ratingText}. Total fines amount: ${finesText}.`,
-    services: [],
-    amenities: [],
-    care_levels: [],
+    services: Array.isArray(services) ? services : [],
+    amenities: Array.isArray(amenities) ? amenities : [],
+    care_levels: Array.isArray(careLevels) ? careLevels : ["Skilled Nursing"],
     pricing: pricing || "",
-    images: [],
+    images: Array.isArray(mappedImages) ? mappedImages.slice(0, 8) : [],
+    units: units || 0,
+    occupancy: occupancy || 0,
+    active_leads: activeLeads || 0,
+    apify_raw: rawRow || null,
     external_data: {
       provider_name: providerName,
       city,
@@ -190,6 +480,9 @@ const toExternalFacilityDoc = (normalizedRow) => {
       total_fines_amount: totalFinesAmount,
       provider_url: providerUrl,
       pricing: pricing || "",
+      google_places: {
+        ...(googlePlaces || {}),
+      },
     },
   };
 };
@@ -205,13 +498,27 @@ const upsertExternalFacilities = async (records) => {
       external_ref: item.external_ref,
     });
 
-    if (existing) {
-      Object.assign(existing, item);
-      await existing.save();
-      updated += 1;
-    } else {
-      await Facility.create(item);
-      created += 1;
+    try {
+      if (existing) {
+        Object.assign(existing, item);
+        await existing.save();
+        updated += 1;
+      } else {
+        await Facility.create(item);
+        created += 1;
+      }
+    } catch (error) {
+      // Handle legacy/email collisions by reusing existing row keyed by email.
+      if (error?.code === 11000 && item?.email) {
+        const byEmail = await Facility.findOne({ email: item.email });
+        if (byEmail) {
+          Object.assign(byEmail, item);
+          await byEmail.save();
+          updated += 1;
+          continue;
+        }
+      }
+      throw error;
     }
   }
 
@@ -224,9 +531,44 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
     throw new Error("APIFY_TOKEN is required in environment variables");
   }
 
+  const actorId = toOptionalString(actorInput?.actorId) || APIFY_DEFAULT_ACTOR_ID;
+  const defaultActorInput = parseJsonEnvObject("APIFY_SYNC_ACTOR_INPUT_JSON");
+  const actorPayload =
+    actorInput && typeof actorInput === "object" ? { ...actorInput } : {};
+  delete actorPayload.actorId;
   const safeActorInput =
-    actorInput && typeof actorInput === "object" ? actorInput : {};
-  const runUrl = `${APIFY_BASE_URL}/acts/${encodeURIComponent(APIFY_ACTOR_ID)}/runs?token=${encodeURIComponent(apifyToken)}`;
+    actorPayload && typeof actorPayload === "object"
+      ? { ...defaultActorInput, ...actorPayload }
+      : { ...defaultActorInput };
+
+  if (actorId.includes("compass/crawler-google-places")) {
+    const hasSearchStrings =
+      Array.isArray(safeActorInput.searchStringsArray) &&
+      safeActorInput.searchStringsArray.length > 0;
+    const hasCategories =
+      Array.isArray(safeActorInput.categoryFilterWords) &&
+      safeActorInput.categoryFilterWords.length > 0;
+    const hasStartUrls =
+      Array.isArray(safeActorInput.startUrls) && safeActorInput.startUrls.length > 0;
+    const scrapeAll = Boolean(safeActorInput.allPlacesNoSearchAction);
+
+    if (!hasSearchStrings && !hasCategories && !hasStartUrls && !scrapeAll) {
+      throw new Error(
+        "Invalid actorInput for compass/crawler-google-places. Provide at least one of: searchStringsArray, categoryFilterWords, startUrls, or allPlacesNoSearchAction=true."
+      );
+    }
+
+    // Keep actor-side crawl bounded when caller provides maxItems.
+    const maxItems = Number.parseInt(String(safeActorInput.maxItems || ""), 10);
+    if (
+      Number.isFinite(maxItems) &&
+      maxItems > 0 &&
+      !Number.isFinite(Number(safeActorInput.maxCrawledPlacesPerSearch))
+    ) {
+      safeActorInput.maxCrawledPlacesPerSearch = maxItems;
+    }
+  }
+  const runUrl = `${APIFY_BASE_URL}/acts/${encodeURIComponent(actorId)}/runs?token=${encodeURIComponent(apifyToken)}`;
 
   const runResponse = await fetch(runUrl, {
     method: "POST",
@@ -245,19 +587,51 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
     throw new Error("Apify run started but run id is missing");
   }
 
-  const waitUrl = `${APIFY_BASE_URL}/actor-runs/${encodeURIComponent(runId)}?waitForFinish=120&token=${encodeURIComponent(apifyToken)}`;
-  const waitResponse = await fetch(waitUrl);
-  if (!waitResponse.ok) {
-    const errorText = await waitResponse.text();
-    throw new Error(`Failed while waiting for Apify run: ${errorText}`);
+  const maxWaitSeconds = Number.parseInt(
+    String(process.env.APIFY_RUN_MAX_WAIT_SECONDS || "900"),
+    10
+  );
+  const waitChunkSeconds = Number.parseInt(
+    String(process.env.APIFY_RUN_WAIT_CHUNK_SECONDS || "120"),
+    10
+  );
+  const timeoutAt = Date.now() + Math.max(60, maxWaitSeconds) * 1000;
+  let waitPayload = null;
+  let runStatus = "RUNNING";
+  let datasetId = "";
+
+  while (Date.now() < timeoutAt) {
+    const waitUrl = `${APIFY_BASE_URL}/actor-runs/${encodeURIComponent(runId)}?waitForFinish=${Math.max(
+      5,
+      waitChunkSeconds
+    )}&token=${encodeURIComponent(apifyToken)}`;
+    const waitResponse = await fetch(waitUrl);
+    if (!waitResponse.ok) {
+      const errorText = await waitResponse.text();
+      throw new Error(`Failed while waiting for Apify run: ${errorText}`);
+    }
+
+    waitPayload = await waitResponse.json();
+    runStatus = waitPayload?.data?.status || "UNKNOWN";
+    datasetId = waitPayload?.data?.defaultDatasetId || "";
+
+    if (runStatus === "SUCCEEDED") break;
+    if (["FAILED", "ABORTED", "TIMED-OUT"].includes(runStatus)) {
+      const statusMessage = waitPayload?.data?.statusMessage
+        ? ` (${waitPayload.data.statusMessage})`
+        : "";
+      throw new Error(
+        `Apify run did not succeed. Current status: ${runStatus}${statusMessage}`
+      );
+    }
   }
 
-  const waitPayload = await waitResponse.json();
-  const runStatus = waitPayload?.data?.status;
-  const datasetId = waitPayload?.data?.defaultDatasetId;
   if (runStatus !== "SUCCEEDED" || !datasetId) {
     throw new Error(
-      `Apify run did not succeed. Current status: ${runStatus || "UNKNOWN"}`
+      `Apify run is still ${runStatus || "RUNNING"} after waiting ${Math.max(
+        60,
+        maxWaitSeconds
+      )} seconds`
     );
   }
 
@@ -269,19 +643,26 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
   }
 
   const rows = await datasetResponse.json();
+  const maxItemsLimit = Number.parseInt(String(safeActorInput.maxItems || ""), 10);
+  const limitedRows =
+    Array.isArray(rows) && Number.isFinite(maxItemsLimit) && maxItemsLimit > 0
+      ? rows.slice(0, maxItemsLimit)
+      : rows;
   const normalized = Array.isArray(rows)
-    ? rows.map(normalizeApifyNursingHomeRow).filter((item) => item.providerName)
+    ? limitedRows
+        .map(normalizeApifyFacilityRow)
+        .filter((item) => item.providerName)
     : [];
 
   if (normalized.length === 0) {
     throw new Error("Apify returned no valid nursing home records");
   }
 
-  const prepared = normalized.map(toExternalFacilityDoc);
+  const prepared = normalized.map((item) => toExternalFacilityDoc(item, actorId));
   const { created, updated } = await upsertExternalFacilities(prepared);
 
   return {
-    actor: APIFY_ACTOR_ID,
+    actor: actorId,
     runId,
     totalScraped: normalized.length,
     created,
@@ -296,6 +677,13 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
       total_fines_amount: item.totalFinesAmount,
       provider_url: item.providerUrl,
       pricing: item.pricing || "",
+      services: item.services || [],
+      amenities: item.amenities || [],
+      care_levels: item.careLevels || [],
+      units: item.units || 0,
+      occupancy: item.occupancy || 0,
+      active_leads: item.activeLeads || 0,
+      google_places: item.googlePlaces || {},
     })),
   };
 };
