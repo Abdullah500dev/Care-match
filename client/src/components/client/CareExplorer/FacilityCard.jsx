@@ -3,7 +3,8 @@ import { Heart, Star, ArrowRight, MapPin, Sparkles } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
-const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=280&fit=crop";
+const CAREMATCH_PLACEHOLDER_IMAGE = "/assets/images/footer-logo.svg";
+const DEFAULT_IMAGE = CAREMATCH_PLACEHOLDER_IMAGE;
 const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
 
 const FacilityCard = ({
@@ -14,7 +15,7 @@ const FacilityCard = ({
   rating = 4.8,
   reviewCount = 127,
   ratingLabel = "family reviews",
-  priceRange = "$5,200 - $7,800",
+  priceRange = "N/A",
   distance = "2.3 MILES AWAY",
   features = [
     "Strong memory care program",
@@ -32,6 +33,19 @@ const FacilityCard = ({
   isFavorite = false,
   onToggleFavorite,
 }) => {
+  const [cardImageSrc, setCardImageSrc] = React.useState(imageSrc || DEFAULT_IMAGE);
+  const isUsingPlaceholderImage = cardImageSrc === CAREMATCH_PLACEHOLDER_IMAGE;
+
+  React.useEffect(() => {
+    setCardImageSrc(imageSrc || DEFAULT_IMAGE);
+  }, [imageSrc]);
+
+  const handleImageError = () => {
+    if (cardImageSrc !== CAREMATCH_PLACEHOLDER_IMAGE) {
+      setCardImageSrc(CAREMATCH_PLACEHOLDER_IMAGE);
+    }
+  };
+
   const hasWebsite = typeof website === "string" && /^https?:\/\//i.test(website);
   const hasExternalSourceUrl =
     typeof externalSourceUrl === "string" && /^https?:\/\//i.test(externalSourceUrl);
@@ -96,9 +110,12 @@ const FacilityCard = ({
         {/* Image Section */}
         <div className="relative">
           <img
-            src={imageSrc || DEFAULT_IMAGE}
+            src={cardImageSrc}
             alt={name}
-            className="w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] object-cover"
+            onError={handleImageError}
+            className={`w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] ${
+              isUsingPlaceholderImage ? "object-contain bg-white p-4" : "object-cover"
+            }`}
           />
           {/* Match Badge */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/70 text-white backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold">
@@ -172,7 +189,12 @@ const FacilityCard = ({
     >
       {/* Image Section - compact: always on top ~45–50%; listing: side-by-side on sm+ */}
       <div className={`relative w-full flex-shrink-0 ${compact ? "aspect-[4/3] min-h-[180px]" : "sm:w-[33.333%] min-h-[180px] min-[400px]:min-h-[200px] sm:min-h-[220px]"}`}>
-        <img src={imageSrc} alt={name} className="h-full w-full object-cover" />
+        <img
+          src={cardImageSrc}
+          alt={name}
+          onError={handleImageError}
+          className={`h-full w-full ${isUsingPlaceholderImage ? "object-contain bg-white p-6" : "object-cover"}`}
+        />
         {/* Match Badge - dark semi-transparent oval */}
         <div className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 text-white backdrop-blur-sm font-bold ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[11px] sm:text-xs"}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" />

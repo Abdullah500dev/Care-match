@@ -24,59 +24,8 @@ function resolveFacilityImageUrl(path) {
   return `${API_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-const FACILITIES = [
-  {
-    key: "fallback-1",
-    matchPercent: 98,
-    imageSrc: "/assets/images/imgForFindCare.svg",
-    category: "ASSISTED LIVING",
-    name: "Sunrise Bay Center",
-    priceRange: "$4,000 - $6,500/mo",
-    distance: "3 miles away",
-    distanceMiles: 3,
-    address: "101 Howard St, San Francisco, CA",
-    features: ["Strong care team", "Flexible tour schedule"],
-    careLevels: ["assisted living"],
-    amenities: ["24/7 care", "private rooms"],
-    services: ["therapy services"],
-    availability: "Within 30 Days",
-  },
-  {
-    key: "fallback-2",
-    matchPercent: 94,
-    imageSrc: "/assets/images/imgForFindCare.svg",
-    category: "MEMORY CARE",
-    name: "Golden Life Residence",
-    priceRange: "$5,200 - $7,300/mo",
-    distance: "9 miles away",
-    distanceMiles: 9,
-    address: "1455 Market St, San Francisco, CA",
-    features: ["Memory support", "Secure community"],
-    careLevels: ["memory care"],
-    amenities: ["24/7 care"],
-    services: ["therapy services"],
-    availability: "Within 30 Days",
-  },
-  {
-    key: "fallback-3",
-    matchPercent: 89,
-    imageSrc: "/assets/images/imgForFindCare.svg",
-    category: "ASSISTED LIVING",
-    name: "Pacific Assisted Home",
-    priceRange: "$3,900 - $5,900/mo",
-    distance: "14 miles away",
-    distanceMiles: 14,
-    address: "2200 Powell St, San Francisco, CA",
-    features: ["Budget friendly", "Active community"],
-    careLevels: ["assisted living"],
-    amenities: ["pet friendly"],
-    services: ["transportation"],
-    availability: "Future Planning",
-  },
-];
-
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
-const DEFAULT_PRICE_RANGE = "$4,000 - $6,500/mo";
+const DEFAULT_PRICE_RANGE = "N/A";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
@@ -139,6 +88,10 @@ function normalizeFacilityForCard(m) {
     m && typeof m.external_data === "object" && m.external_data
       ? m.external_data
       : {};
+  const googlePlaces =
+    externalData && typeof externalData.google_places === "object"
+      ? externalData.google_places
+      : {};
   const firstImg =
     Array.isArray(m.images) && m.images.length ? m.images[0] : null;
   const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
@@ -168,6 +121,18 @@ function normalizeFacilityForCard(m) {
     externalData.overall_rating != null &&
     !Number.isNaN(Number(externalData.overall_rating))
       ? Number(externalData.overall_rating)
+      : googlePlaces.total_score != null &&
+          !Number.isNaN(Number(googlePlaces.total_score))
+        ? Number(googlePlaces.total_score)
+        : null;
+  const reviewCountRaw =
+    googlePlaces.review_count ??
+    m?.apify_raw?.reviewsCount ??
+    m?.apify_raw?.reviews_count ??
+    null;
+  const reviewCountValue =
+    reviewCountRaw != null && !Number.isNaN(Number(reviewCountRaw))
+      ? Number(reviewCountRaw)
       : null;
   const providerUrl = String(externalData.provider_url || "").trim();
   const distance =
@@ -189,8 +154,13 @@ function normalizeFacilityForCard(m) {
     address: m.address || "",
     website: m.website || "",
     rating: overallRating != null ? overallRating : 4.8,
-    reviewCount: overallRating != null ? 1 : 127,
-    ratingLabel: overallRating != null ? "CMS rating" : "family reviews",
+    reviewCount: reviewCountValue != null ? reviewCountValue : 0,
+    ratingLabel:
+      reviewCountValue != null
+        ? "reviews"
+        : overallRating != null
+          ? "CMS rating"
+          : "reviews",
     specialty: Array.isArray(m.specialty) ? m.specialty : [],
     description: m.description || "",
     sourcePlatform: m.source_platform || "",
@@ -281,7 +251,7 @@ const CareExplorer = () => {
   const baseFacilities = useMemo(() => {
     if (liveFacilities?.length) return liveFacilities;
     if (directoryFacilities.length) return directoryFacilities;
-    return FACILITIES;
+    return [];
   }, [liveFacilities, directoryFacilities]);
 
   const careTypeOptions = useMemo(() => {
@@ -488,14 +458,7 @@ const CareExplorer = () => {
     return mapFacilities.filter((f) => allowed.has(f.key));
   }, [mapFacilities, currentCoords, nearbyMapFacilityKeys]);
 
-  const showFullCarrieList = Boolean(fromCarrie && liveFacilities?.length);
-  const pageSize = showFullCarrieList
-    ? Math.max(filteredFacilities.length, 1)
-    : layout === "single"
-      ? 3
-      : layout === "two"
-        ? 4
-        : 12;
+  const pageSize = 5;
   const matchCountForHeader = filteredFacilities.length;
   const locationLabelForHeader =
     String(filters.locationQuery || "").trim() ||
@@ -872,7 +835,13 @@ const CareExplorer = () => {
                 </div>
               ))}
 
-              {!showFullCarrieList && totalPages > 1 && (
+              {listingItems.length === 0 && (
+                <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-6 text-center text-sm text-[#64748b]">
+                  No facilities available yet for the selected filters.
+                </div>
+              )}
+
+              {totalPages > 1 && (
                 <div className="col-span-full mt-2 flex items-center justify-center gap-2">
                   <button
                     type="button"
