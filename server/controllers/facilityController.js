@@ -27,6 +27,7 @@ import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
+import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -134,15 +135,65 @@ const pushIfPresent = (arr, label, value) => {
 const toStringArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
-    return value.map((x) => String(x || "").trim()).filter(Boolean);
+    return value
+      .flatMap((x) => toStringArray(x))
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
   }
   if (typeof value === "object") {
-    return Object.entries(value)
-      .map(([k, v]) => `${String(k)}: ${String(v ?? "").trim()}`.trim())
-      .filter((x) => x && !x.endsWith(":"));
+    if (
+      Object.prototype.hasOwnProperty.call(value, "day") &&
+      Object.prototype.hasOwnProperty.call(value, "hours")
+    ) {
+      const day = String(value.day || "").trim();
+      const hours = String(value.hours || "").trim();
+      return day && hours ? [`${day}: ${hours}`] : [];
+    }
+
+    const out = [];
+    Object.entries(value).forEach(([k, v]) => {
+      if (Array.isArray(v)) {
+        v.forEach((entry) => {
+          if (entry && typeof entry === "object") {
+            Object.entries(entry).forEach(([subKey, subVal]) => {
+              if (typeof subVal === "boolean") {
+                out.push(`${k} - ${subKey}: ${subVal ? "Yes" : "No"}`);
+              } else if (subVal != null && String(subVal).trim() !== "") {
+                out.push(`${k} - ${subKey}: ${String(subVal).trim()}`);
+              }
+            });
+          } else if (entry != null && String(entry).trim() !== "") {
+            out.push(`${k}: ${String(entry).trim()}`);
+          }
+        });
+      } else if (v != null && String(v).trim() !== "") {
+        out.push(`${String(k)}: ${String(v).trim()}`);
+      }
+    });
+    return out;
   }
   const single = String(value).trim();
   return single ? [single] : [];
+};
+
+const inferCareLevelsFromText = (...values) => {
+  const text = values
+    .map((v) => String(v || "").toLowerCase())
+    .join(" ");
+  const levels = [];
+  if (/skilled nursing|nursing home|snf|rehab center/i.test(text)) {
+    levels.push("Skilled Nursing");
+  }
+  if (/assisted living|assisted/i.test(text)) {
+    levels.push("Assisted Living");
+  }
+  if (/memory care|dementia|alzheimer/i.test(text)) {
+    levels.push("Memory Care");
+  }
+  if (/independent living/i.test(text)) {
+    levels.push("Independent Living");
+  }
+  return [...new Set(levels)];
 };
 
 const parseJsonEnvObject = (envName) => {
@@ -153,6 +204,110 @@ const parseJsonEnvObject = (envName) => {
     return parsed && typeof parsed === "object" ? parsed : {};
   } catch {
     return {};
+  }
+};
+
+const parseJsonObjectFromText = (text) => {
+  const raw = String(text || "").trim();
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced?.[1]) {
+      try {
+        return JSON.parse(fenced[1]);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+};
+
+const normalizeStringList = (value, limit = 16) => {
+  const list = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    const s = String(item || "").trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+    if (out.length >= limit) break;
+  }
+  return out;
+};
+
+const enrichFacilityListsWithGpt = async (rawRecord, fallback = {}) => {
+  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey || !rawRecord || typeof rawRecord !== "object") {
+    return {
+      services: normalizeStringList(fallback.services),
+      amenities: normalizeStringList(fallback.amenities),
+      care_levels: normalizeStringList(fallback.care_levels),
+    };
+  }
+
+  const systemPrompt =
+    "You classify senior-care listing metadata. Return strict JSON only with keys services, amenities, care_levels. Each value must be an array of short strings. No markdown, no explanations.";
+  const userPrompt = JSON.stringify({
+    task: "Extract practical fields for a senior-care directory.",
+    rules: {
+      care_levels_allowed: [
+        "Skilled Nursing",
+        "Assisted Living",
+        "Memory Care",
+        "Independent Living",
+        "Continuing Care",
+        "Rehabilitation",
+      ],
+      max_items_each: 12,
+    },
+    listing: rawRecord,
+    fallback,
+  });
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_CHAT_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.1,
+        max_tokens: 400,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        services: normalizeStringList(fallback.services),
+        amenities: normalizeStringList(fallback.amenities),
+        care_levels: normalizeStringList(fallback.care_levels),
+      };
+    }
+    const content = data?.choices?.[0]?.message?.content || "";
+    const parsed = parseJsonObjectFromText(content) || {};
+    return {
+      services: normalizeStringList(parsed.services || fallback.services),
+      amenities: normalizeStringList(parsed.amenities || fallback.amenities),
+      care_levels: normalizeStringList(parsed.care_levels || fallback.care_levels),
+    };
+  } catch {
+    return {
+      services: normalizeStringList(fallback.services),
+      amenities: normalizeStringList(fallback.amenities),
+      care_levels: normalizeStringList(fallback.care_levels),
+    };
   }
 };
 
@@ -318,30 +473,34 @@ const normalizeApifyFacilityRow = (row = {}) => {
   const placeTypes = Array.isArray(row?.types)
     ? row.types.map((x) => String(x || "").toLowerCase())
     : [];
-  const careLevels = ["Skilled Nursing"];
-  if (placeTypes.some((t) => /assisted|retirement|senior_living|memory/i.test(t))) {
-    careLevels.push("Senior Living");
-  }
+  const categories = toStringArray(
+    pickFirstNonEmpty(row, ["categories", "categoryName", "category"])
+  );
+  const careLevels = inferCareLevelsFromText(
+    providerName,
+    categories.join(" "),
+    placeTypes.join(" ")
+  );
   if (continuingCareBeds > 0) careLevels.push("Continuing Care");
 
-  const mapsUrl = toOptionalString(
-    pickFirstNonEmpty(row, ["googleMapsUrl", "mapsUrl", "url"])
-  );
+  const mapsUrl = toOptionalString(pickFirstNonEmpty(row, ["googleMapsUrl", "mapsUrl", "url"]));
   const placeId = toOptionalString(
     pickFirstNonEmpty(row, ["placeId", "place_id", "id"])
   );
   const category = toOptionalString(
-    pickFirstNonEmpty(row, ["categoryName", "category", "subtitle"])
+    pickFirstNonEmpty(row, ["categoryName", "category", "subTitle", "subtitle"])
   );
-  const subtitle = toOptionalString(pickFirstNonEmpty(row, ["subtitle"]));
+  const subtitle = toOptionalString(pickFirstNonEmpty(row, ["subTitle", "subtitle"]));
   const website = toOptionalString(pickFirstNonEmpty(row, ["website"]));
   const plusCode = toOptionalString(pickFirstNonEmpty(row, ["plusCode", "plus_code"]));
   const latitude =
     toOptionalNumber(pickFirstNonEmpty(row, ["latitude", "lat"])) ??
-    toOptionalNumber(row?.coordinates?.lat);
+    toOptionalNumber(row?.coordinates?.lat) ??
+    toOptionalNumber(row?.location?.lat);
   const longitude =
     toOptionalNumber(pickFirstNonEmpty(row, ["longitude", "lng", "lon"])) ??
-    toOptionalNumber(row?.coordinates?.lng);
+    toOptionalNumber(row?.coordinates?.lng) ??
+    toOptionalNumber(row?.location?.lng);
   const totalScore =
     toOptionalNumber(pickFirstNonEmpty(row, ["totalScore", "rating", "stars"])) ??
     null;
@@ -370,7 +529,17 @@ const normalizeApifyFacilityRow = (row = {}) => {
   const questionsAndAnswers = toStringArray(
     pickFirstNonEmpty(row, ["questionsAndAnswers", "qaUpdates", "qna"])
   );
-  const images = toStringArray(pickFirstNonEmpty(row, ["images", "imageUrls", "photos"]));
+  const images = toStringArray(
+    pickFirstNonEmpty(row, [
+      "images",
+      "imageUrls",
+      "photos",
+      "imageUrl",
+      "image",
+      "thumbnail",
+      "thumbnailUrl",
+    ])
+  );
 
   // Enrich display fields from Google Places if source values are missing.
   if (!providerUrl && (website || mapsUrl)) {
@@ -387,9 +556,9 @@ const normalizeApifyFacilityRow = (row = {}) => {
     totalFinesAmount,
     providerUrl,
     pricing,
-    services,
+    services: [...new Set([...services, ...categories.slice(0, 6)])],
     amenities,
-    careLevels,
+    careLevels: [...new Set(careLevels)],
     units,
     occupancy,
     activeLeads,
@@ -457,15 +626,22 @@ const toExternalFacilityDoc = (normalizedRow, actorId = APIFY_DEFAULT_ACTOR_ID) 
     phone: phoneNumber || "N/A",
     address,
     website: providerUrl || googlePlaces?.website || googlePlaces?.maps_url || "",
-    specialty: actorId.includes("google-places")
-      ? ["Senior Care"]
-      : ["Skilled Nursing"],
+    specialty:
+      actorId.includes("google-places") && Array.isArray(googlePlaces?.additional_info)
+        ? [...new Set((googlePlaces.additional_info || []).slice(0, 6))]
+        : actorId.includes("google-places")
+          ? ["Senior Care"]
+          : ["Skilled Nursing"],
     description: `CMS overall rating: ${ratingText}. Total fines amount: ${finesText}.`,
     services: Array.isArray(services) ? services : [],
     amenities: Array.isArray(amenities) ? amenities : [],
     care_levels: Array.isArray(careLevels) ? careLevels : ["Skilled Nursing"],
     pricing: pricing || "",
-    images: Array.isArray(mappedImages) ? mappedImages.slice(0, 8) : [],
+    images: Array.isArray(mappedImages)
+      ? mappedImages
+          .filter((url) => /^https?:\/\//i.test(String(url || "").trim()))
+          .slice(0, 8)
+      : [],
     units: units || 0,
     occupancy: occupancy || 0,
     active_leads: activeLeads || 0,
@@ -533,9 +709,17 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
 
   const actorId = toOptionalString(actorInput?.actorId) || APIFY_DEFAULT_ACTOR_ID;
   const defaultActorInput = parseJsonEnvObject("APIFY_SYNC_ACTOR_INPUT_JSON");
+  const envEnrich = String(process.env.APIFY_ENRICH_WITH_GPT || "true").toLowerCase();
+  const explicitActorFlag =
+    typeof actorInput?.enrichWithGpt === "boolean"
+      ? actorInput.enrichWithGpt
+      : null;
+  const enrichWithGpt =
+    explicitActorFlag != null ? explicitActorFlag : envEnrich !== "false";
   const actorPayload =
     actorInput && typeof actorInput === "object" ? { ...actorInput } : {};
   delete actorPayload.actorId;
+  delete actorPayload.enrichWithGpt;
   const safeActorInput =
     actorPayload && typeof actorPayload === "object"
       ? { ...defaultActorInput, ...actorPayload }
@@ -658,16 +842,36 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
     throw new Error("Apify returned no valid nursing home records");
   }
 
-  const prepared = normalized.map((item) => toExternalFacilityDoc(item, actorId));
+  let normalizedRows = normalized;
+  if (enrichWithGpt) {
+    const enriched = [];
+    for (const item of normalized) {
+      const gpt = await enrichFacilityListsWithGpt(item.rawRow, {
+        services: item.services,
+        amenities: item.amenities,
+        care_levels: item.careLevels,
+      });
+      enriched.push({
+        ...item,
+        services: gpt.services,
+        amenities: gpt.amenities,
+        careLevels: gpt.care_levels,
+      });
+    }
+    normalizedRows = enriched;
+  }
+
+  const prepared = normalizedRows.map((item) => toExternalFacilityDoc(item, actorId));
   const { created, updated } = await upsertExternalFacilities(prepared);
 
   return {
     actor: actorId,
     runId,
-    totalScraped: normalized.length,
+    totalScraped: normalizedRows.length,
     created,
     updated,
-    fields: normalized.map((item) => ({
+    gptEnriched: enrichWithGpt,
+    fields: normalizedRows.map((item) => ({
       provider_name: item.providerName,
       city: item.city,
       state: item.state,
@@ -1162,6 +1366,51 @@ export const importFacilitiesFromApify = catchAsyncError(async (req, res, next) 
   } catch (error) {
     return next(new ErrorHandler(error.message || "Apify import failed", 502));
   }
+});
+
+export const enrichFacilitiesWithGpt = catchAsyncError(async (req, res, next) => {
+  const admin = await assertAdmin(req.user?.id);
+  if (!admin) {
+    return next(new ErrorHandler("Only admins can run GPT enrichment", 403));
+  }
+
+  const parsedLimit = Number.parseInt(String(req.body?.limit || req.query?.limit || "20"), 10);
+  const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 20 : Math.min(parsedLimit, 100);
+  const externalOnly = String(req.body?.externalOnly ?? "true").toLowerCase() !== "false";
+  const query = externalOnly ? { is_external: true } : {};
+
+  const facilities = await Facility.find(query)
+    .sort({ updatedAt: -1 })
+    .limit(limit)
+    .lean();
+
+  let updatedCount = 0;
+  for (const item of facilities) {
+    const gpt = await enrichFacilityListsWithGpt(item.apify_raw, {
+      services: item.services || [],
+      amenities: item.amenities || [],
+      care_levels: item.care_levels || [],
+    });
+
+    await Facility.updateOne(
+      { _id: item._id },
+      {
+        $set: {
+          services: gpt.services,
+          amenities: gpt.amenities,
+          care_levels: gpt.care_levels,
+        },
+      }
+    );
+    updatedCount += 1;
+  }
+
+  res.status(200).json({
+    success: true,
+    message: "GPT enrichment completed.",
+    processed: facilities.length,
+    updated: updatedCount,
+  });
 });
 
 export const importExternalFacilities = catchAsyncError(async (req, res, next) => {

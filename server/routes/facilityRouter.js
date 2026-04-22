@@ -15,6 +15,7 @@ import {
   getMyFacility,
   importExternalFacilities,
   importFacilitiesFromApify,
+  enrichFacilitiesWithGpt,
   updateMyFacility,
 } from "../controllers/facilityController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
@@ -117,6 +118,7 @@ router.post(
 
 router.post("/import-external", isAutheticated, importExternalFacilities);
 router.post("/import-apify", isAutheticated, importFacilitiesFromApify);
+router.post("/enrich-gpt", isAutheticated, enrichFacilitiesWithGpt);
 
 router.get("/me", isAutheticated, getMyFacility);
 router.put("/me", isAutheticated, updateMyFacility);
