@@ -103,6 +103,19 @@ function formatPricingInput(value) {
   return out + suffix;
 }
 
+function getFacilityPricingValue(facility) {
+  if (!facility || typeof facility !== "object") return "";
+  const direct = String(facility.pricing || "").trim();
+  if (direct) return direct;
+  const nested = String(facility.external_data?.pricing || "").trim();
+  if (nested) return nested;
+  const fines = Number(facility.external_data?.total_fines_amount);
+  if (Number.isFinite(fines) && fines > 0) {
+    return `$${fines.toLocaleString("en-US")}/mo`;
+  }
+  return "";
+}
+
 function FacilityImageSlider({ images, name }) {
   const urls = getFacilityImageUrls(images);
   const [api, setApi] = useState(null);
@@ -315,7 +328,7 @@ export default function Communities() {
       services: Array.isArray(facility.services) ? [...facility.services] : [],
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
-      pricing: facility.pricing || "",
+      pricing: getFacilityPricingValue(facility),
       units: facility.units || 0,
       occupancy: facility.occupancy || 0,
       active_leads: facility.active_leads || 0,
@@ -571,9 +584,9 @@ export default function Communities() {
                     >
                       {typeLabel}
                     </span>
-                    {facility.pricing ? (
+                    {getFacilityPricingValue(facility) ? (
                       <span className="rounded-full bg-white/95 px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
-                        {facility.pricing}
+                        {getFacilityPricingValue(facility)}
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-sm">

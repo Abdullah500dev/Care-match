@@ -115,6 +115,11 @@ const facilitySchema = new mongoose.Schema(
         default: "",
         trim: true,
       },
+      pricing: {
+        type: String,
+        default: "",
+        trim: true,
+      },
     },
 
     units: {

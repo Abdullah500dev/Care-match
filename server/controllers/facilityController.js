@@ -78,6 +78,15 @@ const toNumberOrNull = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
+const toMonthlyPricingText = (rawValue) => {
+  const raw = toOptionalString(rawValue);
+  if (!raw) return "";
+  if (/\$|month|mo|\/m|weekly|week|daily|day|year|yr/i.test(raw)) return raw;
+  const parsed = toNumberOrNull(raw);
+  if (parsed == null || parsed <= 0) return raw;
+  return `$${parsed.toLocaleString("en-US")}/mo`;
+};
+
 const normalizeApifyNursingHomeRow = (row = {}) => {
   const providerName = toOptionalString(
     pickFirstNonEmpty(row, ["providerName", "name", "Provider Name"])
@@ -106,6 +115,22 @@ const normalizeApifyNursingHomeRow = (row = {}) => {
   ]);
   const overallRating = toNumberOrNull(overallRatingRaw);
   const totalFinesAmount = toNumberOrNull(finesRaw);
+  const pricingRaw = pickFirstNonEmpty(row, [
+    "pricing",
+    "price",
+    "monthlyPrice",
+    "monthlyCost",
+    "averageMonthlyCost",
+    "avgMonthlyCost",
+    "estimatedMonthlyCost",
+    "privatePayRate",
+    "costPerMonth",
+    "Price",
+    "Monthly Price",
+    "Monthly Cost",
+    "Estimated Monthly Cost",
+  ]);
+  const pricing = toMonthlyPricingText(pricingRaw);
 
   return {
     providerName,
@@ -116,6 +141,7 @@ const normalizeApifyNursingHomeRow = (row = {}) => {
     overallRating,
     totalFinesAmount,
     providerUrl,
+    pricing,
   };
 };
 
@@ -129,6 +155,7 @@ const toExternalFacilityDoc = (normalizedRow) => {
     overallRating,
     totalFinesAmount,
     providerUrl,
+    pricing,
   } = normalizedRow;
 
   const locationParts = [city, state, zipCode].filter(Boolean);
@@ -151,7 +178,7 @@ const toExternalFacilityDoc = (normalizedRow) => {
     services: [],
     amenities: [],
     care_levels: [],
-    pricing: "",
+    pricing: pricing || "",
     images: [],
     external_data: {
       provider_name: providerName,
@@ -162,6 +189,7 @@ const toExternalFacilityDoc = (normalizedRow) => {
       overall_rating: overallRating,
       total_fines_amount: totalFinesAmount,
       provider_url: providerUrl,
+      pricing: pricing || "",
     },
   };
 };
@@ -267,6 +295,7 @@ export const syncFacilitiesFromApify = async (actorInput = {}) => {
       overall_rating: item.overallRating,
       total_fines_amount: item.totalFinesAmount,
       provider_url: item.providerUrl,
+      pricing: item.pricing || "",
     })),
   };
 };

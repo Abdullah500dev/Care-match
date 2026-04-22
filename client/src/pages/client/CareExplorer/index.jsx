@@ -154,8 +154,16 @@ function normalizeFacilityForCard(m) {
             .trim(),
         )
       : ["Review listing details and tour to validate fit"];
-  const priceRange = formatPriceRange(m.pricing);
-  const numericPrice = parsePriceRangeNumbers(m.pricing);
+  const pricingTextFromFields =
+    String(m.pricing || "").trim() || String(externalData.pricing || "").trim();
+  const finesAmount = Number(externalData.total_fines_amount);
+  const pricingText =
+    pricingTextFromFields ||
+    (Number.isFinite(finesAmount) && finesAmount > 0
+      ? `$${finesAmount.toLocaleString("en-US")}/mo`
+      : "");
+  const priceRange = formatPriceRange(pricingText);
+  const numericPrice = parsePriceRangeNumbers(pricingText);
   const overallRating =
     externalData.overall_rating != null &&
     !Number.isNaN(Number(externalData.overall_rating))
