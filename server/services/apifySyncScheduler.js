@@ -22,6 +22,7 @@ const toPositiveInt = (value, fallback) => {
   return n;
 };
 
+
 export const startApifySyncScheduler = () => {
   const enabled = String(process.env.APIFY_SYNC_ENABLED || "").toLowerCase() === "true";
   syncStatus.enabled = enabled;
