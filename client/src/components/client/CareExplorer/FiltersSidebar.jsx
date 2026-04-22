@@ -13,6 +13,26 @@ const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friend
 const toggleInArray = (arr, value) =>
   arr.includes(value) ? arr.filter((x) => x !== value) : [...arr, value];
 
+const normalizeLabel = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const hasSemanticSelection = (selectedValues, optionValue) => {
+  const option = normalizeLabel(optionValue);
+  if (!option) return false;
+  return selectedValues.some((item) => {
+    const selected = normalizeLabel(item);
+    if (!selected) return false;
+    return (
+      selected === option ||
+      selected.includes(option) ||
+      option.includes(selected)
+    );
+  });
+};
+
 const FiltersSidebar = ({
   filters,
   onFiltersChange,
@@ -109,7 +129,7 @@ const FiltersSidebar = ({
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
             >
               <Checkbox
-                checked={selectedCareTypes.includes(type)}
+                checked={hasSemanticSelection(selectedCareTypes, type)}
                 onCheckedChange={() =>
                   setFilters({
                     selectedCareTypes: toggleInArray(selectedCareTypes, type),
@@ -155,7 +175,7 @@ const FiltersSidebar = ({
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
             >
               <Checkbox
-                checked={selectedAmenities.includes(item)}
+                checked={hasSemanticSelection(selectedAmenities, item)}
                 onCheckedChange={() =>
                   setFilters({
                     selectedAmenities: toggleInArray(selectedAmenities, item),
