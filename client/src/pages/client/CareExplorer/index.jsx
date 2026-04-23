@@ -86,6 +86,35 @@ function titleCase(s) {
     .join(" ");
 }
 
+function tokenizeLocation(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9,\s]/g, " ")
+    .split(/[\s,]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function locationLooksLikeMatch(locationQuery, facilityAddress, facilityDistance) {
+  const query = String(locationQuery || "").trim().toLowerCase();
+  if (!query) return true;
+  const haystack = `${String(facilityAddress || "")} ${String(facilityDistance || "")}`
+    .toLowerCase()
+    .trim();
+  if (!haystack) return false;
+  if (haystack.includes(query)) return true;
+
+  const stopTokens = new Set(["near", "nearby", "around", "south", "north", "east", "west"]);
+  const tokens = tokenizeLocation(query).filter(
+    (token) => token.length >= 3 && !stopTokens.has(token),
+  );
+  if (tokens.length === 0) return false;
+
+  const matchedCount = tokens.filter((token) => haystack.includes(token)).length;
+  const minimumMatches = Math.min(2, tokens.length);
+  return matchedCount >= minimumMatches;
+}
+
 function normalizeFacilityForCard(m) {
   const externalData =
     m && typeof m.external_data === "object" && m.external_data
@@ -409,8 +438,7 @@ const CareExplorer = () => {
 
     return scopedFacilities.filter((f) => {
       if (locationQuery) {
-        const addressText = `${f.address || ""} ${f.distance || ""}`.toLowerCase();
-        if (!addressText.includes(locationQuery)) return false;
+        if (!locationLooksLikeMatch(locationQuery, f.address, f.distance)) return false;
       }
 
       if (q) {
