@@ -192,6 +192,33 @@ const inferMaxDistanceFromMessages = (msgs) => {
   return null;
 };
 
+const inferAmenityMustHavesFromMessages = (msgs) => {
+  const text = msgs
+    .filter((m) => m.role === "user")
+    .map((m) => String(m.content || ""))
+    .join(" \n ")
+    .toLowerCase();
+  const amenities = new Set();
+
+  if (/\bprivate room|private rooms?\b/i.test(text)) amenities.add("private room preferred");
+  if (/\bpet[-\s]?friendly|pets?\b/i.test(text)) amenities.add("pet-friendly");
+  if (/\bcouples?\b/i.test(text)) amenities.add("couples accommodation");
+  if (/\bcultural|language[-\s]?specific|language specific\b/i.test(text)) {
+    amenities.add("cultural or language-specific care");
+  }
+  if (/\bfaith[-\s]?based|religious\b/i.test(text)) amenities.add("faith-based community");
+  if (/\blgbtq\+?|lgbt\b/i.test(text)) amenities.add("lgbtq+ welcoming");
+  if (/\bdiabetes\b/i.test(text)) amenities.add("diabetes management");
+  if (/\bphysical therapy|therapy services?|therapy\b/i.test(text)) {
+    amenities.add("physical therapy");
+  }
+  if (/\bhospice\b/i.test(text)) amenities.add("hospice care");
+  if (/\brespiratory\b/i.test(text)) amenities.add("respiratory support");
+  if (/\bdialysis\b/i.test(text)) amenities.add("dialysis access nearby");
+
+  return [...amenities];
+};
+
 /**
  * POST /api/chat
  * Body: { messages: { role: "user"|"assistant", content: string }[] }
@@ -257,6 +284,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const inferredLocation = inferLocationFromMessages(sanitized);
   const inferredZipCode = inferZipCodeFromMessages(sanitized);
   const inferredMaxDistance = inferMaxDistanceFromMessages(sanitized);
+  const inferredAmenityMustHaves = inferAmenityMustHavesFromMessages(sanitized);
 
   // Priority-ordered missing essentials:
   // 1. Care Type (hard filter) — most critical
@@ -440,6 +468,12 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       inferredMaxDistance != null
     ) {
       prefs.maxDistanceMiles = inferredMaxDistance;
+    }
+    if (prefs && inferredAmenityMustHaves.length > 0) {
+      const existing = Array.isArray(prefs.amenityMustHaves)
+        ? prefs.amenityMustHaves.map((x) => String(x).trim()).filter(Boolean)
+        : [];
+      prefs.amenityMustHaves = [...new Set([...existing, ...inferredAmenityMustHaves])];
     }
     // Safety net: normalize searchLocation to Title Case regardless of how user typed it
     // e.g. "arizona" → "Arizona", "los angeles, ca" → "Los Angeles, Ca"

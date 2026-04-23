@@ -32,6 +32,47 @@ const DEFAULT_PRICE_RANGE = "N/A";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
+const FIXED_AMENITY_OPTIONS = [
+  "Private room preferred",
+  "Pet-friendly",
+  "Couples accommodation",
+  "Cultural or language-specific care",
+  "Faith-based community",
+  "LGBTQ+ welcoming",
+  "Diabetes management",
+  "Physical therapy",
+  "Hospice care",
+  "Respiratory support",
+  "Dialysis access nearby",
+];
+
+const CARE_TYPE_ALIASES = {
+  "assisted living": ["assisted living", "assisted"],
+  "skilled nursing": ["skilled nursing", "snf", "nursing home", "subacute"],
+  "memory care": ["memory care", "dementia", "alzheimer"],
+  "independent living": ["independent living", "independent"],
+  hospice: ["hospice"],
+  "physical therapy": ["physical therapy", "therapy"],
+};
+
+const AMENITY_ALIASES = {
+  "private room preferred": ["private room", "private rooms", "private room preferred"],
+  "pet-friendly": ["pet friendly", "pet-friendly"],
+  "couples accommodation": ["couples accommodation", "couples"],
+  "cultural or language-specific care": [
+    "cultural care",
+    "language specific",
+    "language-specific",
+    "cultural or language-specific care",
+  ],
+  "faith-based community": ["faith based", "faith-based community"],
+  "lgbtq+ welcoming": ["lgbtq", "lgbtq+", "lgbtq welcoming", "lgbtq+ welcoming"],
+  "diabetes management": ["diabetes", "diabetes management"],
+  "physical therapy": ["physical therapy", "therapy services", "therapy"],
+  "hospice care": ["hospice", "hospice care"],
+  "respiratory support": ["respiratory", "respiratory support"],
+  "dialysis access nearby": ["dialysis", "dialysis access", "dialysis access nearby"],
+};
 
 function formatPriceRange(rawPricing) {
   const raw = String(rawPricing || "").trim();
@@ -84,6 +125,32 @@ function titleCase(s) {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function normalizeToken(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9+]+/g, " ")
+    .trim();
+}
+
+function mapSelectionsToOptions(incomingValues, options, aliases = {}) {
+  const selected = [];
+  const normalizedIncoming = (Array.isArray(incomingValues) ? incomingValues : [])
+    .map((v) => normalizeToken(v))
+    .filter(Boolean);
+
+  options.forEach((option) => {
+    const normalizedOption = normalizeToken(option);
+    const aliasList = (aliases[normalizedOption] || []).map((a) => normalizeToken(a));
+    const matchTerms = [normalizedOption, ...aliasList].filter(Boolean);
+    const matched = normalizedIncoming.some((input) =>
+      matchTerms.some((term) => input === term || input.includes(term) || term.includes(input)),
+    );
+    if (matched) selected.push(option);
+  });
+
+  return [...new Set(selected)];
 }
 
 // US state name → abbreviation lookup for location filter
@@ -389,20 +456,7 @@ const CareExplorer = () => {
     return base.length ? base : ["Assisted Living"];
   }, [baseFacilities]);
 
-  const amenityOptions = useMemo(() => {
-    const base = [
-      ...new Set(
-        baseFacilities.flatMap((f) =>
-          [...(f.amenities || []), ...(f.services || [])].map((x) =>
-            titleCase(x),
-          ),
-        ),
-      ),
-    ];
-    return base.slice(0, 60).length
-      ? base.slice(0, 60)
-      : ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
-  }, [baseFacilities]);
+  const amenityOptions = useMemo(() => FIXED_AMENITY_OPTIONS, []);
   const availabilityOptions = useMemo(() => {
     const base = [
       ...new Set(
@@ -427,10 +481,18 @@ const CareExplorer = () => {
       locationQuery: carrieLocationQuery,
       budgetMax: safeMax,
       selectedCareTypes: Array.isArray(carrieFilters.careLevels)
-        ? carrieFilters.careLevels.map((x) => titleCase(x))
+        ? mapSelectionsToOptions(
+          carrieFilters.careLevels.map((x) => titleCase(x)),
+          careTypeOptions,
+          CARE_TYPE_ALIASES,
+        )
         : prev.selectedCareTypes,
       selectedAmenities: Array.isArray(carrieFilters.amenityMustHaves)
-        ? carrieFilters.amenityMustHaves.map((x) => String(x).trim())
+        ? mapSelectionsToOptions(
+          carrieFilters.amenityMustHaves.map((x) => String(x).trim()),
+          amenityOptions,
+          AMENITY_ALIASES,
+        )
         : prev.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
@@ -443,7 +505,7 @@ const CareExplorer = () => {
           ? String(carrieFilters.maxDistanceMiles)
           : prev.maxMiles,
     }));
-  }, [fromCarrie, carrieFilters, carrieLocationQuery]);
+  }, [fromCarrie, carrieFilters, carrieLocationQuery, careTypeOptions, amenityOptions]);
 
   useEffect(() => {
     if (fromCarrie || !API_BASE) return;
@@ -1002,7 +1064,6 @@ const CareExplorer = () => {
                 }
                 careTypeOptions={careTypeOptions}
                 amenityOptions={amenityOptions}
-                availabilityOptions={availabilityOptions}
                 onAskCarrie={handleAskCarrie}
               />
             </div>

@@ -1288,14 +1288,12 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   }
 
   const facilityUser = await User.findById(facility.user_id);
-  if (!facilityUser) {
-    return next(new ErrorHandler("Facility user record missing", 500));
+  if (facilityUser) {
+    facilityUser.name = name;
+    facilityUser.email = normalizedEmail;
+    facilityUser.phone = phone;
+    await facilityUser.save();
   }
-
-  facilityUser.name = name;
-  facilityUser.email = normalizedEmail;
-  facilityUser.phone = phone;
-  await facilityUser.save();
 
   facility.name = name;
   facility.email = normalizedEmail;

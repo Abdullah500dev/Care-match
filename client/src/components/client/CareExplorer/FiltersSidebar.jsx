@@ -85,7 +85,6 @@ function LocationAutocompleteInput({ value, onChange, placeholder, className }) 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const careTypes = ["Assisted Living"];
-const availability = ["Immediate", "Within 30 Days", "Future Planning"];
 const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
 
 const toggleInArray = (arr, value) =>
@@ -127,13 +126,10 @@ const FiltersSidebar = ({
   onReset,
   careTypeOptions = careTypes,
   amenityOptions = amenities,
-  availabilityOptions = availability,
   onAskCarrie,
 }) => {
   const DEFAULT_AMENITIES_VISIBLE = 12;
-  const DEFAULT_AVAILABILITY_VISIBLE = 6;
 
-  const searchQuery = filters?.searchQuery ?? "";
   const locationQuery = filters?.locationQuery ?? "";
   const maxMiles = filters?.maxMiles ?? "";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
@@ -141,39 +137,22 @@ const FiltersSidebar = ({
   const selectedCareTypes = Array.isArray(filters?.selectedCareTypes)
     ? filters.selectedCareTypes
     : [];
-  const selectedAvailability = Array.isArray(filters?.selectedAvailability)
-    ? filters.selectedAvailability
-    : [];
   const selectedAmenities = Array.isArray(filters?.selectedAmenities)
     ? filters.selectedAmenities
     : [];
   const [showAllAmenities, setShowAllAmenities] = useState(false);
-  const [showAllAvailability, setShowAllAvailability] = useState(false);
 
   const normalizedAmenityOptions = [...new Set(
     amenityOptions
       .map((item) => String(item || "").trim())
       .filter(Boolean),
-  )].sort((a, b) => a.localeCompare(b));
-  const normalizedAvailabilityOptions = [...new Set(
-    availabilityOptions
-      .map((item) => String(item || "").trim())
-      .filter(Boolean),
-  )].sort((a, b) => a.localeCompare(b));
-
+  )];
   const visibleAmenities = showAllAmenities
     ? normalizedAmenityOptions
     : normalizedAmenityOptions.filter(
       (item, index) =>
         index < DEFAULT_AMENITIES_VISIBLE ||
         hasSemanticSelection(selectedAmenities, item),
-    );
-  const visibleAvailability = showAllAvailability
-    ? normalizedAvailabilityOptions
-    : normalizedAvailabilityOptions.filter(
-      (item, index) =>
-        index < DEFAULT_AVAILABILITY_VISIBLE ||
-        selectedAvailability.includes(item),
     );
 
   const setFilters = (patch) => {
@@ -192,25 +171,6 @@ const FiltersSidebar = ({
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
           />
-        </div>
-
-        {/* Keyword search */}
-        <div className="relative mb-4">
-          <Input
-            placeholder="Define your search..."
-            value={searchQuery}
-            onChange={(e) => setFilters({ searchQuery: e.target.value })}
-            className="pr-9 h-10 rounded-lg border-[#E2E8F0]"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setFilters({ searchQuery: "" })}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#364153] hover:text-[#132329]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
@@ -267,47 +227,6 @@ const FiltersSidebar = ({
             </label>
           ))}
         </div>
-
-        <div className="my-4 border-t border-[#E2E8F0]" />
-
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 className="font-semibold text-sm text-[#364153]">Availability</h3>
-          {selectedAvailability.length > 0 && (
-            <span className="rounded-full bg-[#00CFF4]/10 px-2 py-0.5 text-[11px] font-semibold text-[#00A8C8]">
-              {selectedAvailability.length} selected
-            </span>
-          )}
-        </div>
-        <div className="space-y-2.5">
-          {visibleAvailability.map((item) => (
-            <label
-              key={item}
-              className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
-            >
-              <Checkbox
-                checked={selectedAvailability.includes(item)}
-                onCheckedChange={() =>
-                  setFilters({
-                    selectedAvailability: toggleInArray(selectedAvailability, item),
-                  })
-                }
-                className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]"
-              />
-              {item}
-            </label>
-          ))}
-        </div>
-        {normalizedAvailabilityOptions.length > DEFAULT_AVAILABILITY_VISIBLE && (
-          <button
-            type="button"
-            onClick={() => setShowAllAvailability((prev) => !prev)}
-            className="mt-2 text-xs font-semibold text-[#00A8C8] hover:text-[#008BA7]"
-          >
-            {showAllAvailability
-              ? "Show less availability"
-              : `Show more availability (${normalizedAvailabilityOptions.length - visibleAvailability.length} more)`}
-          </button>
-        )}
 
         <div className="my-4 border-t border-[#E2E8F0]" />
 
