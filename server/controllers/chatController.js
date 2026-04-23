@@ -376,7 +376,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST be properly capitalized (Title Case) regardless of how the user typed it. Examples: "arizona" → "Arizona", "los angeles" → "Los Angeles", "new york, ny" → "New York, NY", "phoenix az" → "Phoenix, AZ". Never output raw lowercase from the user.\n2. careLevels must be lowercase standard terms: "assisted living", "memory care", "independent living", "skilled nursing".\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. careLevels must be lowercase standard terms: "assisted living", "memory care", "independent living", "skilled nursing".\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -444,7 +444,20 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     // Safety net: normalize searchLocation to Title Case regardless of how user typed it
     // e.g. "arizona" → "Arizona", "los angeles, ca" → "Los Angeles, Ca"
     if (prefs && prefs.searchLocation) {
-      prefs.searchLocation = prefs.searchLocation
+      // Clean up common budget/care fragments that might leak into location
+      let loc = prefs.searchLocation
+        .replace(/\b(for|under|over|around|about|budget|max|min|monthly|month|matches|show|me)\b/gi, "")
+        .replace(/[\$\d,]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      
+      // If cleaning left us empty but we have a ZIP, keep it empty for ZIP priority
+      // otherwise restore original if cleaning was too aggressive (unlikely)
+      if (!loc && prefs.searchLocation.length > 2) {
+         loc = prefs.searchLocation;
+      }
+
+      prefs.searchLocation = loc
         .split(/(\s+|,)/)
         .map((part) => {
           const p = part.trim();
@@ -453,7 +466,9 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
           if (p.length === 2) return p.toUpperCase(); // Assume state code
           return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
         })
-        .join("");
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
     }
     const facilities = await Facility.find().lean();
     const matchSection = formatRecommendationsForChat(facilities, prefs);

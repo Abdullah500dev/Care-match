@@ -114,7 +114,7 @@ When you have **reasonable coverage** of the five priority areas above—or the 
 ## JSON field rules
 - **primaryCareType**: REQUIRED. Exactly one of: "assisted living", "skilled nursing", "memory care", "independent living", "respite", "hospice". This drives the HARD FILTER — facilities not matching this type are EXCLUDED from results.
 - **careLevels**: Array of care levels (usually same as primaryCareType, but can include sub-levels like "memory care" + "assisted living" if user explicitly wants both).
-- **searchLocation**: Must be properly capitalized (Title Case) regardless of how the user typed it. Examples: "arizona" → "Arizona", "los angeles" → "Los Angeles", "new york" → "New York", "ca" → "CA". Format as "City, ST" when city+state provided.
+- **searchLocation**: REQUIRED. Only geographic names (City, State, ZIP). NEVER include budget text, care types, or fragments like "for under". Correct typos (e.g. "arizonaa" → "Arizona"). Format as "City, ST".
 - **searchZipCode**: 5-digit ZIP code string if the user provided one, otherwise null. This takes priority over city text matching for location.
 - **amenityMustHaves**: Concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.
 - **budgetMaxMonthly**: null if unknown.
