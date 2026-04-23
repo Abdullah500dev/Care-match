@@ -146,6 +146,29 @@ function addressMatchesLocation(fullAddress, locationQuery) {
   return false;
 }
 
+function locationMatchStrength(query, address, distance) {
+  if (!query) return 1;
+  const q = String(query).toLowerCase().trim();
+  const addr = String(address || "").toLowerCase();
+
+  // 1. Direct hit (Full match or ZIP match)
+  if (addr.includes(q)) return 1.0;
+
+  // 2. Distance hit (if geocoding worked and we have miles)
+  if (typeof distance === "number" && !Number.isNaN(distance)) {
+    if (distance <= 5) return 0.95;
+    if (distance <= 15) return 0.8;
+    if (distance <= 30) return 0.6;
+    if (distance <= 50) return 0.4;
+    return 0.1;
+  }
+
+  // 3. Partial overlap or state/city match logic
+  if (addressMatchesLocation(address, query)) return 0.75;
+
+  return 0;
+}
+
 function normalizeFacilityForCard(m) {
   const externalData =
     m && typeof m.external_data === "object" && m.external_data
