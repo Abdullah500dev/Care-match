@@ -45,6 +45,14 @@ const FIXED_AMENITY_OPTIONS = [
   "Respiratory support",
   "Dialysis access nearby",
 ];
+const FIXED_CARE_TYPE_OPTIONS = [
+  "Assisted Living",
+  "Skilled Nursing",
+  "Hospice Care",
+  "Physical Therapy",
+  "Memory Care",
+  "Independent Living",
+];
 
 const CARE_TYPE_ALIASES = {
   "assisted living": ["assisted living", "assisted"],
@@ -446,15 +454,8 @@ const CareExplorer = () => {
   }, [liveFacilities, directoryFacilities]);
 
   const careTypeOptions = useMemo(() => {
-    const base = [
-      ...new Set(
-        baseFacilities.flatMap((f) =>
-          (f.careLevels || []).map((x) => titleCase(x)),
-        ),
-      ),
-    ];
-    return base.length ? base : ["Assisted Living"];
-  }, [baseFacilities]);
+    return FIXED_CARE_TYPE_OPTIONS;
+  }, []);
 
   const amenityOptions = useMemo(() => FIXED_AMENITY_OPTIONS, []);
   const availabilityOptions = useMemo(() => {
