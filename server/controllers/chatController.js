@@ -113,14 +113,27 @@ const inferLocationFromMessages = (msgs) => {
     const standaloneZip = text.match(/\b(\d{5})(?:-\d{4})?\b/);
     if (standaloneZip?.[1]) return standaloneZip[1];
     const m = text.match(
-      /\b(?:in|near|around|close to|within)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}(?:\s*,\s*[A-Z]{2})?)/g
+      /\b(?:in|near|around|close to|within)\s+([a-zA-Z][a-zA-Z0-9]*(?:\s+[a-zA-Z][a-zA-Z0-9]*){0,2}(?:\s*,\s*[a-zA-Z]{2}\b)?)/gi
     );
     if (!m || m.length === 0) continue;
     const last = m[m.length - 1].match(
       /\b(?:in|near|around|close to|within)\s+(.+)$/i
     );
     if (!last?.[1]) continue;
-    const candidate = last[1].trim().replace(/[.?!,;:]+$/, "");
+    // Stop at comma unless followed by exactly a 2-letter state abbreviation word
+    let candidate = last[1].trim();
+    const commaIdx = candidate.indexOf(",");
+    if (commaIdx !== -1) {
+      const afterComma = candidate.slice(commaIdx + 1).trim();
+      if (/^[a-zA-Z]{2}$/.test(afterComma)) {
+        // Keep "City, ST" format
+        candidate = candidate.slice(0, commaIdx + 1 + 1 + afterComma.length);
+      } else {
+        // Strip everything from the comma onward
+        candidate = candidate.slice(0, commaIdx);
+      }
+    }
+    candidate = candidate.replace(/[.?!;:]+$/, "").trim();
     if (candidate.length >= 3) return candidate;
   }
   return "";
