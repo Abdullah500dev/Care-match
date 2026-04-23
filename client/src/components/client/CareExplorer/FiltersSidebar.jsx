@@ -130,6 +130,9 @@ const FiltersSidebar = ({
   availabilityOptions = availability,
   onAskCarrie,
 }) => {
+  const DEFAULT_AMENITIES_VISIBLE = 12;
+  const DEFAULT_AVAILABILITY_VISIBLE = 6;
+
   const searchQuery = filters?.searchQuery ?? "";
   const locationQuery = filters?.locationQuery ?? "";
   const maxMiles = filters?.maxMiles ?? "";
@@ -144,6 +147,34 @@ const FiltersSidebar = ({
   const selectedAmenities = Array.isArray(filters?.selectedAmenities)
     ? filters.selectedAmenities
     : [];
+  const [showAllAmenities, setShowAllAmenities] = useState(false);
+  const [showAllAvailability, setShowAllAvailability] = useState(false);
+
+  const normalizedAmenityOptions = [...new Set(
+    amenityOptions
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b));
+  const normalizedAvailabilityOptions = [...new Set(
+    availabilityOptions
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )].sort((a, b) => a.localeCompare(b));
+
+  const visibleAmenities = showAllAmenities
+    ? normalizedAmenityOptions
+    : normalizedAmenityOptions.filter(
+      (item, index) =>
+        index < DEFAULT_AMENITIES_VISIBLE ||
+        hasSemanticSelection(selectedAmenities, item),
+    );
+  const visibleAvailability = showAllAvailability
+    ? normalizedAvailabilityOptions
+    : normalizedAvailabilityOptions.filter(
+      (item, index) =>
+        index < DEFAULT_AVAILABILITY_VISIBLE ||
+        selectedAvailability.includes(item),
+    );
 
   const setFilters = (patch) => {
     onFiltersChange?.({ ...filters, ...patch });
@@ -239,9 +270,16 @@ const FiltersSidebar = ({
 
         <div className="my-4 border-t border-[#E2E8F0]" />
 
-        <h3 className="font-semibold text-sm text-[#364153] mb-3">Availability</h3>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-sm text-[#364153]">Availability</h3>
+          {selectedAvailability.length > 0 && (
+            <span className="rounded-full bg-[#00CFF4]/10 px-2 py-0.5 text-[11px] font-semibold text-[#00A8C8]">
+              {selectedAvailability.length} selected
+            </span>
+          )}
+        </div>
         <div className="space-y-2.5">
-          {availabilityOptions.map((item) => (
+          {visibleAvailability.map((item) => (
             <label
               key={item}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
@@ -259,12 +297,30 @@ const FiltersSidebar = ({
             </label>
           ))}
         </div>
+        {normalizedAvailabilityOptions.length > DEFAULT_AVAILABILITY_VISIBLE && (
+          <button
+            type="button"
+            onClick={() => setShowAllAvailability((prev) => !prev)}
+            className="mt-2 text-xs font-semibold text-[#00A8C8] hover:text-[#008BA7]"
+          >
+            {showAllAvailability
+              ? "Show less availability"
+              : `Show more availability (${normalizedAvailabilityOptions.length - visibleAvailability.length} more)`}
+          </button>
+        )}
 
         <div className="my-4 border-t border-[#E2E8F0]" />
 
-        <h3 className="font-semibold text-sm text-[#364153] mb-3">Must-Have Amenities</h3>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="font-semibold text-sm text-[#364153]">Must-Have Amenities</h3>
+          {selectedAmenities.length > 0 && (
+            <span className="rounded-full bg-[#00CFF4]/10 px-2 py-0.5 text-[11px] font-semibold text-[#00A8C8]">
+              {selectedAmenities.length} selected
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
-          {amenityOptions.map((item) => (
+          {visibleAmenities.map((item) => (
             <label
               key={item}
               className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
@@ -282,6 +338,17 @@ const FiltersSidebar = ({
             </label>
           ))}
         </div>
+        {normalizedAmenityOptions.length > DEFAULT_AMENITIES_VISIBLE && (
+          <button
+            type="button"
+            onClick={() => setShowAllAmenities((prev) => !prev)}
+            className="mt-2 text-xs font-semibold text-[#00A8C8] hover:text-[#008BA7]"
+          >
+            {showAllAmenities
+              ? "Show less amenities"
+              : `Show more amenities (${normalizedAmenityOptions.length - visibleAmenities.length} more)`}
+          </button>
+        )}
 
         <button
           type="button"
