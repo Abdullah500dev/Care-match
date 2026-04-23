@@ -102,10 +102,10 @@ function normalizeFacilityForCard(m) {
   const features =
     Array.isArray(m.reasons) && m.reasons.length
       ? m.reasons.map((r) =>
-          String(r)
-            .replace(/^[✓○]\s*/, "")
-            .trim(),
-        )
+        String(r)
+          .replace(/^[✓○]\s*/, "")
+          .trim(),
+      )
       : ["Review listing details and tour to validate fit"];
   const pricingTextFromFields =
     String(m.pricing || "").trim() || String(externalData.pricing || "").trim();
@@ -119,10 +119,10 @@ function normalizeFacilityForCard(m) {
   const numericPrice = parsePriceRangeNumbers(pricingText);
   const overallRating =
     externalData.overall_rating != null &&
-    !Number.isNaN(Number(externalData.overall_rating))
+      !Number.isNaN(Number(externalData.overall_rating))
       ? Number(externalData.overall_rating)
       : googlePlaces.total_score != null &&
-          !Number.isNaN(Number(googlePlaces.total_score))
+        !Number.isNaN(Number(googlePlaces.total_score))
         ? Number(googlePlaces.total_score)
         : null;
   const reviewCountRaw =
@@ -138,7 +138,7 @@ function normalizeFacilityForCard(m) {
   const distance =
     m.address && String(m.address).trim()
       ? String(m.address).trim().slice(0, 48) +
-        (String(m.address).length > 48 ? "…" : "")
+      (String(m.address).length > 48 ? "…" : "")
       : "Address on file";
   return {
     key: m.facilityId || m._id || m.name,
@@ -165,6 +165,8 @@ function normalizeFacilityForCard(m) {
     amenities: Array.isArray(m.amenities) ? m.amenities : [],
     services: Array.isArray(m.services) ? m.services : [],
     availability: m.availability || "Within 30 Days",
+    lat: googlePlaces.latitude ?? externalData.latitude ?? m.latitude ?? null,
+    lng: googlePlaces.longitude ?? externalData.longitude ?? m.longitude ?? null,
   };
 }
 
@@ -292,7 +294,7 @@ const CareExplorer = () => {
     if (!fromCarrie || !carrieFilters) return;
     const maxBudget =
       Number.isFinite(Number(carrieFilters.budgetMaxMonthly)) &&
-      Number(carrieFilters.budgetMaxMonthly) > 0
+        Number(carrieFilters.budgetMaxMonthly) > 0
         ? Number(carrieFilters.budgetMaxMonthly)
         : 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
@@ -308,12 +310,12 @@ const CareExplorer = () => {
         : prev.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
-        carrieFilters.availability.trim()
+          carrieFilters.availability.trim()
           ? [carrieFilters.availability.trim()]
           : prev.selectedAvailability,
       maxMiles:
         carrieFilters.maxDistanceMiles != null &&
-        !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
+          !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
           ? String(carrieFilters.maxDistanceMiles)
           : prev.maxMiles,
     }));
@@ -419,13 +421,13 @@ const CareExplorer = () => {
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
         const facilityMiles =
           Number.isFinite(Number(f.distanceMiles)) &&
-          Number(f.distanceMiles) > 0
+            Number(f.distanceMiles) > 0
             ? Number(f.distanceMiles)
             : Number.parseFloat(
-                String(f.distance || "").match(
-                  /(\d+(?:\.\d+)?)\s*miles?/i,
-                )?.[1],
-              );
+              String(f.distance || "").match(
+                /(\d+(?:\.\d+)?)\s*miles?/i,
+              )?.[1],
+            );
         if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
           return false;
       }
@@ -446,15 +448,14 @@ const CareExplorer = () => {
 
   const visibleMapFacilities = useMemo(() => {
     if (!Array.isArray(mapFacilities)) return [];
-    if (!currentCoords) return mapFacilities;
     if (
       !Array.isArray(nearbyMapFacilityKeys) ||
       nearbyMapFacilityKeys.length === 0
     )
-      return mapFacilities;
+      return [];
     const allowed = new Set(nearbyMapFacilityKeys);
     return mapFacilities.filter((f) => allowed.has(f.key));
-  }, [mapFacilities, currentCoords, nearbyMapFacilityKeys]);
+  }, [mapFacilities, nearbyMapFacilityKeys]);
 
   const pageSize = 5;
   const matchCountForHeader = filteredFacilities.length;
@@ -527,7 +528,11 @@ const CareExplorer = () => {
   }, [filters]);
 
   useEffect(() => {
-    if (view !== "map") return;
+    if (view !== "map") {
+      mapInstanceRef.current = null;
+      setMapsReady(false);
+      return;
+    }
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) {
       setMapError("Map is unavailable: missing VITE_GOOGLE_MAPS_API_KEY.");
@@ -539,7 +544,6 @@ const CareExplorer = () => {
       .then(() => {
         if (cancelled) return;
         setMapError("");
-        setMapsReady(true);
         if (!mapContainerRef.current || mapInstanceRef.current) return;
         mapInstanceRef.current = new window.google.maps.Map(
           mapContainerRef.current,
@@ -552,43 +556,7 @@ const CareExplorer = () => {
           },
         );
         geocoderRef.current = new window.google.maps.Geocoder();
-        if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              const coords = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-              };
-              setCurrentCoords(coords);
-              mapInstanceRef.current.setCenter(coords);
-              mapInstanceRef.current.setZoom(11);
-              new window.google.maps.Marker({
-                map: mapInstanceRef.current,
-                position: coords,
-                title: "Your current location",
-                icon: {
-                  path: window.google.maps.SymbolPath.CIRCLE,
-                  scale: 7,
-                  fillColor: "#00CFF4",
-                  fillOpacity: 1,
-                  strokeColor: "#0f172a",
-                  strokeWeight: 2,
-                },
-              });
-              setFilters((prev) => ({
-                ...prev,
-                maxMiles: prev.maxMiles || String(DEFAULT_NEARBY_RADIUS_MILES),
-              }));
-            },
-            () => {
-              setCurrentCoords(null);
-              setMapError(
-                "Location access denied. Enable location to see nearby facilities.",
-              );
-            },
-            { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 },
-          );
-        }
+        setMapsReady(true);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -608,11 +576,18 @@ const CareExplorer = () => {
       !geocoderRef.current
     )
       return;
-    mapMarkersRef.current.forEach((m) => m.setMap(null));
+
+    mapMarkersRef.current.forEach((m) => {
+      if (m.marker) m.marker.setMap(null);
+      else if (m.setMap) m.setMap(null); // fallback for any legacy markers
+    });
     mapMarkersRef.current = [];
     setNearbyMapFacilityKeys([]);
-    const candidates = (mapFacilities || []).filter((f) => f.address);
+
+    const candidates = (mapFacilities || []).filter((f) => f.address).slice(0, 15);
     if (candidates.length === 0) return;
+
+    let cancelled = false;
 
     const geocodeOne = (address) =>
       new Promise((resolve) => {
@@ -623,45 +598,81 @@ const CareExplorer = () => {
         });
       });
 
-    Promise.all(
-      candidates.map(async (f) => {
-        const loc = await geocodeOne(f.address);
-        if (!loc) return null;
-        const latLng = { lat: loc.lat(), lng: loc.lng() };
-        if (currentCoords) {
-          const radiusMiles = Number.parseFloat(String(filters.maxMiles || ""));
-          const activeRadius =
-            !Number.isNaN(radiusMiles) && radiusMiles > 0
-              ? radiusMiles
-              : DEFAULT_NEARBY_RADIUS_MILES;
-          const d = distanceMiles(currentCoords, latLng);
-          if (d > activeRadius) return null;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    const loadMarkers = async () => {
+      const placed = [];
+      const cache = {};
+
+      for (let i = 0; i < candidates.length; i++) {
+        if (cancelled) break;
+        const f = candidates[i];
+        
+        // Try searching for the specific facility name + address to get exact coordinates
+        const queryStr = (f.name && f.name !== "Community") 
+          ? `${f.name}, ${f.address}` 
+          : f.address;
+
+        let loc = null;
+        if (f.lat && f.lng) {
+          loc = { lat: () => f.lat, lng: () => f.lng };
+        } else {
+          let locFromCache = cache[queryStr];
+          if (!locFromCache) {
+            locFromCache = await geocodeOne(queryStr);
+            if (!locFromCache && queryStr !== f.address) {
+              locFromCache = await geocodeOne(f.address);
+            }
+            if (locFromCache) {
+              cache[queryStr] = locFromCache;
+            }
+            if (i < candidates.length - 1) await sleep(300);
+          }
+          loc = locFromCache;
         }
-        const avgPrice = averagePriceFromText(f.priceRange);
-        const marker = new window.google.maps.Marker({
-          map: mapInstanceRef.current,
-          position: latLng,
-          title: f.name,
-          label: avgPrice
-            ? {
+
+        if (loc && !cancelled) {
+          const latLng = { lat: loc.lat(), lng: loc.lng() };
+          
+          const avgPrice = averagePriceFromText(f.priceRange);
+          const marker = new window.google.maps.Marker({
+            map: mapInstanceRef.current,
+            position: latLng,
+            title: f.name,
+            label: avgPrice
+              ? {
                 text: `$${Math.round(avgPrice / 100) * 100}`,
                 color: "#0f172a",
                 fontWeight: "700",
               }
-            : undefined,
-        });
-        return { marker, loc, key: f.key };
-      }),
-    ).then((placed) => {
+              : undefined,
+          });
+          
+          placed.push({ marker, loc, key: f.key, latLng });
+        }
+      }
+
+      if (cancelled) {
+        placed.forEach((p) => p.marker.setMap(null));
+        return;
+      }
+
       const valid = placed.filter(Boolean);
       setNearbyMapFacilityKeys(valid.map((x) => x.key));
-      valid.forEach((x) => mapMarkersRef.current.push(x.marker));
+      valid.forEach((x) => mapMarkersRef.current.push({ marker: x.marker, key: x.key }));
+      
       if (valid.length === 0) return;
+      
       const bounds = new window.google.maps.LatLngBounds();
-      valid.forEach((x) => bounds.extend(x.loc));
-      if (currentCoords) bounds.extend(currentCoords);
+      valid.forEach((x) => bounds.extend(x.latLng));
       mapInstanceRef.current.fitBounds(bounds, 60);
-    });
+    };
+
+    loadMarkers();
+
+    return () => {
+      cancelled = true;
+    };
   }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
 
   return (
@@ -792,13 +803,12 @@ const CareExplorer = () => {
 
           {view === "listing" ? (
             <div
-              className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${
-                layout === "single"
-                  ? "space-y-3 sm:space-y-4"
-                  : layout === "two"
-                    ? "grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
-                    : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
-              }`}
+              className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${layout === "single"
+                ? "space-y-3 sm:space-y-4"
+                : layout === "two"
+                  ? "grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
+                  : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
+                }`}
             >
               {listingItems.map((f) => (
                 <div
@@ -866,11 +876,10 @@ const CareExplorer = () => {
                           key={`page-${p}`}
                           type="button"
                           onClick={() => setPage(Number(p))}
-                          className={`rounded-lg border px-2.5 py-1.5 text-sm ${
-                            currentPage === p
-                              ? "border-[#00CFF4] bg-[#00CFF4] text-white"
-                              : "border-[#E2E8F0] bg-white text-[#132329]"
-                          }`}
+                          className={`rounded-lg border px-2.5 py-1.5 text-sm ${currentPage === p
+                            ? "border-[#00CFF4] bg-[#00CFF4] text-white"
+                            : "border-[#E2E8F0] bg-white text-[#132329]"
+                            }`}
                         >
                           {p}
                         </button>
@@ -890,41 +899,61 @@ const CareExplorer = () => {
             </div>
           ) : (
             <div className="flex-1 min-w-0 w-full max-w-full lg:max-w-5xl">
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-3 sm:gap-4">
-                <div className="min-h-[520px] rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden">
+              <div className="flex flex-col gap-4">
+                <div className="min-h-[520px] rounded-2xl border border-[#E2E8F0] bg-white overflow-hidden w-full flex flex-col">
                   {mapError ? (
-                    <div className="h-full flex items-center justify-center px-6 text-sm text-[#64748b]">
+                    <div className="flex-1 flex items-center justify-center px-6 text-sm text-[#64748b]">
                       {mapError}
                     </div>
                   ) : (
-                    <div ref={mapContainerRef} className="h-full w-full" />
+                    <div ref={mapContainerRef} className="flex-1 w-full min-h-[520px]" />
                   )}
                 </div>
-                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-3 sm:p-4 max-h-[520px] overflow-y-auto">
-                  <p className="text-xs font-semibold text-[#64748b] mb-2">
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-hidden">
+                  <p className="text-sm font-semibold text-[#132329] mb-4">
                     Recommended Matches
                   </p>
-                  <div className="space-y-3">
-                    {(visibleMapFacilities || []).slice(0, 8).map((f) => (
-                      <FacilityCard
-                        facilityId={f.key ?? f.facilityId ?? f.name}
+                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x scrollbar-hide">
+                    {(visibleMapFacilities || []).map((f) => (
+                      <div
                         key={`map-${f.key ?? f.matchPercent}`}
-                        matchPercent={f.matchPercent}
-                        imageSrc={f.imageSrc}
-                        name={f.name}
-                        category={f.category}
-                        rating={f.rating}
-                        reviewCount={f.reviewCount}
-                        ratingLabel={f.ratingLabel}
-                        priceRange={f.priceRange}
-                        distance={f.distance}
-                        features={f.features}
-                        website={f.website}
-                        sourcePlatform={f.sourcePlatform}
-                        isExternal={Boolean(f.isExternal)}
-                        externalSourceUrl={f.externalSourceUrl}
-                        compact
-                      />
+                        className="w-[320px] snap-start flex-shrink-0 cursor-pointer transition-transform hover:scale-[1.03]"
+                        onClick={(e) => {
+                          if (e.target.closest('button') || e.target.closest('a')) return;
+                          const markerObj = mapMarkersRef.current.find(m => m.key === f.key);
+                          if (markerObj && markerObj.marker && mapInstanceRef.current) {
+                            mapInstanceRef.current.panTo(markerObj.marker.getPosition());
+                            mapInstanceRef.current.setZoom(15);
+                            markerObj.marker.setAnimation(window.google.maps.Animation.BOUNCE);
+                            setTimeout(() => {
+                              markerObj.marker.setAnimation(null);
+                            }, 2100);
+                          }
+                        }}
+                      >
+                        <FacilityCard
+                          facilityId={f.key ?? f.facilityId ?? f.name}
+                          matchPercent={f.matchPercent}
+                          imageSrc={f.imageSrc}
+                          name={f.name}
+                          category={f.category}
+                          rating={f.rating}
+                          reviewCount={f.reviewCount}
+                          ratingLabel={f.ratingLabel}
+                          priceRange={f.priceRange}
+                          distance={f.distance}
+                          features={f.features}
+                          website={f.website}
+                          sourcePlatform={f.sourcePlatform}
+                          isExternal={Boolean(f.isExternal)}
+                          externalSourceUrl={f.externalSourceUrl}
+                          compact
+                          isFavorite={favoriteFacilityIds.includes(
+                            String(f.key ?? f.facilityId ?? f.name),
+                          )}
+                          onToggleFavorite={handleToggleFavorite}
+                        />
+                      </div>
                     ))}
                   </div>
                 </div>

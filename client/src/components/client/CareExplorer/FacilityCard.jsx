@@ -113,9 +113,8 @@ const FacilityCard = ({
             src={cardImageSrc}
             alt={name}
             onError={handleImageError}
-            className={`w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] ${
-              isUsingPlaceholderImage ? "object-contain bg-white p-4" : "object-cover"
-            }`}
+            className={`w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] ${isUsingPlaceholderImage ? "object-contain bg-white p-4" : "object-cover"
+              }`}
           />
           {/* Match Badge */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/70 text-white backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold">
@@ -130,9 +129,8 @@ const FacilityCard = ({
             onClick={handleFavoriteClick}
           >
             <Heart
-              className={`stroke-[2] h-4 w-4 ${
-                isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
-              }`}
+              className={`stroke-[2] h-4 w-4 ${isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
+                }`}
             />
           </button>
         </div>
@@ -184,7 +182,7 @@ const FacilityCard = ({
   // Default full card (listing + two-column)
   return (
     <div
-      className={`flex w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "min-w-0 flex-col" : "flex-col sm:flex-row"}`}
+      className={`flex h-full w-full max-w-full overflow-hidden rounded-2xl bg-white ${compact ? "min-w-0 flex-col" : "flex-col sm:flex-row"}`}
       style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
     >
       {/* Image Section - compact: always on top ~45–50%; listing: side-by-side on sm+ */}
@@ -208,9 +206,8 @@ const FacilityCard = ({
           onClick={handleFavoriteClick}
         >
           <Heart
-            className={`stroke-[2] ${compact ? "h-3.5 w-3.5" : "h-4 w-4"} ${
-              isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
-            }`}
+            className={`stroke-[2] ${compact ? "h-3.5 w-3.5" : "h-4 w-4"} ${isFavorite ? "text-red-500 fill-red-500" : "text-[#132329]"
+              }`}
           />
         </button>
         {/* Distance - light backdrop blur + opacity, no border */}
@@ -279,31 +276,27 @@ const FacilityCard = ({
               WHY THIS FITS
             </p>
             <div
-              className={`grid gap-y-1 ${
-                compact
+              className={`grid gap-y-1 ${compact
                   ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3"
                   : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"
-              }`}
+                }`}
             >
               {features.map((feature, i) => (
                 <div
                   key={i}
-                  className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${
-                    compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"
-                  }`}
+                  className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"
+                    }`}
                 >
                   <span
-                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden ${
-                      compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
-                    }`}
+                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
+                      }`}
                   >
                     <img
                       src="/assets/images/blueTick.svg"
                       alt=""
                       aria-hidden
-                      className={`shrink-0 object-contain ${
-                        compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
-                      }`}
+                      className={`shrink-0 object-contain ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
+                        }`}
                     />
                   </span>
                   <span className="break-words">{feature}</span>

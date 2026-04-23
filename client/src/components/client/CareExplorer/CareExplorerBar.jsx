@@ -83,7 +83,7 @@ const CareExplorerBar = ({
               </button>
             </div>
           )}
-          <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#F1F5F9] p-0.5 sm:p-1">
+          <div className="flex items-center gap-1 sm:gap-2 border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#F1F5F9] p-0.5 sm:p-1">
             <button
               type="button"
               onClick={() => onScopeChange?.("all")}
