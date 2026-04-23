@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, ArrowRight, MapPin, Sparkles } from "lucide-react";
+import { Heart, Star, ArrowRight, MapPin, Hash, PhoneCall } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -17,12 +17,9 @@ const FacilityCard = ({
   ratingLabel = "family reviews",
   priceRange = "N/A",
   distance = "2.3 MILES AWAY",
-  features = [
-    "Strong memory care program",
-    "Within your budget range",
-    "Pet-friendly community",
-    "24/7 medical staff on-site",
-  ],
+  address = "",
+  zipCode = "",
+  phone = "",
   imageSrc = DEFAULT_IMAGE,
   website = "",
   sourcePlatform = "",
@@ -35,6 +32,8 @@ const FacilityCard = ({
 }) => {
   const [cardImageSrc, setCardImageSrc] = React.useState(imageSrc || DEFAULT_IMAGE);
   const isUsingPlaceholderImage = cardImageSrc === CAREMATCH_PLACEHOLDER_IMAGE;
+  const hasReviewCount = Number.isFinite(Number(reviewCount)) && Number(reviewCount) > 0;
+  const ratingMetaText = hasReviewCount ? `${reviewCount} ${ratingLabel}` : ratingLabel;
 
   React.useEffect(() => {
     setCardImageSrc(imageSrc || DEFAULT_IMAGE);
@@ -246,7 +245,7 @@ const FacilityCard = ({
                 <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
                 <span className="font-semibold text-[#132329]">{rating}</span>
               </div>
-              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{reviewCount} {ratingLabel}</span>
+              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{ratingMetaText}</span>
             </div>
           </div>
           {/* Monthly Investment - grid view: full width so it doesn't steal space from name */}
@@ -262,48 +261,51 @@ const FacilityCard = ({
           </div>
         </div>
 
-        {/* Features – hide in grid view so compact cards match the simpler design */}
+        {/* Contact details – hide in grid view so compact cards match the simpler design */}
         {!gridView && (
           <div
             className={`overflow-hidden ${compact ? "mt-2 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2.5" : "mt-3 sm:mt-4 rounded-2xl sm:rounded-3xl px-3 py-2.5 sm:px-4 sm:py-3"}`}
             style={{
-              background: "#F8FAFC80",
+              background: "linear-gradient(135deg, rgba(248,250,252,0.94), rgba(241,245,249,0.9))",
               borderRadius: "16px",
-              border: "1px solid #F1F5F9",
-              borderTop: "1px solid #F1F5F9",
+              border: "1px solid #E2E8F0",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
             }}
           >
-            <p className={`font-bold tracking-wider text-[#64748b] uppercase flex items-center gap-1.5 ${compact ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"}`}>
-              <Sparkles className={`text-[#155DFC] shrink-0 ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"}`} />
-              WHY THIS FITS
+            <p className={`font-bold tracking-wider text-[#64748b] uppercase ${compact ? "text-[9px] sm:text-[10px] mb-1.5" : "text-[10px] sm:text-[11px] mb-2"}`}>
+              Contact Details
             </p>
-            <div
-              className={`grid gap-y-1 ${compact
-                  ? "mt-1.5 grid-cols-1 min-[320px]:grid-cols-2 gap-x-2 sm:gap-x-3"
-                  : "mt-2 grid-cols-1 min-[380px]:grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-1.5"
-                }`}
-            >
-              {features.map((feature, i) => (
-                <div
-                  key={i}
-                  className={`flex items-center gap-1.5 text-[#132329] min-w-0 ${compact ? "text-[10px] sm:text-xs" : "gap-2 text-xs sm:text-sm"
-                    }`}
-                >
-                  <span
-                    className={`flex flex-shrink-0 items-center justify-center overflow-hidden ${compact ? "h-4 w-4" : "h-5 w-5 sm:h-6 sm:w-6"
-                      }`}
-                  >
-                    <img
-                      src="/assets/images/blueTick.svg"
-                      alt=""
-                      aria-hidden
-                      className={`shrink-0 object-contain ${compact ? "h-2.5 w-2.5 sm:h-3 sm:w-3" : "h-3 w-3 sm:h-3.5 sm:w-3.5"
-                        }`}
-                    />
-                  </span>
-                  <span className="break-words">{feature}</span>
-                </div>
-              ))}
+
+            <div className={`grid grid-cols-1 min-[390px]:grid-cols-3 gap-2 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}>
+              <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
+                <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
+                  <MapPin className="h-3.5 w-3.5 text-[#155DFC]" />
+                  Address
+                </p>
+                <p className="mt-1 break-words font-medium text-[#132329]">
+                  {String(address || "").trim() || "N/A"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
+                <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
+                  <Hash className="h-3.5 w-3.5 text-[#155DFC]" />
+                  Zip Code
+                </p>
+                <p className="mt-1 break-words font-medium text-[#132329]">
+                  {String(zipCode || "").trim() || "N/A"}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
+                <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
+                  <PhoneCall className="h-3.5 w-3.5 text-[#155DFC]" />
+                  Phone
+                </p>
+                <p className="mt-1 break-words font-medium text-[#132329]">
+                  {String(phone || "").trim() || "N/A"}
+                </p>
+              </div>
             </div>
           </div>
         )}

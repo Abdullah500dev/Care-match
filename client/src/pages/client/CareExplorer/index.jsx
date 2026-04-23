@@ -296,6 +296,22 @@ function normalizeFacilityForCard(m) {
       ? Number(reviewCountRaw)
       : null;
   const providerUrl = String(externalData.provider_url || "").trim();
+  const phone =
+    String(
+      m.phone ||
+      m.phone_number ||
+      externalData.phone_number ||
+      externalData.phone ||
+      "",
+    ).trim() || "N/A";
+  const zipCode =
+    String(
+      m.zip_code ||
+      m.zipCode ||
+      externalData.zip_code ||
+      externalData.zipCode ||
+      "",
+    ).trim() || "";
   const distance =
     m.address && String(m.address).trim()
       ? String(m.address).trim().slice(0, 48) +
@@ -313,9 +329,11 @@ function normalizeFacilityForCard(m) {
     distance,
     features,
     address: m.address || "",
+    zipCode,
+    phone,
     website: m.website || "",
     rating: overallRating != null ? overallRating : 4.8,
-    reviewCount: overallRating != null ? 1 : 127,
+    reviewCount: reviewCountValue,
     ratingLabel: overallRating != null ? "CMS rating" : "family reviews",
     specialty: Array.isArray(m.specialty) ? m.specialty : [],
     description: m.description || "",
@@ -1198,6 +1216,9 @@ const CareExplorer = () => {
                     priceRange={f.priceRange}
                     distance={f.distance}
                     features={f.features}
+                    address={f.address}
+                    zipCode={f.zipCode}
+                    phone={f.phone}
                     website={f.website}
                     sourcePlatform={f.sourcePlatform}
                     isExternal={Boolean(f.isExternal)}
@@ -1312,6 +1333,9 @@ const CareExplorer = () => {
                           priceRange={f.priceRange}
                           distance={f.distance}
                           features={f.features}
+                          address={f.address}
+                          zipCode={f.zipCode}
+                          phone={f.phone}
                           website={f.website}
                           sourcePlatform={f.sourcePlatform}
                           isExternal={Boolean(f.isExternal)}
