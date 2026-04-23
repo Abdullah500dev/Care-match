@@ -363,6 +363,7 @@ const CareExplorer = () => {
   const [mapError, setMapError] = useState("");
   const [mapsReady, setMapsReady] = useState(false);
   const [currentCoords, setCurrentCoords] = useState(null);
+  const [locationCenterCoords, setLocationCenterCoords] = useState(null);
   const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
   const [directoryFacilities, setDirectoryFacilities] = useState([]);
   const { isAuthenticated, userData } = useSelector(getUser);
@@ -509,6 +510,47 @@ const CareExplorer = () => {
   }, [fromCarrie, carrieFilters, carrieLocationQuery, careTypeOptions, amenityOptions]);
 
   useEffect(() => {
+    const query = String(filters.locationQuery || carrieLocationQuery || "").trim();
+    if (!query) {
+      setLocationCenterCoords(null);
+      return;
+    }
+
+    let cancelled = false;
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) {
+      setLocationCenterCoords(null);
+      return;
+    }
+
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        if (cancelled || !window.google?.maps?.Geocoder) return;
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ address: query }, (results, status) => {
+          if (cancelled) return;
+          if (
+            status === "OK" &&
+            Array.isArray(results) &&
+            results[0]?.geometry?.location
+          ) {
+            const loc = results[0].geometry.location;
+            setLocationCenterCoords({ lat: loc.lat(), lng: loc.lng() });
+            return;
+          }
+          setLocationCenterCoords(null);
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setLocationCenterCoords(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.locationQuery, carrieLocationQuery]);
+
+  useEffect(() => {
     if (fromCarrie || !API_BASE) return;
     let cancelled = false;
     axios
@@ -606,22 +648,35 @@ const CareExplorer = () => {
       }
 
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        const facilityMiles =
+        let facilityMiles = Number.NaN;
+        if (
+          locationCenterCoords &&
+          Number.isFinite(Number(f.lat)) &&
+          Number.isFinite(Number(f.lng))
+        ) {
+          facilityMiles = distanceMiles(locationCenterCoords, {
+            lat: Number(f.lat),
+            lng: Number(f.lng),
+          });
+        } else if (
           Number.isFinite(Number(f.distanceMiles)) &&
-            Number(f.distanceMiles) > 0
-            ? Number(f.distanceMiles)
-            : Number.parseFloat(
-              String(f.distance || "").match(
-                /(\d+(?:\.\d+)?)\s*miles?/i,
-              )?.[1],
-            );
+          Number(f.distanceMiles) > 0
+        ) {
+          facilityMiles = Number(f.distanceMiles);
+        } else {
+          facilityMiles = Number.parseFloat(
+            String(f.distance || "").match(
+              /(\d+(?:\.\d+)?)\s*miles?/i,
+            )?.[1],
+          );
+        }
         if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
           return false;
       }
 
       return true;
     });
-  }, [filters, scopedFacilities, carrieLocationQuery]);
+  }, [filters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
 
   const rankedFacilities = useMemo(() => {
     const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
@@ -747,6 +802,46 @@ const CareExplorer = () => {
     filters.selectedAvailability.length > 0
       ? filters.selectedAvailability.join(", ")
       : "your preferred timeline";
+  const promptCriteria = [];
+  if (carrieLocationQuery) {
+    promptCriteria.push({ label: "Location", value: carrieLocationQuery });
+  }
+  if (Array.isArray(carrieFilters?.careLevels) && carrieFilters.careLevels.length > 0) {
+    promptCriteria.push({
+      label: "Care Type",
+      value: carrieFilters.careLevels.map((x) => titleCase(x)).join(", "),
+    });
+  }
+  if (
+    Number.isFinite(Number(carrieFilters?.budgetMaxMonthly)) &&
+    Number(carrieFilters.budgetMaxMonthly) > 0
+  ) {
+    promptCriteria.push({
+      label: "Budget",
+      value: `Up to $${Number(carrieFilters.budgetMaxMonthly).toLocaleString()}/mo`,
+    });
+  }
+  if (
+    Array.isArray(carrieFilters?.amenityMustHaves) &&
+    carrieFilters.amenityMustHaves.length > 0
+  ) {
+    promptCriteria.push({
+      label: "Must-Have Needs",
+      value: carrieFilters.amenityMustHaves
+        .map((x) => String(x).trim())
+        .filter(Boolean)
+        .join(", "),
+    });
+  }
+  if (
+    typeof carrieFilters?.availability === "string" &&
+    carrieFilters.availability.trim()
+  ) {
+    promptCriteria.push({
+      label: "Move-In Timeline",
+      value: carrieFilters.availability.trim(),
+    });
+  }
   const totalPages = Math.max(
     1,
     Math.ceil(rankedFacilities.length / pageSize),
@@ -991,15 +1086,20 @@ const CareExplorer = () => {
                     These communities are{" "}
                     <span className="font-semibold text-[#132329]">
                       ranked from your chat with Carrie
-                    </span>{" "}
-                    in <span className="font-semibold text-[#132329]">{locationLabelForHeader}</span>{" "}
-                    for <span className="font-semibold text-[#132329]">{summaryCareText}</span>,{" "}
-                    with a budget around{" "}
-                    <span className="font-semibold text-[#132329]">{summaryBudgetText}</span>,{" "}
-                    must-have needs like{" "}
-                    <span className="font-semibold text-[#132329]">{summaryNeedsText}</span>,{" "}
-                    and move-in timeline of{" "}
-                    <span className="font-semibold text-[#132329]">{carrieAvailabilityText}</span>.
+                    </span>.
+                    {promptCriteria.length > 0 && (
+                      <>
+                        {" "}Criteria from your prompt:{" "}
+                        {promptCriteria.map((item, idx) => (
+                          <React.Fragment key={item.label}>
+                            {idx > 0 ? "; " : ""}
+                            <span className="font-semibold text-[#132329]">{item.label}:</span>{" "}
+                            <span className="font-semibold text-[#132329]">{item.value}</span>
+                          </React.Fragment>
+                        ))}
+                        .
+                      </>
+                    )}
                     Always confirm details on a tour.
                   </>
                 ) : (

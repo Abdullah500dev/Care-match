@@ -69,6 +69,7 @@ Example: if user says "assisted living," NEVER include skilled nursing facilitie
 - After getting city/state, ask if they have a **ZIP code** for more accurate results.
 - If they give a ZIP code directly, use that as the primary location signal.
 - If only a region is given (e.g., "near Phoenix"), accept that and use it for fuzzy matching.
+- If the user includes a radius phrase like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", capture that number in **maxDistanceMiles**.
 
 ### Priority 3 — Budget (ask THIRD)
 - Ask for an **approximate maximum monthly all-in budget** (USD).
@@ -116,6 +117,7 @@ When you have **reasonable coverage** of the five priority areas above—or the 
 - **careLevels**: Array of care levels (usually same as primaryCareType, but can include sub-levels like "memory care" + "assisted living" if user explicitly wants both).
 - **searchLocation**: REQUIRED. Only geographic names (City, State, ZIP). NEVER include budget text, care types, or fragments like "for under". Correct typos (e.g. "arizonaa" → "Arizona"). Format as "City, ST".
 - **searchZipCode**: 5-digit ZIP code string if the user provided one, otherwise null. This takes priority over city text matching for location.
+- **maxDistanceMiles**: REQUIRED when user mentions a distance/radius constraint (e.g. "under 20 miles", "within 15 mi", "no more than 30 miles"). Must be a numeric value only (no units/string).
 - **amenityMustHaves**: Concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.
 - **budgetMaxMonthly**: null if unknown.
 - **snfReadiness**: true only if user may need skilled nursing / SNF transition soon.
