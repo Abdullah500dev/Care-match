@@ -481,3 +481,57 @@ export const getActivationStatus = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler(error.message, 400));
   }
 });
+
+// Toggle Favorite Facility
+export const toggleFavorite = catchAsyncError(async (req, res, next) => {
+  try {
+    const { facilityId } = req.body;
+    const userId = req.user?.id;
+
+    if (!facilityId) {
+      return next(new ErrorHandler("Facility ID is required", 400));
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    const index = user.saved_facilities.indexOf(String(facilityId));
+
+    if (index === -1) {
+      user.saved_facilities.push(String(facilityId));
+    } else {
+      user.saved_facilities.splice(index, 1);
+    }
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: index === -1 ? "Added to favorites" : "Removed from favorites",
+      favorites: user.saved_facilities,
+    });
+  } catch (error) {
+    return next(new ErrorHandler(error.message, 400));
+  }
+});
+
+// Get Favorite Facilities
+export const getFavorites = catchAsyncError(async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return next(new ErrorHandler("User not found", 404));
+    }
+
+    res.status(200).json({
+      success: true,
+      favorites: user.saved_facilities || [],
+    });
+  } catch (error) {
+    return next(new ErrorHandler(error.message, 400));
+  }
+});
