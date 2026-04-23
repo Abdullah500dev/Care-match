@@ -76,6 +76,10 @@ const userSchema = new mongoose.Schema(
     token: String,
     tokenValidityInMinutes: String,
     tokenExpire: Date,
+    saved_facilities: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

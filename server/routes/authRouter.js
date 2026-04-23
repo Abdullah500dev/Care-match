@@ -13,6 +13,8 @@ import {
   forgotPassword,
   resetPassword,
   getActivationStatus,
+  toggleFavorite,
+  getFavorites,
 } from "../controllers/authController.js";
 
 import {
@@ -744,5 +746,7 @@ router.post("/password/reset/:token", resetPasswordValidation, resetPassword);
  *                   example: 400
  */
 router.post("/password/reset", forgetPasswordEmailValidation, forgotPassword);
+router.post("/toggle-favorite", isAutheticated, toggleFavorite);
+router.get("/favorites", isAutheticated, getFavorites);
 
 export default router;

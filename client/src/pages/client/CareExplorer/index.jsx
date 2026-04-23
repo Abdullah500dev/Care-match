@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import axios from "axios";
+import { apiClient } from "../../../services/api";
+import { getUser } from "../../../store/auth/authSlice";
 import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
@@ -204,15 +207,36 @@ const CareExplorer = () => {
   const [currentCoords, setCurrentCoords] = useState(null);
   const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
   const [directoryFacilities, setDirectoryFacilities] = useState([]);
-  const [favoriteFacilityIds, setFavoriteFacilityIds] = useState(() => {
-    try {
-      const raw = localStorage.getItem(FAVORITE_FACILITY_IDS_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed.map((id) => String(id)) : [];
-    } catch {
-      return [];
-    }
-  });
+  const { isAuthenticated, userData } = useSelector(getUser);
+  const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
+
+  // Load initial favorites from backend or local storage
+  useEffect(() => {
+    const loadFavorites = async () => {
+      if (isAuthenticated) {
+        try {
+          const response = await apiClient.get("/api/auth/favorites");
+          if (response.data.success) {
+            setFavoriteFacilityIds(response.data.favorites.map(id => String(id)));
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to fetch favorites from database", error);
+        }
+      }
+
+      // Fallback to local storage if not authenticated or API fails
+      try {
+        const raw = localStorage.getItem(FAVORITE_FACILITY_IDS_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        setFavoriteFacilityIds(Array.isArray(parsed) ? parsed.map((id) => String(id)) : []);
+      } catch {
+        setFavoriteFacilityIds([]);
+      }
+    };
+
+    loadFavorites();
+  }, [isAuthenticated]);
 
   const handleAskCarrie = () => {
     if (location.pathname !== "/") {
@@ -225,14 +249,25 @@ const CareExplorer = () => {
     scrollToCarrieHeroThenOpenChat({ source: "care-explorer" });
   };
 
-  const handleToggleFavorite = (facilityId) => {
+  const handleToggleFavorite = async (facilityId) => {
     const safeId = String(facilityId || "").trim();
     if (!safeId) return;
+
+    // Optimistic UI update
     setFavoriteFacilityIds((prev) =>
       prev.includes(safeId)
         ? prev.filter((id) => id !== safeId)
         : [...prev, safeId],
     );
+
+    if (isAuthenticated) {
+      try {
+        await apiClient.post("/api/auth/toggle-favorite", { facilityId: safeId });
+      } catch (error) {
+        console.error("Failed to sync favorite with database", error);
+        // Rollback on failure if you want to be strict, but for likes usually it's fine
+      }
+    }
   };
 
   useEffect(() => {
