@@ -34,15 +34,20 @@ export function normalizeIntakePreferences(raw) {
   const personalityNotes =
     typeof raw.personalityNotes === "string" ? raw.personalityNotes.trim() : "";
   const snfReadiness = Boolean(raw.snfReadiness);
+  const primaryCareType = typeof raw.primaryCareType === "string" ? raw.primaryCareType.trim() : "";
+  const searchZipCode = typeof raw.searchZipCode === "string" ? raw.searchZipCode.trim() : "";
+
   return {
     careLevels,
     amenityMustHaves,
     budgetMaxMonthly,
     searchLocation,
+    searchZipCode,
     maxDistanceMiles,
     visitationImportance,
     personalityNotes,
     snfReadiness,
+    primaryCareType,
   };
 }
 
@@ -137,6 +142,7 @@ const AMENITY_SYNONYMS = [
   ["therapy", "rehab", "physical therapy", "occupational therapy"],
   ["dialysis"],
   ["lgbtq", "lgbt", "welcoming"],
+  ["parking", "free parking", "on-site parking", "parking lot", "parking lots"],
 ];
 
 /**
@@ -310,11 +316,18 @@ function locationSearchTokens(q) {
  * @param {string} searchLocation
  * @param {string} facilityAddress
  */
-function locationScore(searchLocation, facilityAddress) {
+function locationScore(searchLocation, facilityAddress, prefs) {
   const q = norm(searchLocation);
   const a = norm(facilityAddress);
-  if (!q || q.length < 3) return { score: 0.5, label: "location not specified" };
+  const z = prefs?.searchZipCode ? norm(prefs.searchZipCode) : "";
+
+  if (!q && !z) return { score: 0.5, label: "location not specified" };
   if (!a) return { score: 0.3, label: "no address on listing" };
+
+  // ZIP code match is highest confidence
+  if (z && a.includes(z)) {
+    return { score: 0.98, label: "ZIP code match" };
+  }
 
   if (q.length >= 5 && a.includes(q)) {
     return { score: 0.9, label: "location text overlap" };
@@ -432,7 +445,7 @@ export function scoreFacility(facility, prefs) {
   const amen = amenityScore(amenityMustHaves, fcAmenities, fcServices);
   const priceR = parseMonthlyPriceRange(facility.pricing);
   const budget = budgetScore(budgetMax, priceR);
-  const loc = locationScore(searchLocation, facility.address || "");
+  const loc = locationScore(searchLocation, facility.address || "", prefs);
   const visit = visitationScore(visitationImportance, fcAmenities, fcServices);
   const pers = personalityScore(personalityNotes, fcAmenities, fcServices);
   const snf = snfReadinessScore(snfReadiness, fcLevels);
@@ -543,8 +556,8 @@ export function facilityMeetsIntakeRequirements(facility, prefs) {
   const q = norm(searchLocation);
   if (q.length >= 3) {
     const locTokens = locationSearchTokens(q);
-    if (locTokens.length > 0) {
-      const loc = locationScore(searchLocation, facility.address || "");
+    if (locTokens.length > 0 || prefs?.searchZipCode) {
+      const loc = locationScore(searchLocation, facility.address || "", prefs);
       if (
         loc.label === "distance/area: not a clear text match (MVP)" ||
         loc.label === "no address on listing"
@@ -611,14 +624,14 @@ function evaluateCriteriaMatch(facility, prefs, criteria) {
       checks.push({ key: c.key, primary: c.primary, matched: care.matched.length > 0 });
     } else if (c.key === "amenities") {
       const amen = amenityScore(c.value, fcAmenities, fcServices);
-      // criterion-level match: at least one amenity hit
-      checks.push({ key: c.key, primary: c.primary, matched: amen.hits.length > 0 });
+      // 'Must-Have' logic: criterion is only matched if ALL requested amenities are present
+      checks.push({ key: c.key, primary: c.primary, matched: amen.hits.length === c.value.length && amen.misses.length === 0 });
     } else if (c.key === "budget") {
       const priceR = parseMonthlyPriceRange(facility.pricing);
       const compareHigh = priceR.max ?? priceR.min;
       checks.push({ key: c.key, primary: c.primary, matched: compareHigh != null && compareHigh <= c.value });
     } else if (c.key === "location") {
-      const loc = locationScore(c.value, facility.address || "");
+      const loc = locationScore(c.value, facility.address || "", prefs);
       checks.push({ key: c.key, primary: c.primary, matched: loc.score >= 0.55 });
     } else if (c.key === "personality") {
       const pers = personalityScore(c.value, fcAmenities, fcServices);
@@ -661,7 +674,21 @@ export function rankFacilities(facilities, prefs, opts = {}) {
   // Do not show everything when we have no usable criteria.
   if (criteria.length === 0) return [];
 
-  const evaluated = facilities.map((f) => {
+  // HARD FILTER: Only show facilities that match the primary care type if specified.
+  let filteredFacilities = facilities;
+  if (prefs.primaryCareType) {
+    const targetType = norm(prefs.primaryCareType);
+    filteredFacilities = facilities.filter((f) => {
+      const fLevels = (f.care_levels || []).map(norm);
+      // Check if any of the facility's care levels match the target primary care type
+      return fLevels.some(l => 
+        l.includes(targetType) || targetType.includes(l) ||
+        CARE_SYNONYMS.some(group => group.includes(targetType) && group.some(g => l.includes(g)))
+      );
+    });
+  }
+
+  const evaluated = filteredFacilities.map((f) => {
     const base = scoreFacility(f, prefs);
     const evals = evaluateCriteriaMatch(f, prefs, criteria);
     return {
