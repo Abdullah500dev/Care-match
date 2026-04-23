@@ -174,6 +174,9 @@ const CareExplorer = () => {
   const carrieMatches = location.state?.carrieMatches;
   const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
+  const carrieLocationQuery = String(
+    carrieFilters?.locationQuery || carrieFilters?.searchLocation || "",
+  ).trim();
 
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
@@ -181,7 +184,7 @@ const CareExplorer = () => {
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
-    locationQuery: String(carrieFilters?.locationQuery || "").trim(),
+    locationQuery: carrieLocationQuery,
     searchQuery: "",
     maxMiles: "",
     budgetMin: 1000,
@@ -295,7 +298,7 @@ const CareExplorer = () => {
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
     setFilters((prev) => ({
       ...prev,
-      locationQuery: String(carrieFilters.locationQuery || "").trim(),
+      locationQuery: carrieLocationQuery,
       budgetMax: safeMax,
       selectedCareTypes: Array.isArray(carrieFilters.careLevels)
         ? carrieFilters.careLevels.map((x) => titleCase(x))
@@ -314,7 +317,7 @@ const CareExplorer = () => {
           ? String(carrieFilters.maxDistanceMiles)
           : prev.maxMiles,
     }));
-  }, [fromCarrie, carrieFilters]);
+  }, [fromCarrie, carrieFilters, carrieLocationQuery]);
 
   useEffect(() => {
     if (fromCarrie || !API_BASE) return;
@@ -349,7 +352,7 @@ const CareExplorer = () => {
     const q = String(filters.searchQuery || "")
       .trim()
       .toLowerCase();
-    const locationQuery = String(filters.locationQuery || carrieFilters?.locationQuery || "")
+    const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
       .trim()
       .toLowerCase();
     const maxMilesNum = Number.parseFloat(
@@ -429,7 +432,7 @@ const CareExplorer = () => {
 
       return true;
     });
-  }, [filters, scopedFacilities, carrieFilters?.locationQuery]);
+  }, [filters, scopedFacilities, carrieLocationQuery]);
 
   const mapFacilities = useMemo(
     () =>
@@ -457,7 +460,7 @@ const CareExplorer = () => {
   const matchCountForHeader = filteredFacilities.length;
   const locationLabelForHeader =
     String(filters.locationQuery || "").trim() ||
-    String(carrieFilters?.locationQuery || "").trim() ||
+    carrieLocationQuery ||
     String(filters.searchQuery || "").trim() ||
     "your area";
   const summaryCareText =
@@ -769,7 +772,7 @@ const CareExplorer = () => {
                 onFiltersChange={setFilters}
                 onReset={() =>
                   setFilters({
-                    locationQuery: String(carrieFilters?.locationQuery || "").trim(),
+                    locationQuery: carrieLocationQuery,
                     searchQuery: "",
                     maxMiles: "",
                     budgetMin: 1000,

@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   Users,
   Building2,
-  CalendarDays,
   MessageSquareText,
   BarChart3,
   Settings,
@@ -56,12 +55,6 @@ export default function Header() {
           label: "Facilities",
           to: "/admin/communities",
           icon: Building2,
-        },
-        {
-          key: "calendar",
-          label: "Calendar",
-          to: "/admin/calendar",
-          icon: CalendarDays,
         },
         {
           key: "messages",
