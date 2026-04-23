@@ -1,13 +1,91 @@
-import React from "react";
-import { MessageCircle, X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { MessageCircle, MapPin, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BudgetRangeSlider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import {
+  getGoogleMapsApiKey,
+  loadGoogleMapsScript,
+} from "../../../lib/loadGoogleMaps";
+
+// ─── Google Places Autocomplete Input ───────────────────────────────────────
+
+function LocationAutocompleteInput({ value, onChange, placeholder, className }) {
+  const inputRef = useRef(null);
+  const autocompleteRef = useRef(null);
+  const [ready, setReady] = useState(false);
+
+  // Load Maps + Places library once
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) return;
+    loadGoogleMapsScript(apiKey)
+      .then(() => setReady(true))
+      .catch(() => {});
+  }, []);
+
+  // Attach autocomplete once the library is ready and the input is mounted
+  useEffect(() => {
+    if (!ready || !inputRef.current || autocompleteRef.current) return;
+
+    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
+      types: ["(regions)"],          // cities, states, countries
+      fields: ["formatted_address", "name", "address_components"],
+    });
+
+    ac.addListener("place_changed", () => {
+      const place = ac.getPlace();
+      // Build a clean "City, ST" or "State" string from components
+      let label = "";
+      const comps = place.address_components || [];
+      const locality      = comps.find((c) => c.types.includes("locality"))?.long_name;
+      const admin1Short   = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name;
+      const admin1Long    = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name;
+      const country       = comps.find((c) => c.types.includes("country"))?.short_name;
+
+      if (locality && admin1Short && country === "US") {
+        label = `${locality}, ${admin1Short}`;
+      } else if (admin1Long && country === "US") {
+        label = admin1Long;
+      } else {
+        label = place.name || place.formatted_address || "";
+      }
+
+      onChange(label);
+    });
+
+    autocompleteRef.current = ac;
+  }, [ready, onChange]);
+
+  return (
+    <div className="relative">
+      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94a3b8] pointer-events-none" />
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full pl-9 pr-8 h-10 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] transition-colors ${className ?? ""}`}
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#364153] transition-colors"
+          aria-label="Clear location"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 const careTypes = ["Assisted Living"];
-
 const availability = ["Immediate", "Within 30 Days", "Future Planning"];
-
 const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
 
 const toggleInArray = (arr, value) =>
@@ -25,13 +103,23 @@ const hasSemanticSelection = (selectedValues, optionValue) => {
   return selectedValues.some((item) => {
     const selected = normalizeLabel(item);
     if (!selected) return false;
+    
+    // Basic fuzzy match: handle singular/plural and overlaps
+    const s1 = selected.replace(/s$/i, "");
+    const s2 = option.replace(/s$/i, "");
+
     return (
+      s1 === s2 ||
       selected === option ||
       selected.includes(option) ||
-      option.includes(selected)
+      option.includes(selected) ||
+      s1.includes(s2) ||
+      s2.includes(s1)
     );
   });
 };
+
+// ─── FiltersSidebar ─────────────────────────────────────────────────────────
 
 const FiltersSidebar = ({
   filters,
@@ -65,13 +153,18 @@ const FiltersSidebar = ({
     <aside className="w-full flex flex-col gap-3 sm:gap-5 min-w-0 max-w-full">
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
         <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-3">Filters</h3>
-        <div className="relative mb-4">
-          <Input
+
+        {/* Location autocomplete */}
+        <div className="mb-3">
+          <LocationAutocompleteInput
             placeholder="Searched area (city or state)"
             value={locationQuery}
-            onChange={(e) => setFilters({ locationQuery: e.target.value })}
-            className="pr-9 h-10 rounded-lg border-[#E2E8F0] mb-3"
+            onChange={(val) => setFilters({ locationQuery: val })}
           />
+        </div>
+
+        {/* Keyword search */}
+        <div className="relative mb-4">
           <Input
             placeholder="Define your search..."
             value={searchQuery}
@@ -88,6 +181,7 @@ const FiltersSidebar = ({
             </button>
           )}
         </div>
+
         <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
         <Input
           id="maxDistance"
@@ -98,6 +192,7 @@ const FiltersSidebar = ({
           onChange={(e) => setFilters({ maxMiles: e.target.value })}
           className="h-10 rounded-lg border-[#E2E8F0] mb-4"
         />
+
         <p className="text-xs text-[#20252c] font-bold mb-2">Monthly Budget</p>
         <BudgetRangeSlider
           budgetMin={budgetMin}
@@ -187,6 +282,7 @@ const FiltersSidebar = ({
             </label>
           ))}
         </div>
+
         <button
           type="button"
           onClick={onReset}

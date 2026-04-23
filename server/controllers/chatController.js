@@ -57,16 +57,16 @@ const summarizeFacilityInventory = (facilitiesLean) => {
   );
   const areaOptions = topValues(
     facilities.map((f) => toCityHint(f.address)).filter(Boolean),
-    6
+    12
   );
   const sampleNames = facilities
-    .slice(0, 12)
+    .slice(0, 15)
     .map((f) => String(f.name || "Community").trim())
     .filter(Boolean);
   return [
     `Total communities: ${count}.`,
     careOptions.length ? `Care types seen in listings: ${careOptions.join(", ")}.` : null,
-    areaOptions.length ? `Example areas: ${areaOptions.join(", ")}.` : null,
+    areaOptions.length ? `We have facilities in these areas: ${areaOptions.join(" | ")}.` : null,
     amenityOptions.length ? `Common amenities/services: ${amenityOptions.join(", ")}.` : null,
     sampleNames.length ? `Example community names: ${sampleNames.join(", ")}.` : null,
   ]
@@ -101,7 +101,45 @@ const inferCareLevelsFromMessages = (msgs) => {
   if (/\bmemory care|dementia|alzheimer\b/i.test(text)) levels.add("memory care");
   if (/\bassisted living|assisted\b/i.test(text)) levels.add("assisted living");
   if (/\bindependent living|independent\b/i.test(text)) levels.add("independent living");
+  if (/\brespite\b/i.test(text)) levels.add("respite");
+  if (/\bhospice\b/i.test(text)) levels.add("hospice");
   return [...levels];
+};
+
+/**
+ * Infer the PRIMARY care type (hard filter) from messages.
+ * Priority: Skilled Nursing > Memory Care > Assisted Living > Independent Living > Respite > Hospice
+ * Returns a single string or null.
+ */
+const inferPrimaryCareTypeFromMessages = (msgs) => {
+  const text = msgs
+    .filter((m) => m.role === "user")
+    .map((m) => String(m.content || ""))
+    .join(" \n ");
+  if (/\bskilled nursing|\bsnf\b|nursing home|subacute/i.test(text)) return "skilled nursing";
+  if (/\bmemory care|dementia|alzheimer/i.test(text)) return "memory care";
+  if (/\bassisted living/i.test(text)) return "assisted living";
+  if (/\bindependent living/i.test(text)) return "independent living";
+  if (/\brespite/i.test(text)) return "respite";
+  if (/\bhospice/i.test(text)) return "hospice";
+  return null;
+};
+
+/**
+ * Infer ZIP code from messages (5-digit US ZIP).
+ */
+const inferZipCodeFromMessages = (msgs) => {
+  const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
+  for (let i = users.length - 1; i >= 0; i -= 1) {
+    const text = users[i];
+    // Explicit ZIP mention: "zip code 85001", "zipcode: 85001", "zip 85001"
+    const explicit = text.match(/\b(?:zip(?:\s*code)?|zipcode)\s*(?:is|=|:)?\s*(\d{5})(?:-\d{4})?\b/i);
+    if (explicit?.[1]) return explicit[1];
+    // Standalone 5-digit number
+    const standalone = text.match(/\b(\d{5})(?:-\d{4})?\b/);
+    if (standalone?.[1]) return standalone[1];
+  }
+  return null;
 };
 
 const inferLocationFromMessages = (msgs) => {
@@ -215,15 +253,24 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const intakeAnswerCount = Math.max(0, userMessageCount - preludeUsed);
   const inferredBudget = inferBudgetFromMessages(sanitized);
   const inferredCareLevels = inferCareLevelsFromMessages(sanitized);
+  const inferredPrimaryCareType = inferPrimaryCareTypeFromMessages(sanitized);
   const inferredLocation = inferLocationFromMessages(sanitized);
+  const inferredZipCode = inferZipCodeFromMessages(sanitized);
   const inferredMaxDistance = inferMaxDistanceFromMessages(sanitized);
+
+  // Priority-ordered missing essentials:
+  // 1. Care Type (hard filter) — most critical
+  // 2. Location (city/state or ZIP)
+  // 3. Budget
+  // 4. Amenities (not tracked here, handled by GPT)
+  // 5. Care level sub-needs (lower priority)
   const missingEssentials = [
-    ...(inferredCareLevels.length > 0 ? [] : ["care needs"]),
-    ...(inferredLocation ? [] : ["location"]),
-    ...(inferredLocation && inferredMaxDistance == null ? ["max distance from location"] : []),
-    ...(inferredBudget ? [] : ["budget"]),
+    ...(inferredPrimaryCareType ? [] : ["care type (assisted living, skilled nursing, memory care, etc.)"]),
+    ...((inferredLocation || inferredZipCode) ? [] : ["location (city/state or ZIP code)"]),
+    ...(inferredBudget ? [] : ["approximate monthly budget"]),
   ];
-  const essentialTotalPoints = inferredLocation ? 4 : 3;
+  // We need care type + location at minimum to show results
+  const essentialTotalPoints = 3; // care type + location + budget
   const essentialPointCount = essentialTotalPoints - missingEssentials.length;
   const shouldReturnResults =
     explicitMatchNow ||
@@ -269,12 +316,17 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       `CONVERSATION_RULES (server):\n` +
       `- User messages so far: ${userMessageCount}.\n` +
       `- Collected essential intake points: ${essentialPointCount}/${essentialTotalPoints}.\n` +
+      `- Inferred primary care type: ${inferredPrimaryCareType || "NOT YET KNOWN"}.\n` +
+      `- Inferred location: ${inferredLocation || inferredZipCode || "NOT YET KNOWN"}.\n` +
+      `- Inferred budget: ${inferredBudget ? `$${inferredBudget}/mo` : "NOT YET KNOWN"}.\n` +
       `- Missing essentials (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
+      `- PRIORITY ORDER for questions: (1) Care Type → (2) Location + ZIP → (3) Budget → (4) Amenities → (5) Care Level sub-needs.\n` +
+      `- CRITICAL: If care type is known, NEVER ask about or suggest the opposite type (e.g., if user said assisted living, never mention skilled nursing).\n` +
       `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until the user has sent **at least ${minMessagesBeforeJson}** messages, **unless** they clearly insist on seeing matches right now and you can honestly fill the JSON from the thread.\n` +
       `- If you are not outputting that JSON block yet, **do not** include those delimiters at all.\n` +
       `- Keep replies feeling human; one gentle question max when you need info.\n` +
-      `- If essentials are missing, ask ONLY about one missing essential from the list above; do not ask unrelated follow-ups.\n` +
-      `- If location is known but max distance is missing, ask specifically: how far from that location (in miles) is acceptable.\n` +
+      `- If essentials are missing, ask ONLY about the HIGHEST PRIORITY missing essential from the priority list above.\n` +
+      `- If location (city/state) is known but ZIP is not, ask once: "Do you have a ZIP code? That helps narrow results to your exact area.".\n` +
       `- If essentials are all present, do not ask more intake questions; proceed to show matches.`;
 
     const conversationSystem =
@@ -324,7 +376,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST be properly capitalized (Title Case) regardless of how the user typed it. Examples: "arizona" → "Arizona", "los angeles" → "Los Angeles", "new york, ny" → "New York, NY", "phoenix az" → "Phoenix, AZ". Never output raw lowercase from the user.\n2. careLevels must be lowercase standard terms: "assisted living", "memory care", "independent living", "skilled nursing".\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -357,6 +409,21 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   let matchedPreferences = null;
   if (rawPrefs) {
     const prefs = normalizeIntakePreferences(rawPrefs);
+
+    // Backfill primaryCareType from inference if GPT didn't extract it
+    if (prefs && !prefs.primaryCareType && inferredPrimaryCareType) {
+      prefs.primaryCareType = inferredPrimaryCareType;
+    }
+    // Ensure careLevels is consistent with primaryCareType
+    if (prefs && prefs.primaryCareType && (!prefs.careLevels || prefs.careLevels.length === 0)) {
+      prefs.careLevels = [prefs.primaryCareType];
+    }
+
+    // Backfill ZIP code
+    if (prefs && !prefs.searchZipCode && inferredZipCode) {
+      prefs.searchZipCode = inferredZipCode;
+    }
+
     if (prefs && (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) && inferredBudget) {
       prefs.budgetMaxMonthly = inferredBudget;
     }
@@ -374,9 +441,23 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     ) {
       prefs.maxDistanceMiles = inferredMaxDistance;
     }
+    // Safety net: normalize searchLocation to Title Case regardless of how user typed it
+    // e.g. "arizona" → "Arizona", "los angeles, ca" → "Los Angeles, Ca"
+    if (prefs && prefs.searchLocation) {
+      prefs.searchLocation = prefs.searchLocation
+        .split(/(\s+|,)/)
+        .map((part) => {
+          const p = part.trim();
+          if (!p) return part;
+          if (p === ",") return part;
+          if (p.length === 2) return p.toUpperCase(); // Assume state code
+          return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+        })
+        .join("");
+    }
     const facilities = await Facility.find().lean();
     const matchSection = formatRecommendationsForChat(facilities, prefs);
-    finalContent = `Here’s what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
+    finalContent = `Here's what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
     if (prefs) {
       matchedFacilities = rankAllFacilities(facilities, prefs);
       matchedPreferences = prefs;

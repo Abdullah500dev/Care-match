@@ -86,6 +86,66 @@ function titleCase(s) {
     .join(" ");
 }
 
+// US state name → abbreviation lookup for location filter
+const US_STATE_ABBR = {
+  alabama: "al", alaska: "ak", arizona: "az", arkansas: "ar", california: "ca",
+  colorado: "co", connecticut: "ct", delaware: "de", florida: "fl", georgia: "ga",
+  hawaii: "hi", idaho: "id", illinois: "il", indiana: "in", iowa: "ia",
+  kansas: "ks", kentucky: "ky", louisiana: "la", maine: "me", maryland: "md",
+  massachusetts: "ma", michigan: "mi", minnesota: "mn", mississippi: "ms",
+  missouri: "mo", montana: "mt", nebraska: "ne", nevada: "nv",
+  "new hampshire": "nh", "new jersey": "nj", "new mexico": "nm", "new york": "ny",
+  "north carolina": "nc", "north dakota": "nd", ohio: "oh", oklahoma: "ok",
+  oregon: "or", pennsylvania: "pa", "rhode island": "ri", "south carolina": "sc",
+  "south dakota": "sd", tennessee: "tn", texas: "tx", utah: "ut",
+  vermont: "vt", virginia: "va", washington: "wa", "west virginia": "wv",
+  wisconsin: "wi", wyoming: "wy", "district of columbia": "dc",
+};
+
+/**
+ * Returns true if the facility's full address matches the location query.
+ * Handles: city names, state full names, state abbreviations, zip codes.
+ */
+function addressMatchesLocation(fullAddress, locationQuery) {
+  if (!locationQuery) return true;
+  const addr = String(fullAddress || "").toLowerCase();
+  const query = locationQuery.toLowerCase().trim();
+  if (!query) return true;
+
+  // If facility has no address data, don't hide it — incomplete data shouldn't remove results
+  if (!addr) return true;
+
+  // 1. Direct substring match (city names, zip codes, full state name spelled out)
+  if (addr.includes(query)) return true;
+
+  // 2. State full name → try abbreviation match in address (e.g. "new jersey" → "nj")
+  const abbr = US_STATE_ABBR[query];
+  if (abbr) {
+    // Word-boundary match — catches ", NJ", " NJ ", "NJ,", "NJ 07030" etc.
+    if (new RegExp(`\\b${abbr}\\b`).test(addr)) return true;
+  }
+
+  // 3. Handle "City, State" queries e.g. "Newark, NJ" or "Newark, New Jersey"
+  if (query.includes(",")) {
+    const [city, stateRaw] = query.split(",").map((s) => s.trim());
+    const stateAbbr = US_STATE_ABBR[stateRaw] || stateRaw;
+    if (city && addr.includes(city)) {
+      if (addr.includes(stateAbbr)) return true;
+      if (stateRaw && addr.includes(stateRaw)) return true;
+    }
+  }
+
+  // 4. User typed a 2-letter abbreviation like "NJ" — word-boundary match
+  if (/^[a-z]{2}$/.test(query)) {
+    if (new RegExp(`\\b${query}\\b`).test(addr)) return true;
+    // Also try reverse: "nj" → find "new jersey" in address
+    const fullName = Object.keys(US_STATE_ABBR).find((k) => US_STATE_ABBR[k] === query);
+    if (fullName && addr.includes(fullName)) return true;
+  }
+
+  return false;
+}
+
 function normalizeFacilityForCard(m) {
   const externalData =
     m && typeof m.external_data === "object" && m.external_data
@@ -210,6 +270,12 @@ const CareExplorer = () => {
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
 
+  // Preload Google Maps + Places so the location autocomplete works immediately
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (apiKey) loadGoogleMapsScript(apiKey).catch(() => {});
+  }, []);
+
   // Load initial favorites from backend or local storage
   useEffect(() => {
     const loadFavorites = async () => {
@@ -310,8 +376,8 @@ const CareExplorer = () => {
         ),
       ),
     ];
-    return base.slice(0, 12).length
-      ? base.slice(0, 12)
+    return base.slice(0, 60).length
+      ? base.slice(0, 60)
       : ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
   }, [baseFacilities]);
   const availabilityOptions = useMemo(() => {
@@ -341,7 +407,7 @@ const CareExplorer = () => {
         ? carrieFilters.careLevels.map((x) => titleCase(x))
         : prev.selectedCareTypes,
       selectedAmenities: Array.isArray(carrieFilters.amenityMustHaves)
-        ? carrieFilters.amenityMustHaves.map((x) => titleCase(x))
+        ? carrieFilters.amenityMustHaves.map((x) => String(x).trim())
         : prev.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
@@ -409,8 +475,8 @@ const CareExplorer = () => {
 
     return scopedFacilities.filter((f) => {
       if (locationQuery) {
-        const addressText = `${f.address || ""} ${f.distance || ""}`.toLowerCase();
-        if (!addressText.includes(locationQuery)) return false;
+        // Use improved location matching that handles state names and abbreviations
+        if (!addressMatchesLocation(f.address, locationQuery)) return false;
       }
 
       if (q) {

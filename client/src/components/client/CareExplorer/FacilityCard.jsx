@@ -210,17 +210,19 @@ const FacilityCard = ({
               }`}
           />
         </button>
-        {/* Distance - light backdrop blur + opacity, no border */}
+        {/* Distance - glassmorphism pill */}
         <div
           className={`absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full font-bold uppercase tracking-wide text-white ${compact ? "px-2.5 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]"}`}
           style={{
-            backdropFilter: "blur(1px)",
-            WebkitBackdropFilter: "blur(2px)",
-            backgroundColor: "transparent",
-            textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+            backdropFilter: "blur(16px) saturate(1.4)",
+            WebkitBackdropFilter: "blur(16px) saturate(1.4)",
+            backgroundColor: "rgba(255,255,255,0.12)",
+            border: "1px solid rgba(255,255,255,0.28)",
+            boxShadow: "0 2px 10px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.2)",
+            textShadow: "0 1px 4px rgba(0,0,0,0.7), 0 0 8px rgba(0,0,0,0.4)",
           }}
         >
-          <MapPin className={`text-[#00CFF4] shrink-0 ${compact ? "h-2.5 w-2.5" : "h-3 w-3"}`} strokeWidth={2} />
+          <MapPin className={`text-[#00CFF4] shrink-0 drop-shadow-sm ${compact ? "h-2.5 w-2.5" : "h-3 w-3"}`} strokeWidth={2} />
           {distance}
         </div>
       </div>
