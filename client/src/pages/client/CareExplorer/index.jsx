@@ -273,7 +273,7 @@ const CareExplorer = () => {
   // Preload Google Maps + Places so the location autocomplete works immediately
   useEffect(() => {
     const apiKey = getGoogleMapsApiKey();
-    if (apiKey) loadGoogleMapsScript(apiKey).catch(() => {});
+    if (apiKey) loadGoogleMapsScript(apiKey).catch(() => { });
   }, []);
 
   // Load initial favorites from backend or local storage
@@ -537,6 +537,89 @@ const CareExplorer = () => {
     });
   }, [filters, scopedFacilities, carrieLocationQuery]);
 
+  const rankedFacilities = useMemo(() => {
+    const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
+      .trim()
+      .toLowerCase();
+    const searchQuery = String(filters.searchQuery || "").trim().toLowerCase();
+    const selectedCare = (filters.selectedCareTypes || []).map((x) =>
+      String(x).toLowerCase(),
+    );
+    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
+      String(x).toLowerCase(),
+    );
+    const selectedAvailability = (filters.selectedAvailability || []).map((x) =>
+      String(x).toLowerCase(),
+    );
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
+
+    const getRelevanceScore = (facility) => {
+      let score = 0;
+
+      // Keep backend/LLM match signal as a baseline.
+      const backendMatchScore = Number(facility.matchPercent) || 0;
+      score += Math.min(20, Math.max(0, backendMatchScore * 0.2));
+
+      // Location is the first-order ranking signal.
+      const locationStrength = locationMatchStrength(
+        locationQuery,
+        facility.address,
+        facility.distance,
+      );
+      score += locationStrength * 45;
+
+      if (selectedCare.length > 0) {
+        const levels = (facility.careLevels || []).map((x) => String(x).toLowerCase());
+        const careHits = selectedCare.filter((want) =>
+          levels.some((level) => level.includes(want) || want.includes(level)),
+        ).length;
+        score += (careHits / selectedCare.length) * 15;
+      } else {
+        score += 7;
+      }
+
+      if (selectedAmenities.length > 0) {
+        const pool = [
+          ...(facility.amenities || []),
+          ...(facility.services || []),
+          ...(facility.features || []),
+        ].map((x) => String(x).toLowerCase());
+        const amenityHits = selectedAmenities.filter((want) =>
+          pool.some((value) => value.includes(want) || want.includes(value)),
+        ).length;
+        score += (amenityHits / selectedAmenities.length) * 12;
+      } else {
+        score += 6;
+      }
+
+      if (selectedAvailability.length > 0) {
+        const availability = String(facility.availability || "").toLowerCase();
+        if (availability && selectedAvailability.includes(availability)) score += 3;
+      }
+
+      const low = facility.priceMin ?? facility.priceMax;
+      const high = facility.priceMax ?? facility.priceMin;
+      if (low != null && high != null && low <= budgetMax && high >= budgetMin) score += 3;
+
+      if (searchQuery) {
+        const text =
+          `${facility.name || ""} ${facility.category || ""} ${facility.address || ""} ${(facility.features || []).join(" ")}`.toLowerCase();
+        if (text.includes(searchQuery)) score += 2;
+      }
+
+      return score;
+    };
+
+    return [...filteredFacilities].sort((a, b) => {
+      const scoreDiff = getRelevanceScore(b) - getRelevanceScore(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      const backendDiff = (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0);
+      if (backendDiff !== 0) return backendDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
+  }, [filteredFacilities, filters, carrieLocationQuery]);
+
   const mapFacilities = useMemo(
     () =>
       view === "map"
@@ -559,7 +642,7 @@ const CareExplorer = () => {
   }, [mapFacilities, nearbyMapFacilityKeys]);
 
   const pageSize = 5;
-  const matchCountForHeader = filteredFacilities.length;
+  const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     String(filters.locationQuery || "").trim() ||
     carrieLocationQuery ||
@@ -580,12 +663,12 @@ const CareExplorer = () => {
       : "your preferred timeline";
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredFacilities.length / pageSize),
+    Math.ceil(rankedFacilities.length / pageSize),
   );
   const currentPage = Math.min(page, totalPages);
   const startIdx = (currentPage - 1) * pageSize;
   const endIdx = startIdx + pageSize;
-  const listingItems = filteredFacilities.slice(startIdx, endIdx);
+  const listingItems = rankedFacilities.slice(startIdx, endIdx);
 
   const pageNumbers = useMemo(() => {
     if (totalPages <= 7) {
@@ -708,10 +791,10 @@ const CareExplorer = () => {
       for (let i = 0; i < candidates.length; i++) {
         if (cancelled) break;
         const f = candidates[i];
-        
+
         // Try searching for the specific facility name + address to get exact coordinates
-        const queryStr = (f.name && f.name !== "Community") 
-          ? `${f.name}, ${f.address}` 
+        const queryStr = (f.name && f.name !== "Community")
+          ? `${f.name}, ${f.address}`
           : f.address;
 
         let loc = null;
@@ -734,7 +817,7 @@ const CareExplorer = () => {
 
         if (loc && !cancelled) {
           const latLng = { lat: loc.lat(), lng: loc.lng() };
-          
+
           const avgPrice = averagePriceFromText(f.priceRange);
           const marker = new window.google.maps.Marker({
             map: mapInstanceRef.current,
@@ -748,7 +831,7 @@ const CareExplorer = () => {
               }
               : undefined,
           });
-          
+
           placed.push({ marker, loc, key: f.key, latLng });
         }
       }
@@ -761,9 +844,9 @@ const CareExplorer = () => {
       const valid = placed.filter(Boolean);
       setNearbyMapFacilityKeys(valid.map((x) => x.key));
       valid.forEach((x) => mapMarkersRef.current.push({ marker: x.marker, key: x.key }));
-      
+
       if (valid.length === 0) return;
-      
+
       const bounds = new window.google.maps.LatLngBounds();
       valid.forEach((x) => bounds.extend(x.latLng));
       mapInstanceRef.current.fitBounds(bounds, 60);
@@ -823,8 +906,8 @@ const CareExplorer = () => {
                     <span className="font-semibold text-[#132329]">
                       ranked from your chat with Carrie
                     </span>{" "}
-                    for <span className="font-semibold text-[#132329]">{summaryCareText}</span>{" "}
-                    in <span className="font-semibold text-[#132329]">{locationLabelForHeader}</span>,{" "}
+                    in <span className="font-semibold text-[#132329]">{locationLabelForHeader}</span>{" "}
+                    for <span className="font-semibold text-[#132329]">{summaryCareText}</span>,{" "}
                     with a budget around{" "}
                     <span className="font-semibold text-[#132329]">{summaryBudgetText}</span>,{" "}
                     must-have needs like{" "}
@@ -835,13 +918,13 @@ const CareExplorer = () => {
                   </>
                 ) : (
                   <>
-                    Prioritized for{" "}
-                    <span className="font-semibold text-[#132329]">
-                      {summaryCareText}
-                    </span>
-                    {" "}in{" "}
+                    Prioritized in{" "}
                     <span className="font-semibold text-[#132329]">
                       {locationLabelForHeader}
+                    </span>
+                    {" "}for{" "}
+                    <span className="font-semibold text-[#132329]">
+                      {summaryCareText}
                     </span>
                     , budget around{" "}
                     <span className="font-semibold text-[#132329]">
