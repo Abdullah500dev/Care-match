@@ -8,11 +8,15 @@ import {
 import Facility from "../models/facilityModel.js";
 import {
   extractIntakeJsonBlock,
-  formatRecommendationsForChat,
   normalizeIntakePreferences,
   parseBudgetLikeValue,
-  rankAllFacilities,
 } from "../services/matchingEngine.js";
+import { getCareMatchResults } from "../scripts/results.js";
+import {
+  formatAiDiscoveryMatchesForChat,
+  intakePreferencesToAiSearchParams,
+  mapAiDiscoveryFacilityToMatchRow,
+} from "../services/aiDiscoveryBridge.js";
 
 const PRELUDE_MAX_USER_MESSAGES = 2;
 const QUESTION_COUNT = 5;
@@ -504,11 +508,28 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
         .replace(/\s+/g, " ")
         .trim();
     }
-    const facilities = await Facility.find().lean();
-    const matchSection = formatRecommendationsForChat(facilities, prefs);
+    const aiParams = intakePreferencesToAiSearchParams(prefs);
+    let aiMatchRows = [];
+    if (aiParams) {
+      try {
+        const aiOut = await getCareMatchResults(aiParams);
+        aiMatchRows = (aiOut.results || []).map((row, idx) =>
+          mapAiDiscoveryFacilityToMatchRow(row, idx)
+        );
+      } catch (err) {
+        console.error("[sendChat] AI discovery search failed:", err?.message || err);
+      }
+    }
+
+    const matchSection = aiMatchRows.length
+      ? formatAiDiscoveryMatchesForChat(aiMatchRows, 6)
+      : aiParams
+        ? "\n\n---\n**Your matches**\n_I couldn’t load live suggestions just now. Try again in a moment._"
+        : "\n\n---\n**Your matches**\n_Add a **ZIP code** with your city or state (for example, “Boston, MA 02108”) so I can run live discovery._";
+
     finalContent = `Here's what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
     if (prefs) {
-      matchedFacilities = rankAllFacilities(facilities, prefs);
+      matchedFacilities = aiMatchRows;
       matchedPreferences = prefs;
     }
   }

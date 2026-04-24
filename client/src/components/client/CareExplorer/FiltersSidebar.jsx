@@ -131,9 +131,12 @@ const FiltersSidebar = ({
   const DEFAULT_AMENITIES_VISIBLE = 12;
 
   const locationQuery = filters?.locationQuery ?? "";
+  const zipCode = filters?.zipCode ?? "";
   const maxMiles = filters?.maxMiles ?? "";
+  const additionalPreferences = filters?.additionalPreferences ?? "";
+  const sortBy = filters?.sortBy ?? "bestMatch";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
-  const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 4500;
+  const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 15000;
   const selectedCareTypes = Array.isArray(filters?.selectedCareTypes)
     ? filters.selectedCareTypes
     : [];
@@ -162,14 +165,36 @@ const FiltersSidebar = ({
   return (
     <aside className="w-full flex flex-col gap-3 sm:gap-5 min-w-0 max-w-full">
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
-        <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-3">Filters</h3>
+        <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-1">Filters</h3>
+        <p className="hidden lg:block text-xs text-[#64748b] mb-3 leading-relaxed">
+          Add a city plus ZIP for the strongest match, set a travel radius, and include custom needs like accessibility or lifestyle preferences to refresh ranked results automatically.
+        </p>
 
         {/* Location autocomplete */}
         <div className="mb-3">
           <LocationAutocompleteInput
-            placeholder="Searched area (city or state)"
+            placeholder="City or state"
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
+          />
+        </div>
+
+        <div className="mb-4">
+          <p className="text-xs text-[#20252c] font-bold mb-2">ZIP Code</p>
+          <Input
+            id="zipCode"
+            type="text"
+            inputMode="numeric"
+            maxLength={5}
+            placeholder="e.g. 32811"
+            value={zipCode}
+            onChange={(e) =>
+              setFilters({
+                zipCode: String(e.target.value || "")
+                  .replace(/\D/g, "")
+                  .slice(0, 5),
+              })}
+            className="h-10 rounded-lg border-[#E2E8F0]"
           />
         </div>
 
@@ -183,6 +208,20 @@ const FiltersSidebar = ({
           onChange={(e) => setFilters({ maxMiles: e.target.value })}
           className="h-10 rounded-lg border-[#E2E8F0] mb-4"
         />
+
+        <div className="mb-4">
+          <p className="text-xs text-[#20252c] font-bold mb-2">Rank Results By</p>
+          <select
+            value={sortBy}
+            onChange={(e) => setFilters({ sortBy: e.target.value })}
+            className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#364153] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4]"
+          >
+            <option value="bestMatch">Best overall match</option>
+            <option value="overallQuality">Overall quality</option>
+            <option value="nearest">Nearest first</option>
+            <option value="lowestPrice">Lowest estimated price</option>
+          </select>
+        </div>
 
         <p className="text-xs text-[#20252c] font-bold mb-2">Monthly Budget</p>
         <BudgetRangeSlider
@@ -203,6 +242,33 @@ const FiltersSidebar = ({
           <span className="rounded-lg px-3 py-1.5 text-sm font-semibold text-[#00CFF4] bg-[#00CFF4]/10">
             ${budgetMax.toLocaleString()}
           </span>
+        </div>
+
+        <div className="my-4 border-t border-[#E2E8F0]" />
+
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm text-[#132329]">Additional Preferences</h3>
+            {additionalPreferences.trim() && (
+              <button
+                type="button"
+                onClick={() => setFilters({ additionalPreferences: "" })}
+                className="text-[11px] font-semibold text-[#00A8C8] hover:text-[#008BA7]"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <textarea
+            value={additionalPreferences}
+            onChange={(e) => setFilters({ additionalPreferences: e.target.value })}
+            placeholder="e.g. wheelchair-friendly entrance, accessible parking, outdoor areas, social activities, vibrant community"
+            rows={4}
+            className="w-full rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] resize-none"
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-[#64748b]">
+            Use commas or new lines to add dynamic requirements. These are sent into live discovery and used in ranking.
+          </p>
         </div>
 
         <div className="my-4 border-t border-[#E2E8F0]" />

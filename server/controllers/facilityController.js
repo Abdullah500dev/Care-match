@@ -28,6 +28,8 @@ import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
+import { getCareMatchResults } from "../scripts/results.js";
+import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -1467,5 +1469,57 @@ export const importExternalFacilities = catchAsyncError(async (req, res, next) =
     created,
     updated,
     totalProcessed: prepared.length,
+  });
+});
+
+/**
+ * POST /api/facilities/discover
+ * Live AI discovery (same engine as Carrie) from explicit search params.
+ * Used by Care Explorer when filters change so the client can refresh results.
+ */
+export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => {
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    return next(new ErrorHandler("Discovery is not configured (missing OPENAI_API_KEY).", 503));
+  }
+
+  const body = req.body || {};
+  const payload = {
+    zip_code: String(body.zip_code || "").trim(),
+    location: String(body.location || "").trim(),
+    care_levels: Array.isArray(body.care_levels) ? body.care_levels : [],
+    amenities: Array.isArray(body.amenities) ? body.amenities : [],
+    services: Array.isArray(body.services) ? body.services : [],
+    keywords: Array.isArray(body.keywords) ? body.keywords : [],
+  };
+
+  const bmin = Number(body.budget_min);
+  const bmax = Number(body.budget_max);
+  if (Number.isFinite(bmin) && Number.isFinite(bmax) && bmin > 0 && bmax >= bmin) {
+    payload.budget_min = Math.round(bmin);
+    payload.budget_max = Math.round(bmax);
+  }
+
+  const maxDistanceMiles = Number(body.max_distance_miles);
+  if (Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0) {
+    payload.max_distance_miles = Math.round(maxDistanceMiles);
+  }
+
+  let out;
+  try {
+    out = await getCareMatchResults(payload);
+  } catch (e) {
+    const status = typeof e?.status === "number" ? e.status : 502;
+    const safe = status >= 400 && status < 600 ? status : 502;
+    return next(new ErrorHandler(e?.message || "Discovery failed", safe));
+  }
+
+  const facilities = (out.results || []).map((row, idx) =>
+    mapAiDiscoveryFacilityToMatchRow(row, idx)
+  );
+
+  res.status(200).json({
+    success: true,
+    count: facilities.length,
+    facilities,
   });
 });

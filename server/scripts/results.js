@@ -1,0 +1,401 @@
+/**
+ * Care match search helper — OpenAI Responses API.
+ * Call `getCareMatchResults(searchParams)` with:
+ * { zip_code, location, amenities?, services?, care_levels }
+ *
+ * Env: OPENAI_API_KEY (required), OPENAI_MODEL (default: gpt-5.4)
+ * `.env` next to this file is loaded via dotenv (does not override existing env vars).
+ */
+
+import OpenAI from "openai";
+import path from "path";
+import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+import { CITY_DEFAULT_STATE, inferStateFromCityHint } from "./usCityDefaultState.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/** Load server-level `.env`; does not override variables already set in the environment. */
+dotenv.config({ path: path.join(__dirname, "..", ".env") });
+
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
+
+/** When the model drifts to another metro, keep at least this many after geo filter before skipping retry. */
+const MIN_GEO_FILTERED = 8;
+
+/** Block obvious placeholder / demo hosts (post-sanitize + prompt forbid). */
+const DISALLOWED_URL_HOST =
+  /example\.com|example\.org|example\.net|placeholder|picsum\.photos|via\.placeholder|dummyimage|placehold\.co|loremflickr|fakeimg|test\.com|satisfied|localhost/i;
+
+const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spelling):
+- care_levels: string[]
+- name: string
+- email: string (realistic community contact; may be info@ the same domain as website when unknown)
+- phone: string (E.164 or readable US format)
+- website: string (https URL — MUST be the operator’s real public homepage domain you verified via web search; NEVER example.com or other placeholders)
+- description: string (2–4 sentences)
+- services: string[] (include requested services where plausible)
+- amenities: string[] (include requested amenities where plausible)
+- budget: { min_monthly: number, max_monthly: number, currency: "USD" }
+- pricing: string (short note)
+- images: string[] (0 to 3 items ONLY — each MUST be a direct https URL to a real image file on the same registrable domain as website, or on a major operator CDN clearly tied to that brand; use [] if you cannot verify real image URLs — NEVER invent or use stock/demo hosts)
+- location: { full_address, city, county, state, zip_code, country: "US" }
+- provider_url: string (https URL — same entity as website or a reputable government/registry link from web search; no placeholders)
+- google_places: { place_id, maps_url, latitude, longitude, review_count, total_score }
+- maps_url: string
+- latitude: number
+- longitude: number
+- review: { rating: number, count: number, summary: string }`;
+
+function validatePayload(body) {
+  if (!body || typeof body !== "object") return "Body must be a JSON object.";
+  const { zip_code, location, care_levels } = body;
+  if (typeof zip_code !== "string" || !zip_code.trim()) return "zip_code is required (string).";
+  if (typeof location !== "string" || !location.trim())
+    return "location is required (string) — city, state, or county.";
+  if (!Array.isArray(care_levels) || care_levels.length === 0)
+    return "care_levels is required (non-empty string array).";
+  if (body.amenities != null && !Array.isArray(body.amenities)) return "amenities must be an array of strings if provided.";
+  if (body.services != null && !Array.isArray(body.services)) return "services must be an array of strings if provided.";
+  if (body.keywords != null && !Array.isArray(body.keywords)) return "keywords must be an array of strings if provided.";
+  return null;
+}
+
+/** @param {{ zip_code: string, location: string, care_levels: unknown[], amenities: unknown[], services: unknown[] }} payload */
+export function parseGeoAnchorFromPayload(payload) {
+  const zip = String(payload.zip_code || "").replace(/\D/g, "").slice(0, 5);
+  const location = String(payload.location || "").trim();
+  const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
+  let stateAbbr = null;
+  let cityHint = "";
+  if (parts.length >= 2 && /^[A-Za-z]{2}$/.test(parts[parts.length - 1])) {
+    stateAbbr = parts[parts.length - 1].toUpperCase();
+    cityHint = parts.slice(0, -1).join(" ").toLowerCase().trim();
+  } else if (parts.length >= 1) {
+    cityHint = parts.join(" ").toLowerCase().trim();
+  }
+  cityHint = cityHint.replace(/\b\d{5}(?:-\d{4})?\b/g, "").replace(/\s+/g, " ").trim();
+
+  if (!stateAbbr) {
+    const fromCity = inferStateFromCityHint(cityHint);
+    if (fromCity) stateAbbr = fromCity;
+  }
+  const cityKey = cityHint.split(",")[0].trim().toLowerCase();
+  if (!stateAbbr && cityKey && CITY_DEFAULT_STATE.has(cityKey)) {
+    stateAbbr = CITY_DEFAULT_STATE.get(cityKey);
+  }
+  return { zip, location, stateAbbr, cityHint };
+}
+
+/** Remove placeholder / fake URLs so the UI never shows example.com. */
+function sanitizeDiscoveryResults(results) {
+  if (!Array.isArray(results)) return;
+  for (const f of results) {
+    if (f && typeof f.website === "string" && DISALLOWED_URL_HOST.test(f.website)) {
+      f.website = "";
+    }
+    if (f && typeof f.provider_url === "string" && DISALLOWED_URL_HOST.test(f.provider_url)) {
+      f.provider_url = typeof f.website === "string" ? f.website : "";
+    }
+    if (f && Array.isArray(f.images)) {
+      f.images = f.images
+        .filter((u) => typeof u === "string" && /^https:\/\//i.test(u) && !DISALLOWED_URL_HOST.test(u))
+        .slice(0, 3);
+    }
+  }
+}
+
+function facilityLocationBlob(f) {
+  const loc = f && typeof f.location === "object" && f.location ? f.location : {};
+  const gp = f && typeof f.google_places === "object" && f.google_places ? f.google_places : {};
+  return [
+    loc.full_address,
+    loc.city,
+    loc.county,
+    loc.state,
+    loc.zip_code,
+    f.maps_url,
+    gp.maps_url,
+  ]
+    .map((x) => String(x || "").toLowerCase())
+    .join(" | ");
+}
+
+/**
+ * Drop rows that are clearly outside the user’s anchor (common model failure mode).
+ * @param {object[]} results
+ * @param {{ zip: string, location: string, stateAbbr: string|null, cityHint: string }} anchor
+ */
+export function filterDiscoveryResultsByAnchor(results, anchor) {
+  if (!Array.isArray(results)) return [];
+
+  const anchorZip = String(anchor.zip || "").replace(/\D/g, "").slice(0, 5);
+  const hint = String(anchor.cityHint || "").toLowerCase().trim();
+  const wantState = anchor.stateAbbr ? String(anchor.stateAbbr).toUpperCase() : "";
+
+  return results.filter((f) => {
+    const loc = f && typeof f.location === "object" && f.location ? f.location : {};
+    const blob = facilityLocationBlob(f);
+    const rowState = String(loc.state || "").trim().toUpperCase();
+    let rowZip = String(loc.zip_code || "").replace(/\D/g, "").slice(0, 5);
+    if (!rowZip) {
+      const m = blob.match(/\b(\d{5})(?:-\d{4})?\b/);
+      if (m) rowZip = m[1];
+    }
+
+    if (wantState && rowState.length === 2 && rowState !== wantState) return false;
+
+    if (wantState === "CA" && /,\s*ma\b|, massachusetts\b|\bdedham\b|\bbrookline\b|\bcambridge,\s*ma\b/.test(blob)) {
+      if (!hint || !blob.includes(hint)) return false;
+    }
+    if (wantState === "MA" && /,\s*ca\b|, california\b|\bsan francisco\b/.test(blob)) {
+      if (!hint || !blob.includes(hint)) return false;
+    }
+
+    if (hint.length >= 3 && blob.includes(hint)) {
+      return true;
+    }
+
+    if (anchorZip.length === 5) {
+      if (rowZip.length === 5) {
+        if (rowZip.slice(0, 2) !== anchorZip.slice(0, 2)) return false;
+        if (wantState && rowState.length === 2 && rowState !== wantState) return false;
+        return true;
+      }
+      return blob.includes(anchorZip);
+    }
+
+    return false;
+  });
+}
+
+function buildPrompt(payload) {
+  const anchor = parseGeoAnchorFromPayload(payload);
+  const anchorNote = anchor.stateAbbr
+    ? `Anchor U.S. state: ${anchor.stateAbbr}. Anchor metro ZIP (must match all rows’ regions): ${anchor.zip}.`
+    : `Anchor metro ZIP: ${anchor.zip}.`;
+
+  const acc =
+    Array.isArray(payload.amenities) && payload.amenities.length
+      ? `Accessibility / amenity priorities (reflect honestly in amenities + description; rank higher when clearly supported): ${JSON.stringify(payload.amenities)}`
+      : "";
+
+  const budgetMin = Number(payload.budget_min);
+  const budgetMax = Number(payload.budget_max);
+  const budgetLine =
+    Number.isFinite(budgetMin) &&
+    Number.isFinite(budgetMax) &&
+    budgetMin > 0 &&
+    budgetMax >= budgetMin
+      ? `Monthly budget (prefer estimated monthly fees within or close to this range when plausible): $${Math.round(budgetMin)}–$${Math.round(budgetMax)} USD per month.\n`
+      : "";
+  const maxDistanceMiles = Number(payload.max_distance_miles);
+  const distanceLine =
+    Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
+      ? `Distance constraint: prioritize communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Rank closer communities higher and avoid obviously farther results when possible.\n`
+      : "";
+  const keywords = Array.isArray(payload.keywords)
+    ? payload.keywords.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const keywordLine = keywords.length
+    ? `Lifestyle / fit preferences to reflect in ranking, amenities, services, or description when supported: ${JSON.stringify(keywords)}\n`
+    : "";
+
+  return `You output only compact JSON. Never use markdown code fences.
+
+Search for senior care / assisted living style facilities matching:
+
+- zip_code: ${JSON.stringify(payload.zip_code)}
+- location (city, state, OR county — treat as the ONLY geographic anchor): ${JSON.stringify(payload.location)}
+- care_levels: ${JSON.stringify(payload.care_levels)}
+- amenities (prefer facilities that mention or plausibly offer these): ${JSON.stringify(payload.amenities || [])}
+- services (prefer facilities that mention or plausibly offer these): ${JSON.stringify(payload.services || [])}
+
+${anchorNote}
+${budgetLine}${distanceLine}${keywordLine}${acc ? `${acc}\n` : ""}
+
+WEB SEARCH (REQUIRED FOR THIS TASK):
+- You have access to the web_search tool. Use it to find each community’s **real** official website and, when possible, **direct https image URLs** from that site (or the same operator domain).
+- Do NOT fabricate URLs. If you cannot verify a homepage, omit website (empty string) and use images: [] rather than guessing.
+- Forbidden patterns (never output): example.com, example.org, via.placeholder, picsum.photos, placehold.co, loremflickr, dummyimage, localhost, or any obvious template host.
+
+GEOGRAPHY (NON-NEGOTIABLE):
+- Every facility MUST be in the same U.S. state and metro area implied by the location + zip_code above.
+- location.state MUST match that state (e.g. California → "CA"). Do NOT output communities in Massachusetts, Texas, Illinois, etc. unless the anchor location is clearly in that state.
+- Do NOT "fill" the list using similarly named streets in distant cities (e.g. "Washington St" in Dedham, MA when the user asked for San Francisco, CA).
+- location.zip_code should share the same broad regional prefix as the anchor ZIP when possible (same first 2 digits at minimum for the same state).
+
+Return ONLY valid JSON with this top-level shape:
+{ "results": [ /* EXACTLY 20 facility objects */ ] }
+
+${FACILITY_SHAPE}
+
+Rules:
+1. results MUST have length exactly 20 before you stop.
+2. Names, addresses, coordinates, and ZIP codes must all be mutually consistent with the anchor location and zip_code.
+3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility, services, lifestyle fit, and overall quality in amenities or description.
+4. Vary facility names; do not copy one template 20 times.
+5. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
+6. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
+}
+
+function buildGeoRepairPrompt(payload) {
+  const anchor = parseGeoAnchorFromPayload(payload);
+  return `${buildPrompt(payload)}
+
+RETRY / CORRECTION (read carefully):
+The previous attempt may have included ANY community outside ${JSON.stringify(anchor.location)} with ZIP region ${JSON.stringify(anchor.zip)}.
+Regenerate the ENTIRE JSON from scratch. ALL 20 rows must be in that same metro and state (no Massachusetts listings for a California anchor, no cross-country filler). If a street name is ambiguous, pick only addresses that unambiguously match the anchor city or neighboring suburbs in the same state.
+Use web_search again for every row: real https website and real image URLs only — no example.com or placeholders.`;
+}
+
+/** Strip optional ```json ... ``` wrapper from model text. */
+function extractJsonObject(text) {
+  const t = text.trim();
+  const fence = /^```(?:json)?\s*([\s\S]*?)```$/m.exec(t);
+  if (fence) return fence[1].trim();
+  return t;
+}
+
+async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
+  const anchor = parseGeoAnchorFromPayload(payload);
+
+  const discoveryTools =
+    process.env.CAREMATCH_DISCOVERY_WEB_SEARCH === "0"
+      ? undefined
+      : [{ type: "web_search" }];
+
+  const runOnce = async (input) => {
+    const response = await client.responses.create({
+      model,
+      input,
+      ...(discoveryTools ? { tools: discoveryTools } : {}),
+    });
+
+    const text = typeof response.output_text === "string" ? response.output_text : "";
+    if (!text.trim()) {
+      const err = new Error("Empty model response");
+      err.status = 502;
+      throw err;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(extractJsonObject(text));
+    } catch {
+      const err = new Error("Model returned non-JSON");
+      err.status = 502;
+      err.raw_snippet = text.slice(0, 500);
+      throw err;
+    }
+
+    if (!parsed.results || !Array.isArray(parsed.results)) {
+      const err = new Error('Expected { "results": array } from model');
+      err.status = 502;
+      throw err;
+    }
+
+    if (parsed.results.length < 20) {
+      const err = new Error(`Expected at least 20 results, got ${parsed.results.length}`);
+      err.status = 502;
+      err.partial = parsed;
+      throw err;
+    }
+
+    if (parsed.results.length > 20) {
+      parsed.results = parsed.results.slice(0, 20);
+    }
+
+    sanitizeDiscoveryResults(parsed.results);
+    return parsed;
+  };
+
+  let parsed = await runOnce(buildPrompt(payload));
+  let filtered = filterDiscoveryResultsByAnchor(parsed.results, anchor);
+
+  if (filtered.length < MIN_GEO_FILTERED) {
+    try {
+      const parsed2 = await runOnce(buildGeoRepairPrompt(payload));
+      const filtered2 = filterDiscoveryResultsByAnchor(parsed2.results, anchor);
+      if (filtered2.length > filtered.length) {
+        parsed = parsed2;
+        filtered = filtered2;
+      }
+    } catch {
+      /* keep first pass */
+    }
+  }
+
+  if (filtered.length === 0) {
+    const err = new Error(
+      "No communities passed geographic validation for your area. Try again with a complete city, state, and ZIP (e.g. San Francisco, CA 94102)."
+    );
+    err.status = 502;
+    err.partial = parsed;
+    throw err;
+  }
+
+  parsed.results = filtered;
+  sanitizeDiscoveryResults(parsed.results);
+  return parsed;
+}
+
+function normalizeSearchParams(userSearch) {
+  const bmin = Number(userSearch?.budget_min);
+  const bmax = Number(userSearch?.budget_max);
+  const maxDistanceMiles = Number(userSearch?.max_distance_miles);
+  return {
+    zip_code: typeof userSearch?.zip_code === "string" ? userSearch.zip_code.trim() : "",
+    location: typeof userSearch?.location === "string" ? userSearch.location.trim() : "",
+    care_levels: Array.isArray(userSearch?.care_levels) ? userSearch.care_levels : [],
+    amenities: Array.isArray(userSearch?.amenities) ? userSearch.amenities : [],
+    services: Array.isArray(userSearch?.services) ? userSearch.services : [],
+    keywords: Array.isArray(userSearch?.keywords) ? userSearch.keywords : [],
+    budget_min: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
+    budget_max: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
+    max_distance_miles:
+      Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
+        ? Math.round(maxDistanceMiles)
+        : null,
+  };
+}
+
+/**
+ * Main function you can call after you get params from user search.
+ * @param {object} userSearch - Search input from user.
+ * @param {object} [options]
+ * @param {string} [options.apiKey] - Optional API key; falls back to OPENAI_API_KEY.
+ * @param {string} [options.model] - Optional model override.
+ * @returns {Promise<{results: Array}>}
+ */
+export async function getCareMatchResults(userSearch, options = {}) {
+  const payload = normalizeSearchParams(userSearch);
+  const validationError = validatePayload(payload);
+  if (validationError) {
+    const err = new Error(validationError);
+    err.status = 400;
+    throw err;
+  }
+
+  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    const err = new Error("Missing OPENAI_API_KEY environment variable.");
+    err.status = 500;
+    throw err;
+  }
+
+  const client = new OpenAI({
+    apiKey,
+  });
+
+  const model = options.model || OPENAI_MODEL;
+  return openaiCareSearch(client, payload, model);
+}
+
+/**
+ * Optional helper if you want validation + search in one line.
+ */
+export async function searchCareFacilitiesFromUser(userSearch, options = {}) {
+  return getCareMatchResults(userSearch, options);
+}

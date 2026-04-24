@@ -15,7 +15,7 @@ const FacilityCard = ({
   rating = 4.8,
   reviewCount = 127,
   ratingLabel = "family reviews",
-  priceRange = "N/A",
+  priceRange = "Price on call",
   distance = "2.3 MILES AWAY",
   address = "",
   zipCode = "",
@@ -34,6 +34,10 @@ const FacilityCard = ({
   const isUsingPlaceholderImage = cardImageSrc === CAREMATCH_PLACEHOLDER_IMAGE;
   const hasReviewCount = Number.isFinite(Number(reviewCount)) && Number(reviewCount) > 0;
   const ratingMetaText = hasReviewCount ? `${reviewCount} ${ratingLabel}` : ratingLabel;
+  const displayPriceRange =
+    String(priceRange || "").trim() && String(priceRange || "").trim().toUpperCase() !== "N/A"
+      ? String(priceRange).trim()
+      : "Price on call";
 
   React.useEffect(() => {
     setCardImageSrc(imageSrc || DEFAULT_IMAGE);
@@ -147,7 +151,7 @@ const FacilityCard = ({
             Monthly Investment
           </p>
           <p className="text-[13px] sm:text-sm font-semibold text-[#132329] tabular-nums">
-            {priceRange}
+            {displayPriceRange}
           </p>
 
           {/* Buttons */}
@@ -256,7 +260,7 @@ const FacilityCard = ({
               MONTHLY INVESTMENT
             </p>
             <p className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}>
-              {priceRange}
+              {displayPriceRange}
             </p>
           </div>
         </div>
