@@ -9,6 +9,7 @@ import {
   createFacility,
   listFacilities,
   listPublicFacilities,
+  postDiscoverFacilities,
   getFacility,
   updateFacility,
   deleteFacility,
@@ -24,6 +25,7 @@ import { getApifySchedulerStatus } from "../controllers/apifySyncController.js";
 const router = express.Router();
 
 router.get("/public", listPublicFacilities);
+router.post("/discover", postDiscoverFacilities);
 router.get("/apify-sync-status", isAutheticated, getApifySchedulerStatus);
 
 /**

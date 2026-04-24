@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { ChevronDown, ChevronUp, Info } from "lucide-react";
 import axios from "axios";
+import { toast } from "sonner";
 import { apiClient } from "../../../services/api";
 import { getUser } from "../../../store/auth/authSlice";
 import SEO from "../../../components/common/SEO";
@@ -253,9 +254,47 @@ function normalizeFacilityForCard(m) {
     externalData && typeof externalData.google_places === "object"
       ? externalData.google_places
       : {};
+  const latForMap =
+    googlePlaces.latitude != null && !Number.isNaN(Number(googlePlaces.latitude))
+      ? Number(googlePlaces.latitude)
+      : externalData.latitude != null && !Number.isNaN(Number(externalData.latitude))
+        ? Number(externalData.latitude)
+        : m.latitude != null && !Number.isNaN(Number(m.latitude))
+          ? Number(m.latitude)
+          : null;
+  const lngForMap =
+    googlePlaces.longitude != null && !Number.isNaN(Number(googlePlaces.longitude))
+      ? Number(googlePlaces.longitude)
+      : externalData.longitude != null && !Number.isNaN(Number(externalData.longitude))
+        ? Number(externalData.longitude)
+        : m.longitude != null && !Number.isNaN(Number(m.longitude))
+          ? Number(m.longitude)
+          : null;
+
   const firstImg =
     Array.isArray(m.images) && m.images.length ? m.images[0] : null;
-  const imageSrc = resolveFacilityImageUrl(firstImg) || DEFAULT_CARD_IMAGE;
+  let imageSrc = resolveFacilityImageUrl(firstImg) || null;
+  if (!imageSrc && Array.isArray(m.images) && m.images.length > 1) {
+    for (let i = 1; i < m.images.length; i += 1) {
+      const u = resolveFacilityImageUrl(m.images[i]);
+      if (u) {
+        imageSrc = u;
+        break;
+      }
+    }
+  }
+  const mapsKey = getGoogleMapsApiKey();
+  if (
+    !imageSrc &&
+    mapsKey &&
+    latForMap != null &&
+    lngForMap != null &&
+    Number.isFinite(latForMap) &&
+    Number.isFinite(lngForMap)
+  ) {
+    imageSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${latForMap},${lngForMap}&zoom=16&size=600x360&scale=2&maptype=roadmap&markers=color:0x14b8a6%7C${latForMap},${lngForMap}&key=${encodeURIComponent(mapsKey)}`;
+  }
+  if (!imageSrc) imageSrc = DEFAULT_CARD_IMAGE;
   const category =
     Array.isArray(m.care_levels) && m.care_levels.length
       ? m.care_levels.join(" · ").toUpperCase()
@@ -349,6 +388,97 @@ function normalizeFacilityForCard(m) {
   };
 }
 
+function extractFiveDigitZip(text) {
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
+/** Normalize for fuzzy checkbox / listing match (hyphens, case). */
+function normMatchToken(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/-/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function amenityText(x) {
+  if (x == null) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "object" && x.name != null) return String(x.name);
+  return String(x);
+}
+
+/** Tokens to match in facility text for one sidebar "must-have" selection. */
+function amenityMatchVariants(selectedLower) {
+  const key = normMatchToken(selectedLower);
+  if (!key) return [];
+  for (const [label, aliases] of Object.entries(AMENITY_ALIASES)) {
+    const labelN = normMatchToken(label);
+    if (labelN === key) {
+      return [...new Set([labelN, ...aliases.map((a) => normMatchToken(a))])].filter(
+        Boolean,
+      );
+    }
+    if (aliases.some((a) => normMatchToken(a) === key)) {
+      return [...new Set([labelN, ...aliases.map((a) => normMatchToken(a)), key])].filter(
+        Boolean,
+      );
+    }
+  }
+  return [key];
+}
+
+/** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
+function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
+  const locRaw = String(filters.locationQuery || carrieLocationQuery || "").trim();
+  const zipFromPrefs = String(carrieFilters?.searchZipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  const zip =
+    extractFiveDigitZip(locRaw) ||
+    extractFiveDigitZip(String(carrieLocationQuery || "")) ||
+    extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
+    (zipFromPrefs.length === 5 ? zipFromPrefs : "");
+  const location =
+    locRaw ||
+    String(carrieFilters?.searchLocation || "").trim() ||
+    (zip ? `ZIP ${zip}` : "");
+
+  const care_levels =
+    Array.isArray(filters.selectedCareTypes) && filters.selectedCareTypes.length > 0
+      ? filters.selectedCareTypes.map((x) => String(x).toLowerCase())
+      : Array.isArray(carrieFilters?.careLevels) && carrieFilters.careLevels.length > 0
+        ? carrieFilters.careLevels.map((x) => String(x).toLowerCase())
+        : ["assisted living"];
+
+  const amenities = [
+    ...(Array.isArray(filters.selectedAmenities)
+      ? filters.selectedAmenities.map((x) => String(x))
+      : []),
+    ...(Array.isArray(carrieFilters?.amenityMustHaves)
+      ? carrieFilters.amenityMustHaves.map((x) => String(x))
+      : []),
+  ]
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+  const amText = amenities.join(" ").toLowerCase();
+  const services = [];
+  if (/\bhospice\b/.test(amText)) services.push("hospice care");
+  if (/\bphysical therapy|therapy\b/.test(amText)) services.push("physical therapy");
+
+  return {
+    zip_code: zip,
+    location,
+    care_levels,
+    amenities: [...new Set(amenities)],
+    services: [...new Set(services)],
+    budget_min: Number(filters.budgetMin),
+    budget_max: Number(filters.budgetMax),
+  };
+}
+
 const CareExplorer = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -384,6 +514,11 @@ const CareExplorer = () => {
   const [locationCenterCoords, setLocationCenterCoords] = useState(null);
   const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
   const [directoryFacilities, setDirectoryFacilities] = useState([]);
+  /** `undefined` = use Carrie / directory; array = last live discover from filters (may be empty). */
+  const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const discoverRunIdRef = useRef(0);
+  const skipDiscoverMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
 
@@ -467,10 +602,13 @@ const CareExplorer = () => {
   }, [carrieMatches]);
 
   const baseFacilities = useMemo(() => {
+    if (discoverOverrideRows !== undefined) {
+      return Array.isArray(discoverOverrideRows) ? discoverOverrideRows : [];
+    }
     if (liveFacilities?.length) return liveFacilities;
     if (directoryFacilities.length) return directoryFacilities;
     return [];
-  }, [liveFacilities, directoryFacilities]);
+  }, [discoverOverrideRows, liveFacilities, directoryFacilities]);
 
   const careTypeOptions = useMemo(() => {
     return FIXED_CARE_TYPE_OPTIONS;
@@ -589,6 +727,60 @@ const CareExplorer = () => {
     };
   }, [fromCarrie]);
 
+  // Debounced live discover when filters change (same engine as Carrie / results.js).
+  useEffect(() => {
+    if (skipDiscoverMountRef.current) {
+      skipDiscoverMountRef.current = false;
+      return;
+    }
+
+    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
+    if (!body.zip_code || !String(body.location || "").trim()) {
+      return;
+    }
+
+    const runId = ++discoverRunIdRef.current;
+    const timer = window.setTimeout(async () => {
+      setDiscoverLoading(true);
+      try {
+        const { data } = await apiClient.post("/api/facilities/discover", body);
+        if (runId !== discoverRunIdRef.current) return;
+        const rows = Array.isArray(data?.facilities) ? data.facilities : [];
+        setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
+      } catch (err) {
+        if (runId !== discoverRunIdRef.current) return;
+        const msg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "Request failed";
+        toast.error("Could not refresh listings", { description: String(msg) });
+      } finally {
+        if (runId === discoverRunIdRef.current) {
+          setDiscoverLoading(false);
+        }
+      }
+    }, 650);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    filters.budgetMin,
+    filters.budgetMax,
+    filters.locationQuery,
+    filters.maxMiles,
+    filters.selectedAmenities,
+    filters.selectedAvailability,
+    filters.selectedCareTypes,
+    carrieFilters,
+    carrieLocationQuery,
+  ]);
+
+  useEffect(() => {
+    if (discoverOverrideRows !== undefined) {
+      setPage(1);
+    }
+  }, [discoverOverrideRows]);
+
   const scopedFacilities = useMemo(() => {
     if (scope !== "saved") return baseFacilities;
     const favoriteSet = new Set(favoriteFacilityIds.map((id) => String(id)));
@@ -641,23 +833,36 @@ const CareExplorer = () => {
       }
 
       if (selectedCare.size > 0) {
-        const levels = (f.careLevels || []).map((x) => String(x).toLowerCase());
-        const hasCare = [...selectedCare].some((c) =>
-          levels.some((l) => l.includes(c) || c.includes(l)),
-        );
+        const levels = [
+          ...(f.careLevels || []).map((x) => normMatchToken(x)),
+          normMatchToken(f.category),
+        ].filter(Boolean);
+        const hasCare = [...selectedCare].some((c) => {
+          const cn = normMatchToken(c);
+          if (!cn) return false;
+          return levels.some((l) => l.includes(cn) || cn.includes(l));
+        });
         if (!hasCare) return false;
       }
 
       if (selectedAmenities.length > 0) {
         const pool = [
-          ...(f.amenities || []),
-          ...(f.services || []),
-          ...(f.features || []),
-        ].map((x) => String(x).toLowerCase());
-        const hasAmenity = selectedAmenities.some((a) =>
-          pool.some((p) => p.includes(a) || a.includes(p)),
-        );
-        if (!hasAmenity) return false;
+          ...(f.amenities || []).map(amenityText),
+          ...(f.services || []).map(amenityText),
+          ...(f.features || []).map(amenityText),
+          String(f.description || ""),
+          String(f.name || ""),
+        ]
+          .map((x) => normMatchToken(x))
+          .filter(Boolean);
+        const hasAllMustHaves = selectedAmenities.every((a) => {
+          const variants = amenityMatchVariants(a);
+          if (variants.length === 0) return true;
+          return variants.some((want) =>
+            pool.some((p) => p.includes(want) || want.includes(p)),
+          );
+        });
+        if (!hasAllMustHaves) return false;
       }
 
       if (selectedAvailability.size > 0) {
@@ -740,13 +945,20 @@ const CareExplorer = () => {
 
       if (selectedAmenities.length > 0) {
         const pool = [
-          ...(facility.amenities || []),
-          ...(facility.services || []),
-          ...(facility.features || []),
-        ].map((x) => String(x).toLowerCase());
-        const amenityHits = selectedAmenities.filter((want) =>
-          pool.some((value) => value.includes(want) || want.includes(value)),
-        ).length;
+          ...(facility.amenities || []).map(amenityText),
+          ...(facility.services || []).map(amenityText),
+          ...(facility.features || []).map(amenityText),
+          String(facility.description || ""),
+          String(facility.name || ""),
+        ]
+          .map((x) => normMatchToken(x))
+          .filter(Boolean);
+        const amenityHits = selectedAmenities.filter((want) => {
+          const variants = amenityMatchVariants(want);
+          return variants.some((v) =>
+            pool.some((p) => p.includes(v) || v.includes(p)),
+          );
+        }).length;
         score += (amenityHits / selectedAmenities.length) * 12;
       } else {
         score += 6;
@@ -1079,6 +1291,7 @@ const CareExplorer = () => {
           onScopeChange={setScope}
           matchCount={matchCountForHeader}
           locationLabel={locationLabelForHeader}
+          isDiscoverLoading={discoverLoading}
         />
 
         {/* How we matched - bordered card; responsive */}
@@ -1169,7 +1382,10 @@ const CareExplorer = () => {
               <FiltersSidebar
                 filters={filters}
                 onFiltersChange={setFilters}
-                onReset={() =>
+                onReset={() => {
+                  discoverRunIdRef.current += 1;
+                  setDiscoverLoading(false);
+                  setDiscoverOverrideRows(undefined);
                   setFilters({
                     locationQuery: carrieLocationQuery,
                     searchQuery: "",
@@ -1179,8 +1395,8 @@ const CareExplorer = () => {
                     selectedCareTypes: [],
                     selectedAvailability: ["Within 30 Days"],
                     selectedAmenities: [],
-                  })
-                }
+                  });
+                }}
                 careTypeOptions={careTypeOptions}
                 amenityOptions={amenityOptions}
                 onAskCarrie={handleAskCarrie}

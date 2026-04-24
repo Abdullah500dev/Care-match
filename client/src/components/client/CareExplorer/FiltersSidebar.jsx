@@ -162,7 +162,10 @@ const FiltersSidebar = ({
   return (
     <aside className="w-full flex flex-col gap-3 sm:gap-5 min-w-0 max-w-full">
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
-        <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-3">Filters</h3>
+        <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-1">Filters</h3>
+        <p className="hidden lg:block text-xs text-[#64748b] mb-3 leading-relaxed">
+          Checkboxes and budget narrow the list immediately. Include a <strong>5-digit ZIP</strong> in Location (e.g. San Francisco, CA 94102) to also run a debounced live search and replace results from the server.
+        </p>
 
         {/* Location autocomplete */}
         <div className="mb-3">

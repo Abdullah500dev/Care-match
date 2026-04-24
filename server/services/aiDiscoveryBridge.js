@@ -1,0 +1,189 @@
+/**
+ * Maps Carrie intake preferences → getCareMatchResults payload,
+ * and OpenAI discovery rows → the same facility row shape used by rankFacilities / Care Explorer.
+ */
+
+/** @param {string} text */
+function extractZipFromText(text) {
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
+/** Rough ZIP–region sanity: avoids MA zips (e.g. 02026) when the user asked for San Francisco. */
+function reconcileZipWithLocation(zip, location) {
+  const z = String(zip || "").replace(/\D/g, "").slice(0, 5);
+  const loc = String(location || "").toLowerCase();
+  if (!z || z.length !== 5) return z;
+
+  const isSf =
+    /\bsan francisco\b/.test(loc) ||
+    /\bsf\b/.test(loc) ||
+    /\bay area\b/.test(loc);
+  if (isSf && !/^94/.test(z)) {
+    return "94102";
+  }
+
+  const isBoston =
+    /\bboston\b/.test(loc) ||
+    /\bcambridge\s*,\s*ma\b/.test(loc) ||
+    /\b(somerville|brookline|newton|quincy)\s*,\s*ma\b/.test(loc);
+  if (isBoston && /^94/.test(z)) {
+    return "02108";
+  }
+
+  return z;
+}
+
+function deriveServicesFromAmenities(amenities) {
+  const text = (Array.isArray(amenities) ? amenities : [])
+    .map((x) => String(x).toLowerCase())
+    .join(" | ");
+  const services = [];
+  if (/\bhospice\b/.test(text)) services.push("hospice care");
+  if (/\bphysical therapy|therapy\b/.test(text)) services.push("physical therapy");
+  if (/\boccupational therapy\b/.test(text)) services.push("occupational therapy");
+  if (/\bskilled nursing|snf\b/.test(text)) services.push("skilled nursing");
+  return [...new Set(services)];
+}
+
+/** @param {Record<string, unknown>|null|undefined} prefs */
+export function intakePreferencesToAiSearchParams(prefs) {
+  if (!prefs || typeof prefs !== "object") return null;
+
+  let zip = String(prefs.searchZipCode || "").trim();
+  if (!zip) zip = extractZipFromText(prefs.searchLocation);
+
+  const locationRaw = String(prefs.searchLocation || "").trim();
+  zip = reconcileZipWithLocation(zip, locationRaw);
+
+  const careFromLevels = Array.isArray(prefs.careLevels)
+    ? prefs.careLevels.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+  const primary = prefs.primaryCareType ? String(prefs.primaryCareType).trim() : "";
+  const care_levels =
+    careFromLevels.length > 0 ? careFromLevels : primary ? [primary] : ["assisted living"];
+
+  const amenities = Array.isArray(prefs.amenityMustHaves)
+    ? prefs.amenityMustHaves.map((x) => String(x).trim()).filter(Boolean)
+    : [];
+
+  const services = deriveServicesFromAmenities(amenities);
+
+  if (!zip || !locationRaw) return null;
+
+  return {
+    zip_code: zip,
+    location: locationRaw,
+    care_levels,
+    amenities,
+    services,
+  };
+}
+
+/**
+ * @param {object} f - one facility object from getCareMatchResults().results
+ * @param {number} index
+ */
+export function mapAiDiscoveryFacilityToMatchRow(f, index) {
+  const loc = f && typeof f.location === "object" && f.location ? f.location : {};
+  const gp = f && typeof f.google_places === "object" && f.google_places ? f.google_places : {};
+  const rev = f && typeof f.review === "object" && f.review ? f.review : {};
+
+  const address =
+    String(loc.full_address || "").trim() ||
+    [loc.city, loc.county, loc.state, loc.zip_code].filter(Boolean).join(", ");
+
+  const slug = String(f.name || "community")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  const placeId = String(gp.place_id || "").trim();
+  const facilityId = placeId ? `ai-${placeId}` : `ai-${slug || "facility"}-${index}`;
+
+  const lat = gp.latitude ?? f.latitude;
+  const lng = gp.longitude ?? f.longitude;
+  const rating = rev.rating ?? gp.total_score;
+  const reviewCount = rev.count ?? gp.review_count;
+
+  const external_data = {
+    provider_url: f.provider_url || "",
+    phone_number: f.phone || "",
+    phone: f.phone || "",
+    zip_code: loc.zip_code || "",
+    google_places: {
+      place_id: gp.place_id || "",
+      maps_url: gp.maps_url || f.maps_url || "",
+      latitude: lat,
+      longitude: lng,
+      review_count: reviewCount,
+      total_score: gp.total_score ?? rating,
+    },
+    overall_rating: rating != null ? Number(rating) : null,
+    pricing: f.pricing || "",
+  };
+
+  const scoreBase = rating != null && !Number.isNaN(Number(rating)) ? Number(rating) / 5 : 0.82;
+  const score = Math.min(100, Math.round(scoreBase * 100));
+
+  const reasons = [];
+  if (rev.summary) reasons.push(String(rev.summary).trim());
+  if (f.pricing) reasons.push(String(f.pricing).trim());
+  if (!reasons.length) reasons.push("AI-suggested community — verify details before touring.");
+
+  return {
+    facilityId,
+    name: f.name || "Community",
+    address: address || "Address on file",
+    pricing: String(f.pricing || "").trim(),
+    care_levels: Array.isArray(f.care_levels) ? f.care_levels : [],
+    images: Array.isArray(f.images) ? f.images : [],
+    website: f.website || "",
+    phone: f.phone || "",
+    zip_code: loc.zip_code || "",
+    specialty: [],
+    description: String(f.description || "").trim(),
+    source_platform: "AI Discovery",
+    is_external: true,
+    amenities: Array.isArray(f.amenities) ? f.amenities : [],
+    services: Array.isArray(f.services) ? f.services : [],
+    external_data,
+    latitude: lat,
+    longitude: lng,
+    score,
+    reasons,
+    criteriaMatched: 0,
+    criteriaTotal: 0,
+  };
+}
+
+/**
+ * Markdown block for Carrie chat when using AI discovery rows (same vibe as rule-based formatter).
+ * @param {object[]} rows - rows from mapAiDiscoveryFacilityToMatchRow
+ * @param {number} [limit]
+ */
+export function formatAiDiscoveryMatchesForChat(rows, limit = 6) {
+  const list = Array.isArray(rows) ? rows.slice(0, limit) : [];
+  if (list.length === 0) {
+    return "\n\n---\n**Your matches**\nNo AI suggestions returned. Try again or adjust location/ZIP.\n";
+  }
+  const lines = [
+    "",
+    "---",
+    "**Your matches (AI discovery)**",
+    "These are model-generated starting points for research — always verify on a tour and with licensing sources.",
+  ];
+  list.forEach((r, i) => {
+    lines.push(`\n**${i + 1}. ${r.name}** — score **${r.score}/100**`);
+    if (Array.isArray(r.reasons) && r.reasons.length) {
+      lines.push(r.reasons.map((x) => `  ${x}`).join("\n"));
+    }
+    if (r.address) lines.push(`  _${r.address}_`);
+    if (r.pricing) lines.push(`  _Pricing (estimate): ${r.pricing}_`);
+    if (r.website) lines.push(`  _Website: ${r.website}_`);
+  });
+  lines.push(
+    "\n_Next step: open the dashboard to compare communities, then schedule tours and confirm true monthly cost._"
+  );
+  return lines.join("\n");
+}
