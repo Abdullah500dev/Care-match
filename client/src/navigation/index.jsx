@@ -214,7 +214,7 @@ const Layout = ({ children }) => {
     location.pathname.startsWith("/facility");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
-  const inactivityTimerRef = useRef(null);
+  const reminderIntervalRef = useRef(null);
   const reminderToastIdRef = useRef(null);
   const [scrollPastThreshold, setScrollPastThreshold] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -285,28 +285,18 @@ const Layout = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const INACTIVITY_MS = 60 * 1000;
-    const activityEvents = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "touchstart",
-      "scroll",
-    ];
-
-    const clearInactivityTimer = () => {
-      if (inactivityTimerRef.current) {
-        window.clearTimeout(inactivityTimerRef.current);
-        inactivityTimerRef.current = null;
-      }
-    };
+    const REMINDER_INTERVAL_MS = 30 * 1000;
+    const REMINDER_VISIBLE_MS = 3000;
 
     const showHelpReminder = () => {
       if (isChatOpen) return;
       reminderToastIdRef.current = toast("Do you need any help?", {
         id: "carematch-help-reminder",
-        duration: 10000,
+        duration: REMINDER_VISIBLE_MS,
         position: "bottom-right",
+        style: {
+          marginBottom: "84px",
+        },
         action: {
           label: "Ask Carrie",
           onClick: () => {
@@ -319,24 +309,21 @@ const Layout = ({ children }) => {
       });
     };
 
-    const scheduleReminder = () => {
-      clearInactivityTimer();
-      inactivityTimerRef.current = window.setTimeout(showHelpReminder, INACTIVITY_MS);
-    };
-
-    // Trigger reminder 1 minute after landing and also after fresh inactivity windows.
-    scheduleReminder();
-    for (const eventName of activityEvents) {
-      window.addEventListener(eventName, scheduleReminder, { passive: true });
+    if (reminderIntervalRef.current) {
+      window.clearInterval(reminderIntervalRef.current);
     }
+    reminderIntervalRef.current = window.setInterval(
+      showHelpReminder,
+      REMINDER_INTERVAL_MS,
+    );
 
     return () => {
-      clearInactivityTimer();
+      if (reminderIntervalRef.current) {
+        window.clearInterval(reminderIntervalRef.current);
+        reminderIntervalRef.current = null;
+      }
       if (reminderToastIdRef.current) {
         toast.dismiss(reminderToastIdRef.current);
-      }
-      for (const eventName of activityEvents) {
-        window.removeEventListener(eventName, scheduleReminder);
       }
     };
   }, [isChatOpen, navigate, location.pathname]);
