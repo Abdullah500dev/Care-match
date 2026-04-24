@@ -111,6 +111,14 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     phone_number: f.phone || "",
     phone: f.phone || "",
     zip_code: loc.zip_code || "",
+    budget:
+      f && typeof f.budget === "object" && f.budget
+        ? {
+          min_monthly: f.budget.min_monthly ?? null,
+          max_monthly: f.budget.max_monthly ?? null,
+          currency: f.budget.currency || "USD",
+        }
+        : null,
     google_places: {
       place_id: gp.place_id || "",
       maps_url: gp.maps_url || f.maps_url || "",
@@ -136,6 +144,14 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     name: f.name || "Community",
     address: address || "Address on file",
     pricing: String(f.pricing || "").trim(),
+    budget:
+      f && typeof f.budget === "object" && f.budget
+        ? {
+          min_monthly: f.budget.min_monthly ?? null,
+          max_monthly: f.budget.max_monthly ?? null,
+          currency: f.budget.currency || "USD",
+        }
+        : null,
     care_levels: Array.isArray(f.care_levels) ? f.care_levels : [],
     images: Array.isArray(f.images) ? f.images : [],
     website: f.website || "",

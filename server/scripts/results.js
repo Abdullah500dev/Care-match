@@ -58,6 +58,7 @@ function validatePayload(body) {
     return "care_levels is required (non-empty string array).";
   if (body.amenities != null && !Array.isArray(body.amenities)) return "amenities must be an array of strings if provided.";
   if (body.services != null && !Array.isArray(body.services)) return "services must be an array of strings if provided.";
+  if (body.keywords != null && !Array.isArray(body.keywords)) return "keywords must be an array of strings if provided.";
   return null;
 }
 
@@ -189,6 +190,17 @@ function buildPrompt(payload) {
     budgetMax >= budgetMin
       ? `Monthly budget (prefer estimated monthly fees within or close to this range when plausible): $${Math.round(budgetMin)}–$${Math.round(budgetMax)} USD per month.\n`
       : "";
+  const maxDistanceMiles = Number(payload.max_distance_miles);
+  const distanceLine =
+    Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
+      ? `Distance constraint: prioritize communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Rank closer communities higher and avoid obviously farther results when possible.\n`
+      : "";
+  const keywords = Array.isArray(payload.keywords)
+    ? payload.keywords.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  const keywordLine = keywords.length
+    ? `Lifestyle / fit preferences to reflect in ranking, amenities, services, or description when supported: ${JSON.stringify(keywords)}\n`
+    : "";
 
   return `You output only compact JSON. Never use markdown code fences.
 
@@ -201,7 +213,7 @@ Search for senior care / assisted living style facilities matching:
 - services (prefer facilities that mention or plausibly offer these): ${JSON.stringify(payload.services || [])}
 
 ${anchorNote}
-${budgetLine}${acc ? `${acc}\n` : ""}
+${budgetLine}${distanceLine}${keywordLine}${acc ? `${acc}\n` : ""}
 
 WEB SEARCH (REQUIRED FOR THIS TASK):
 - You have access to the web_search tool. Use it to find each community’s **real** official website and, when possible, **direct https image URLs** from that site (or the same operator domain).
@@ -222,7 +234,7 @@ ${FACILITY_SHAPE}
 Rules:
 1. results MUST have length exactly 20 before you stop.
 2. Names, addresses, coordinates, and ZIP codes must all be mutually consistent with the anchor location and zip_code.
-3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility and services in amenities or description.
+3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility, services, lifestyle fit, and overall quality in amenities or description.
 4. Vary facility names; do not copy one template 20 times.
 5. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
 6. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
@@ -332,14 +344,20 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
 function normalizeSearchParams(userSearch) {
   const bmin = Number(userSearch?.budget_min);
   const bmax = Number(userSearch?.budget_max);
+  const maxDistanceMiles = Number(userSearch?.max_distance_miles);
   return {
     zip_code: typeof userSearch?.zip_code === "string" ? userSearch.zip_code.trim() : "",
     location: typeof userSearch?.location === "string" ? userSearch.location.trim() : "",
     care_levels: Array.isArray(userSearch?.care_levels) ? userSearch.care_levels : [],
     amenities: Array.isArray(userSearch?.amenities) ? userSearch.amenities : [],
     services: Array.isArray(userSearch?.services) ? userSearch.services : [],
+    keywords: Array.isArray(userSearch?.keywords) ? userSearch.keywords : [],
     budget_min: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
     budget_max: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
+    max_distance_miles:
+      Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
+        ? Math.round(maxDistanceMiles)
+        : null,
   };
 }
 

@@ -3,11 +3,26 @@ import { getCareMatchResults } from "./scripts/results.js";
 async function run() {
   try {
     const userSearch = {
-      zip_code: "60601",
-      location: "Chicago, IL",
-      care_levels: ["Assisted Living", "Memory Care"],
-      amenities: ["Pet Friendly", "WiFi"],
-      services: ["Medication Management", "24/7 Nursing"],
+      zip_code: "32811",
+      location: "Orlando, FL",
+      care_levels: ["Assisted Living"],
+      amenities: [
+        "Wheelchair Accessible Entrance",
+        "On-site Parking",
+        "Outdoor Areas",
+      ],
+      services: ["Social Activities", "Vibrant Community"],
+      budget_min: 6500,
+      budget_max: 10000,
+      max_distance_miles: 20,
+      keywords: [
+        "wheelchair-friendly entrances",
+        "accessible parking",
+        "outdoor areas",
+        "social activities",
+        "vibrant community environment",
+        "overall quality",
+      ],
     };
 
     const out = await getCareMatchResults(userSearch);

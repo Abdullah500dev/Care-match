@@ -29,7 +29,7 @@ function resolveFacilityImageUrl(path) {
 }
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
-const DEFAULT_PRICE_RANGE = "N/A";
+const DEFAULT_PRICE_RANGE = "Price on call";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
@@ -309,13 +309,37 @@ function normalizeFacilityForCard(m) {
       : ["Review listing details and tour to validate fit"];
   const pricingTextFromFields =
     String(m.pricing || "").trim() || String(externalData.pricing || "").trim();
+  const budgetObject =
+    m && typeof m.budget === "object" && m.budget
+      ? m.budget
+      : externalData && typeof externalData.budget === "object" && externalData.budget
+        ? externalData.budget
+        : null;
+  const budgetMin =
+    budgetObject?.min_monthly != null && !Number.isNaN(Number(budgetObject.min_monthly))
+      ? Number(budgetObject.min_monthly)
+      : null;
+  const budgetMax =
+    budgetObject?.max_monthly != null && !Number.isNaN(Number(budgetObject.max_monthly))
+      ? Number(budgetObject.max_monthly)
+      : null;
+  const pricingTextFromBudget =
+    budgetMin != null && budgetMax != null
+      ? `$${budgetMin.toLocaleString("en-US")} - $${budgetMax.toLocaleString("en-US")}/mo`
+      : budgetMin != null
+        ? `$${budgetMin.toLocaleString("en-US")}/mo`
+        : budgetMax != null
+          ? `$${budgetMax.toLocaleString("en-US")}/mo`
+          : "";
   const finesAmount = Number(externalData.total_fines_amount);
   const pricingText =
     pricingTextFromFields ||
+    pricingTextFromBudget ||
     (Number.isFinite(finesAmount) && finesAmount > 0
       ? `$${finesAmount.toLocaleString("en-US")}/mo`
       : "");
-  const priceRange = formatPriceRange(pricingText);
+  const formattedPriceRange = formatPriceRange(pricingText);
+  const priceRange = formattedPriceRange;
   const numericPrice = parsePriceRangeNumbers(pricingText);
   const overallRating =
     externalData.overall_rating != null &&
@@ -429,21 +453,176 @@ function amenityMatchVariants(selectedLower) {
   return [key];
 }
 
+function parseDynamicPreferenceTerms(rawValue) {
+  return [...new Set(
+    String(rawValue || "")
+      .split(/[\n,;]+/)
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  )].slice(0, 12);
+}
+
+function deriveServicesFromPreferencePhrases(values) {
+  const text = (Array.isArray(values) ? values : [])
+    .map((item) => String(item || "").toLowerCase())
+    .join(" | ");
+  const services = [];
+  if (/\bhospice\b/.test(text)) services.push("hospice care");
+  if (/\bphysical therapy|therapy\b/.test(text)) services.push("physical therapy");
+  if (/\boccupational therapy\b/.test(text)) services.push("occupational therapy");
+  if (/\bsocial|activities|engagement|community\b/.test(text)) services.push("social activities");
+  if (/\boutdoor|garden|courtyard|walking path\b/.test(text)) services.push("outdoor spaces");
+  if (/\bwheelchair|accessible|mobility\b/.test(text)) services.push("wheelchair accessibility");
+  if (/\bparking\b/.test(text)) services.push("accessible parking");
+  return [...new Set(services)];
+}
+
+function buildEffectiveLocationQuery(locationQuery, zipCode) {
+  const location = String(locationQuery || "").trim();
+  const zip = String(zipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  if (location && zip) {
+    const locationZip = extractFiveDigitZip(location);
+    if (location === zip || locationZip === zip) return location;
+    return `${location} ${zip}`;
+  }
+  if (location) return location;
+  if (zip) return zip;
+  return "";
+}
+
+function normalizeLocationFieldValue(locationQuery, zipCode) {
+  const rawLocation = String(locationQuery || "").trim();
+  const zip = String(zipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  if (!rawLocation) return "";
+  if (/^\d{5}$/.test(rawLocation)) return zip && rawLocation === zip ? "" : rawLocation;
+
+  let normalized = rawLocation;
+  if (zip) {
+    normalized = normalized.replace(new RegExp(`\\b${zip}\\b`, "g"), "");
+  }
+
+  normalized = normalized
+    .replace(/\bZIP\b/gi, "")
+    .replace(/\s+,/g, ",")
+    .replace(/,\s*,/g, ", ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^,\s*|\s*,$/g, "")
+    .trim();
+
+  return normalized;
+}
+
+function inferCityStateFromMatches(matches) {
+  if (!Array.isArray(matches)) return "";
+
+  for (const match of matches) {
+    const address = String(match?.address || "").trim();
+    if (!address) continue;
+
+    const parts = address
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length >= 2) {
+      const city = parts[parts.length - 2];
+      const stateMatch = parts[parts.length - 1].match(/\b([A-Z]{2})\b/i);
+      const state = stateMatch?.[1]?.toUpperCase() || "";
+      if (city && state) return `${city}, ${state}`;
+      if (city) return city;
+    }
+  }
+
+  return "";
+}
+
+function computeFacilityMiles(facility, locationCenterCoords) {
+  if (
+    locationCenterCoords &&
+    Number.isFinite(Number(facility?.lat)) &&
+    Number.isFinite(Number(facility?.lng))
+  ) {
+    return distanceMiles(locationCenterCoords, {
+      lat: Number(facility.lat),
+      lng: Number(facility.lng),
+    });
+  }
+  if (
+    Number.isFinite(Number(facility?.distanceMiles)) &&
+    Number(facility.distanceMiles) >= 0
+  ) {
+    return Number(facility.distanceMiles);
+  }
+  const parsed = Number.parseFloat(
+    String(facility?.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1],
+  );
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
+function formatDistanceLabel(distanceInMiles, zipCode) {
+  if (Number.isFinite(distanceInMiles) && distanceInMiles >= 0) {
+    const rounded =
+      distanceInMiles < 10
+        ? distanceInMiles.toFixed(1)
+        : Math.round(distanceInMiles).toString();
+    return `${rounded} miles away`;
+  }
+  const zip = String(zipCode || "").trim();
+  if (zip) return `ZIP ${zip}`;
+  return "Local match";
+}
+
+function computeOverallQualityScore(facility) {
+  const rating = Number(facility?.rating);
+  const reviewCount = Number(facility?.reviewCount);
+  const ratingScore = Number.isFinite(rating)
+    ? Math.min(Math.max(rating / 5, 0), 1)
+    : 0.72;
+  const reviewScore =
+    Number.isFinite(reviewCount) && reviewCount > 0
+      ? Math.min(1, Math.log10(reviewCount + 1) / Math.log10(501))
+      : 0;
+  return ratingScore * 0.82 + reviewScore * 0.18;
+}
+
+function averageFacilityPrice(facility) {
+  const low = facility?.priceMin ?? facility?.priceMax;
+  const high = facility?.priceMax ?? facility?.priceMin;
+  if (low != null && high != null) return Math.round((Number(low) + Number(high)) / 2);
+  if (low != null) return Number(low);
+  if (high != null) return Number(high);
+  return Number.POSITIVE_INFINITY;
+}
+
+function sanitizeMonthlyBudgetValue(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  if (parsed > 100000) return null;
+  return Math.round(parsed);
+}
+
 /** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
 function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
   const locRaw = String(filters.locationQuery || carrieLocationQuery || "").trim();
+  const explicitZip = String(filters.zipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
   const zipFromPrefs = String(carrieFilters?.searchZipCode || "")
     .replace(/\D/g, "")
     .slice(0, 5);
   const zip =
+    explicitZip ||
     extractFiveDigitZip(locRaw) ||
     extractFiveDigitZip(String(carrieLocationQuery || "")) ||
     extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
     (zipFromPrefs.length === 5 ? zipFromPrefs : "");
-  const location =
-    locRaw ||
-    String(carrieFilters?.searchLocation || "").trim() ||
-    (zip ? `ZIP ${zip}` : "");
+  const baseLocation =
+    locRaw || String(carrieFilters?.searchLocation || "").trim();
+  const location = buildEffectiveLocationQuery(baseLocation, zip);
 
   const care_levels =
     Array.isArray(filters.selectedCareTypes) && filters.selectedCareTypes.length > 0
@@ -452,6 +631,7 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
         ? carrieFilters.careLevels.map((x) => String(x).toLowerCase())
         : ["assisted living"];
 
+  const dynamicPreferenceTerms = parseDynamicPreferenceTerms(filters.additionalPreferences);
   const amenities = [
     ...(Array.isArray(filters.selectedAmenities)
       ? filters.selectedAmenities.map((x) => String(x))
@@ -459,14 +639,16 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     ...(Array.isArray(carrieFilters?.amenityMustHaves)
       ? carrieFilters.amenityMustHaves.map((x) => String(x))
       : []),
+    ...dynamicPreferenceTerms,
   ]
     .map((x) => x.trim())
     .filter(Boolean);
 
-  const amText = amenities.join(" ").toLowerCase();
-  const services = [];
-  if (/\bhospice\b/.test(amText)) services.push("hospice care");
-  if (/\bphysical therapy|therapy\b/.test(amText)) services.push("physical therapy");
+  const services = deriveServicesFromPreferencePhrases([
+    ...amenities,
+    ...dynamicPreferenceTerms,
+  ]);
+  const maxDistanceMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
 
   return {
     zip_code: zip,
@@ -476,6 +658,11 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     services: [...new Set(services)],
     budget_min: Number(filters.budgetMin),
     budget_max: Number(filters.budgetMax),
+    max_distance_miles:
+      Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
+        ? Math.round(maxDistanceMiles)
+        : null,
+    keywords: dynamicPreferenceTerms,
   };
 }
 
@@ -488,6 +675,15 @@ const CareExplorer = () => {
   const carrieLocationQuery = String(
     carrieFilters?.locationQuery || carrieFilters?.searchLocation || "",
   ).trim();
+  const carrieZipCode = String(carrieFilters?.searchZipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  const normalizedCarrieLocationQueryRaw = normalizeLocationFieldValue(
+    carrieLocationQuery,
+    carrieZipCode,
+  );
+  const inferredCarrieLocationQuery =
+    normalizedCarrieLocationQueryRaw || inferCityStateFromMatches(carrieMatches);
 
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
@@ -495,7 +691,8 @@ const CareExplorer = () => {
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState({
-    locationQuery: carrieLocationQuery,
+    locationQuery: inferredCarrieLocationQuery,
+    zipCode: carrieZipCode,
     searchQuery: "",
     maxMiles: "",
     budgetMin: 1000,
@@ -503,6 +700,8 @@ const CareExplorer = () => {
     selectedCareTypes: [],
     selectedAvailability: ["Within 30 Days"],
     selectedAmenities: [],
+    additionalPreferences: "",
+    sortBy: "bestMatch",
   });
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -628,15 +827,15 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
-    const maxBudget =
-      Number.isFinite(Number(carrieFilters.budgetMaxMonthly)) &&
-        Number(carrieFilters.budgetMaxMonthly) > 0
-        ? Number(carrieFilters.budgetMaxMonthly)
-        : 15000;
+    const maxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly) ?? 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
     setFilters((prev) => ({
       ...prev,
-      locationQuery: carrieLocationQuery,
+      locationQuery: normalizeLocationFieldValue(
+        carrieLocationQuery,
+        carrieZipCode,
+      ) || inferCityStateFromMatches(carrieMatches),
+      zipCode: carrieZipCode,
       budgetMax: safeMax,
       selectedCareTypes: Array.isArray(carrieFilters.careLevels)
         ? mapSelectionsToOptions(
@@ -663,10 +862,13 @@ const CareExplorer = () => {
           ? String(carrieFilters.maxDistanceMiles)
           : prev.maxMiles,
     }));
-  }, [fromCarrie, carrieFilters, carrieLocationQuery, careTypeOptions, amenityOptions]);
+  }, [fromCarrie, carrieFilters, carrieLocationQuery, carrieMatches, careTypeOptions, amenityOptions]);
 
   useEffect(() => {
-    const query = String(filters.locationQuery || carrieLocationQuery || "").trim();
+    const query = buildEffectiveLocationQuery(
+      String(filters.locationQuery || carrieLocationQuery || "").trim(),
+      filters.zipCode,
+    );
     if (!query) {
       setLocationCenterCoords(null);
       return;
@@ -704,7 +906,7 @@ const CareExplorer = () => {
     return () => {
       cancelled = true;
     };
-  }, [filters.locationQuery, carrieLocationQuery]);
+  }, [filters.locationQuery, filters.zipCode, carrieLocationQuery]);
 
   useEffect(() => {
     if (fromCarrie || !API_BASE) return;
@@ -766,8 +968,10 @@ const CareExplorer = () => {
   }, [
     filters.budgetMin,
     filters.budgetMax,
+    filters.zipCode,
     filters.locationQuery,
     filters.maxMiles,
+    filters.additionalPreferences,
     filters.selectedAmenities,
     filters.selectedAvailability,
     filters.selectedCareTypes,
@@ -796,6 +1000,7 @@ const CareExplorer = () => {
     const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
       .trim()
       .toLowerCase();
+    const isZipOnlyLocationQuery = /^\d{5}$/.test(locationQuery);
     const maxMilesNum = Number.parseFloat(
       String(filters.maxMiles || "").trim(),
     );
@@ -812,7 +1017,7 @@ const CareExplorer = () => {
     );
 
     return scopedFacilities.filter((f) => {
-      if (locationQuery) {
+      if (locationQuery && !isZipOnlyLocationQuery) {
         // Use improved location matching that handles state names and abbreviations
         if (!addressMatchesLocation(f.address, locationQuery)) return false;
       }
@@ -871,28 +1076,7 @@ const CareExplorer = () => {
       }
 
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        let facilityMiles = Number.NaN;
-        if (
-          locationCenterCoords &&
-          Number.isFinite(Number(f.lat)) &&
-          Number.isFinite(Number(f.lng))
-        ) {
-          facilityMiles = distanceMiles(locationCenterCoords, {
-            lat: Number(f.lat),
-            lng: Number(f.lng),
-          });
-        } else if (
-          Number.isFinite(Number(f.distanceMiles)) &&
-          Number(f.distanceMiles) > 0
-        ) {
-          facilityMiles = Number(f.distanceMiles);
-        } else {
-          facilityMiles = Number.parseFloat(
-            String(f.distance || "").match(
-              /(\d+(?:\.\d+)?)\s*miles?/i,
-            )?.[1],
-          );
-        }
+        const facilityMiles = computeFacilityMiles(f, locationCenterCoords);
         if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
           return false;
       }
@@ -915,8 +1099,10 @@ const CareExplorer = () => {
     const selectedAvailability = (filters.selectedAvailability || []).map((x) =>
       String(x).toLowerCase(),
     );
+    const customPreferenceTerms = parseDynamicPreferenceTerms(filters.additionalPreferences);
     const budgetMin = Number(filters.budgetMin) || 1000;
     const budgetMax = Number(filters.budgetMax) || 15000;
+    const sortBy = String(filters.sortBy || "bestMatch");
 
     const getRelevanceScore = (facility) => {
       let score = 0;
@@ -969,6 +1155,25 @@ const CareExplorer = () => {
         if (availability && selectedAvailability.includes(availability)) score += 3;
       }
 
+      if (customPreferenceTerms.length > 0) {
+        const pool = [
+          ...(facility.amenities || []).map(amenityText),
+          ...(facility.services || []).map(amenityText),
+          ...(facility.features || []).map(amenityText),
+          String(facility.description || ""),
+          String(facility.name || ""),
+          String(facility.address || ""),
+        ]
+          .map((x) => normMatchToken(x))
+          .filter(Boolean);
+        const hits = customPreferenceTerms.filter((term) => {
+          const want = normMatchToken(term);
+          if (!want) return false;
+          return pool.some((p) => p.includes(want) || want.includes(p));
+        }).length;
+        score += (hits / customPreferenceTerms.length) * 10;
+      }
+
       const low = facility.priceMin ?? facility.priceMax;
       const high = facility.priceMax ?? facility.priceMin;
       if (low != null && high != null && low <= budgetMax && high >= budgetMin) score += 3;
@@ -979,17 +1184,53 @@ const CareExplorer = () => {
         if (text.includes(searchQuery)) score += 2;
       }
 
+      score += computeOverallQualityScore(facility) * 8;
+
       return score;
     };
 
-    return [...filteredFacilities].sort((a, b) => {
-      const scoreDiff = getRelevanceScore(b) - getRelevanceScore(a);
-      if (scoreDiff !== 0) return scoreDiff;
-      const backendDiff = (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0);
-      if (backendDiff !== 0) return backendDiff;
-      return String(a.name || "").localeCompare(String(b.name || ""));
-    });
-  }, [filteredFacilities, filters, carrieLocationQuery]);
+    return filteredFacilities
+      .map((facility) => {
+        const computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
+        return {
+          ...facility,
+          distanceMiles: Number.isFinite(computedDistanceMiles)
+            ? Number(computedDistanceMiles.toFixed(1))
+            : facility.distanceMiles ?? null,
+          distance: formatDistanceLabel(computedDistanceMiles, facility.zipCode),
+          qualityScore: computeOverallQualityScore(facility),
+          relevanceScore: getRelevanceScore(facility),
+          averagePrice: averageFacilityPrice(facility),
+        };
+      })
+      .sort((a, b) => {
+        if (sortBy === "overallQuality") {
+          const qualityDiff = b.qualityScore - a.qualityScore;
+          if (qualityDiff !== 0) return qualityDiff;
+          const relevanceDiff = b.relevanceScore - a.relevanceScore;
+          if (relevanceDiff !== 0) return relevanceDiff;
+        } else if (sortBy === "nearest") {
+          const aMiles = Number.isFinite(a.distanceMiles) ? a.distanceMiles : Number.POSITIVE_INFINITY;
+          const bMiles = Number.isFinite(b.distanceMiles) ? b.distanceMiles : Number.POSITIVE_INFINITY;
+          if (aMiles !== bMiles) return aMiles - bMiles;
+          const relevanceDiff = b.relevanceScore - a.relevanceScore;
+          if (relevanceDiff !== 0) return relevanceDiff;
+        } else if (sortBy === "lowestPrice") {
+          if (a.averagePrice !== b.averagePrice) return a.averagePrice - b.averagePrice;
+          const relevanceDiff = b.relevanceScore - a.relevanceScore;
+          if (relevanceDiff !== 0) return relevanceDiff;
+        } else {
+          const scoreDiff = b.relevanceScore - a.relevanceScore;
+          if (scoreDiff !== 0) return scoreDiff;
+          const qualityDiff = b.qualityScore - a.qualityScore;
+          if (qualityDiff !== 0) return qualityDiff;
+        }
+
+        const backendDiff = (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0);
+        if (backendDiff !== 0) return backendDiff;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+  }, [filteredFacilities, filters, carrieLocationQuery, locationCenterCoords]);
 
   const mapFacilities = useMemo(
     () =>
@@ -1015,8 +1256,10 @@ const CareExplorer = () => {
   const pageSize = 5;
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
-    String(filters.locationQuery || "").trim() ||
-    carrieLocationQuery ||
+    buildEffectiveLocationQuery(
+      String(filters.locationQuery || "").trim() || carrieLocationQuery,
+      filters.zipCode,
+    ) ||
     String(filters.searchQuery || "").trim() ||
     "your area";
   const summaryCareText =
@@ -1028,48 +1271,48 @@ const CareExplorer = () => {
     filters.selectedAmenities.length > 0
       ? filters.selectedAmenities.slice(0, 2).join(", ")
       : "your selected preferences";
-  const carrieAvailabilityText =
-    filters.selectedAvailability.length > 0
-      ? filters.selectedAvailability.join(", ")
-      : "your preferred timeline";
+  const hasNonDefaultAvailability =
+    filters.selectedAvailability.length > 0 &&
+    !(
+      filters.selectedAvailability.length === 1 &&
+      String(filters.selectedAvailability[0]).trim().toLowerCase() === "within 30 days"
+    );
   const promptCriteria = [];
-  if (carrieLocationQuery) {
-    promptCriteria.push({ label: "Location", value: carrieLocationQuery });
+  if (locationLabelForHeader) {
+    promptCriteria.push({ label: "Location", value: locationLabelForHeader });
   }
-  if (Array.isArray(carrieFilters?.careLevels) && carrieFilters.careLevels.length > 0) {
+  if (filters.selectedCareTypes.length > 0) {
     promptCriteria.push({
       label: "Care Type",
-      value: carrieFilters.careLevels.map((x) => titleCase(x)).join(", "),
+      value: filters.selectedCareTypes.join(", "),
     });
   }
   if (
-    Number.isFinite(Number(carrieFilters?.budgetMaxMonthly)) &&
-    Number(carrieFilters.budgetMaxMonthly) > 0
+    sanitizeMonthlyBudgetValue(carrieFilters?.budgetMaxMonthly) != null ||
+    Number(filters.budgetMin) !== 1000 ||
+    Number(filters.budgetMax) !== 15000
   ) {
     promptCriteria.push({
       label: "Budget",
-      value: `Up to $${Number(carrieFilters.budgetMaxMonthly).toLocaleString()}/mo`,
+      value: summaryBudgetText,
     });
   }
-  if (
-    Array.isArray(carrieFilters?.amenityMustHaves) &&
-    carrieFilters.amenityMustHaves.length > 0
-  ) {
+  if (String(filters.maxMiles || "").trim()) {
+    promptCriteria.push({
+      label: "Distance",
+      value: `Within ${String(filters.maxMiles).trim()} miles`,
+    });
+  }
+  if (filters.selectedAmenities.length > 0) {
     promptCriteria.push({
       label: "Must-Have Needs",
-      value: carrieFilters.amenityMustHaves
-        .map((x) => String(x).trim())
-        .filter(Boolean)
-        .join(", "),
+      value: filters.selectedAmenities.join(", "),
     });
   }
-  if (
-    typeof carrieFilters?.availability === "string" &&
-    carrieFilters.availability.trim()
-  ) {
+  if (hasNonDefaultAvailability) {
     promptCriteria.push({
       label: "Move-In Timeline",
-      value: carrieFilters.availability.trim(),
+      value: filters.selectedAvailability.join(", "),
     });
   }
   const totalPages = Math.max(
@@ -1347,10 +1590,28 @@ const CareExplorer = () => {
                     <span className="font-semibold text-[#132329]">
                       {summaryBudgetText}
                     </span>
+                    {String(filters.maxMiles || "").trim() && (
+                      <>
+                        , within{" "}
+                        <span className="font-semibold text-[#132329]">
+                          {String(filters.maxMiles).trim()} miles
+                        </span>
+                      </>
+                    )}
                     , and your specific{" "}
                     <span className="font-semibold text-[#222c2e]">
                       {summaryNeedsText}
                     </span>
+                    {parseDynamicPreferenceTerms(filters.additionalPreferences).length > 0 && (
+                      <>
+                        {" "}including{" "}
+                        <span className="font-semibold text-[#132329]">
+                          {parseDynamicPreferenceTerms(filters.additionalPreferences)
+                            .slice(0, 2)
+                            .join(", ")}
+                        </span>
+                      </>
+                    )}
                     .
                   </>
                 )}
@@ -1387,7 +1648,8 @@ const CareExplorer = () => {
                   setDiscoverLoading(false);
                   setDiscoverOverrideRows(undefined);
                   setFilters({
-                    locationQuery: carrieLocationQuery,
+                    locationQuery: inferredCarrieLocationQuery,
+                    zipCode: carrieZipCode,
                     searchQuery: "",
                     maxMiles: "",
                     budgetMin: 1000,
@@ -1395,6 +1657,8 @@ const CareExplorer = () => {
                     selectedCareTypes: [],
                     selectedAvailability: ["Within 30 Days"],
                     selectedAmenities: [],
+                    additionalPreferences: "",
+                    sortBy: "bestMatch",
                   });
                 }}
                 careTypeOptions={careTypeOptions}

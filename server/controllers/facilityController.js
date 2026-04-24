@@ -1489,6 +1489,7 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     care_levels: Array.isArray(body.care_levels) ? body.care_levels : [],
     amenities: Array.isArray(body.amenities) ? body.amenities : [],
     services: Array.isArray(body.services) ? body.services : [],
+    keywords: Array.isArray(body.keywords) ? body.keywords : [],
   };
 
   const bmin = Number(body.budget_min);
@@ -1496,6 +1497,11 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   if (Number.isFinite(bmin) && Number.isFinite(bmax) && bmin > 0 && bmax >= bmin) {
     payload.budget_min = Math.round(bmin);
     payload.budget_max = Math.round(bmax);
+  }
+
+  const maxDistanceMiles = Number(body.max_distance_miles);
+  if (Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0) {
+    payload.max_distance_miles = Math.round(maxDistanceMiles);
   }
 
   let out;
