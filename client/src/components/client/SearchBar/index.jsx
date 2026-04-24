@@ -13,11 +13,18 @@ import { sendChatMessages } from "@/services/chatService";
 
 export default function SearchBar() {
   const navigate = useNavigate();
+  const thinkingMessages = [
+    "Reviewing care preferences",
+    "Comparing nearby communities",
+    "Ranking the strongest matches",
+    "Checking care and lifestyle fit",
+  ];
   const [query, setQuery] = useState("");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatComposer, setChatComposer] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const inputRef = useRef(null);
@@ -58,6 +65,17 @@ export default function SearchBar() {
     }, 200);
     return () => window.clearTimeout(id);
   }, [isChatOpen]);
+
+  useEffect(() => {
+    if (!chatSending) {
+      setThinkingMessageIndex(0);
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setThinkingMessageIndex((prev) => (prev + 1) % thinkingMessages.length);
+    }, 1800);
+    return () => window.clearInterval(intervalId);
+  }, [chatSending]);
 
   useEffect(() => {
     const onOpenChatRequest = () => {
@@ -514,8 +532,34 @@ export default function SearchBar() {
                 ))}
                 {chatSending && (
                   <div className="mb-3 flex justify-start">
-                    <div className="max-w-[90%] rounded-2xl bg-slate-100 px-3 py-2 text-sm text-slate-500">
-                      Carrie is thinking…
+                    <div className="carrie-thinking-card max-w-[92%] rounded-3xl px-3 py-3 text-sm text-slate-700 sm:px-4">
+                      <div className="flex items-start gap-3">
+                        <div className="carrie-thinking-orb mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#00CFF4]/15 text-[#00A8C8]">
+                          <MessageCircle className="h-5 w-5" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-[#132329]">Carrie is thinking</p>
+                            <div className="flex items-center gap-1" aria-hidden>
+                              <span className="carrie-thinking-dot h-1.5 w-1.5 rounded-full bg-[#00CFF4]" />
+                              <span
+                                className="carrie-thinking-dot h-1.5 w-1.5 rounded-full bg-[#00CFF4]"
+                                style={{ animationDelay: "0.18s" }}
+                              />
+                              <span
+                                className="carrie-thinking-dot h-1.5 w-1.5 rounded-full bg-[#00CFF4]"
+                                style={{ animationDelay: "0.36s" }}
+                              />
+                            </div>
+                          </div>
+                          <p className="mt-1 text-sm text-slate-600">
+                            {thinkingMessages[thinkingMessageIndex]}
+                          </p>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]">
+                            <div className="carrie-thinking-progress h-full rounded-full" />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -650,6 +694,58 @@ export default function SearchBar() {
 
         .mic-transcribing-pulse {
           animation: transcribingPulse 1.2s ease-out infinite;
+        }
+
+        @keyframes carrieThinkingFloat {
+          0%, 100% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-2px);
+          }
+        }
+
+        @keyframes carrieThinkingDot {
+          0%, 80%, 100% {
+            transform: translateY(0);
+            opacity: 0.45;
+          }
+          40% {
+            transform: translateY(-3px);
+            opacity: 1;
+          }
+        }
+
+        @keyframes carrieThinkingProgress {
+          0% {
+            transform: translateX(-100%);
+          }
+          100% {
+            transform: translateX(220%);
+          }
+        }
+
+        .carrie-thinking-card {
+          background:
+            linear-gradient(135deg, rgba(255,255,255,0.96), rgba(240,249,255,0.98)),
+            linear-gradient(90deg, rgba(0,207,244,0.08), rgba(99,102,241,0.08));
+          border: 1px solid rgba(14, 165, 233, 0.14);
+          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        }
+
+        .carrie-thinking-orb {
+          animation: carrieThinkingFloat 2.1s ease-in-out infinite;
+          box-shadow: 0 8px 20px rgba(0, 207, 244, 0.18);
+        }
+
+        .carrie-thinking-dot {
+          animation: carrieThinkingDot 1.1s ease-in-out infinite;
+        }
+
+        .carrie-thinking-progress {
+          width: 42%;
+          background: linear-gradient(90deg, #00cff4, #60a5fa, #818cf8);
+          animation: carrieThinkingProgress 1.8s ease-in-out infinite;
         }
       `}</style>
     </div>
