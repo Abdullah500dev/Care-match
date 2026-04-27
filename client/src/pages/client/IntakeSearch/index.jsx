@@ -796,7 +796,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-[#334155] font-bold">What is your monthly budget?</Label>
-              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}</span>
+              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}+</span>
             </div>
             <BudgetRangeSlider
               budgetMin={budgetMin}

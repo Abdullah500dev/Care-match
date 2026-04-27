@@ -223,6 +223,29 @@ const inferAmenityMustHavesFromMessages = (msgs) => {
   return [...amenities];
 };
 
+const buildFriendlyDiscoveryFailureMessage = (error, aiParams) => {
+  const message = String(error?.message || "").trim();
+  const location = String(aiParams?.location || "").trim();
+  const zip = String(aiParams?.zip_code || "").trim();
+  const locationLabel = [location, zip].filter(Boolean).join(" ");
+
+  if (/geographic validation/i.test(message)) {
+    return (
+      "\n\n---\n**Your matches**\n" +
+      `I couldn’t confirm enough live communities directly in **${locationLabel || "your requested area"}** yet.\n\n` +
+      "Try one of these:\n" +
+      "- keep the same care type, but widen the area to a nearby city or metro\n" +
+      "- double-check the ZIP code and state\n" +
+      "- increase the distance radius a bit and ask me to search again\n"
+    );
+  }
+
+  return (
+    "\n\n---\n**Your matches**\n" +
+    "_I couldn’t load live suggestions just now. Please try again in a moment._"
+  );
+};
+
 /**
  * POST /api/chat
  * Body: { messages: { role: "user"|"assistant", content: string }[] }
@@ -510,6 +533,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     }
     const aiParams = intakePreferencesToAiSearchParams(prefs);
     let aiMatchRows = [];
+    let aiMatchError = null;
     if (aiParams) {
       try {
         const aiOut = await getCareMatchResults(aiParams);
@@ -517,12 +541,15 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
           mapAiDiscoveryFacilityToMatchRow(row, idx)
         );
       } catch (err) {
+        aiMatchError = err;
         console.error("[sendChat] AI discovery search failed:", err?.message || err);
       }
     }
 
     const matchSection = aiMatchRows.length
       ? formatAiDiscoveryMatchesForChat(aiMatchRows, 6)
+      : aiMatchError
+        ? buildFriendlyDiscoveryFailureMessage(aiMatchError, aiParams)
       : aiParams
         ? "\n\n---\n**Your matches**\n_I couldn’t load live suggestions just now. Try again in a moment._"
         : "\n\n---\n**Your matches**\n_Add a **ZIP code** with your city or state (for example, “Boston, MA 02108”) so I can run live discovery._";

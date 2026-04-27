@@ -73,6 +73,12 @@ const generateTemporaryPassword = () => {
 const APIFY_DEFAULT_ACTOR_ID =
   process.env.APIFY_ACTOR_ID || "compass/crawler-google-places";
 const APIFY_BASE_URL = "https://api.apify.com/v2";
+const GOOGLE_MAPS_PLACES_API_KEY = String(
+  process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.VITE_GOOGLE_MAPS_API_KEY ||
+    ""
+).trim();
 
 const pickFirstNonEmpty = (obj, keys) => {
   for (const key of keys) {
@@ -1522,4 +1528,50 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     count: facilities.length,
     facilities,
   });
+});
+
+/**
+ * GET /api/facilities/google-place-photo
+ * Proxies Google Place Photo requests so browser does not depend on direct key usage.
+ * Query: photo_reference (required), maxwidth (optional)
+ */
+export const getGooglePlacePhotoProxy = catchAsyncError(async (req, res, next) => {
+  if (!GOOGLE_MAPS_PLACES_API_KEY) {
+    return next(new ErrorHandler("Google Places photo proxy is not configured.", 503));
+  }
+
+  const photoReference = String(
+    req.query?.photo_reference || req.query?.photoReference || req.query?.ref || ""
+  ).trim();
+  if (!photoReference) {
+    return next(new ErrorHandler("photo_reference query param is required.", 400));
+  }
+
+  const parsedMax = Number.parseInt(String(req.query?.maxwidth || "1200"), 10);
+  const maxwidth = Number.isFinite(parsedMax)
+    ? Math.min(1600, Math.max(200, parsedMax))
+    : 1200;
+
+  const url =
+    `https://maps.googleapis.com/maps/api/place/photo?` +
+    `maxwidth=${encodeURIComponent(String(maxwidth))}` +
+    `&photo_reference=${encodeURIComponent(photoReference)}` +
+    `&key=${encodeURIComponent(GOOGLE_MAPS_PLACES_API_KEY)}`;
+
+  let response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    return next(new ErrorHandler(error?.message || "Failed to fetch place photo.", 502));
+  }
+
+  if (!response.ok) {
+    return next(new ErrorHandler(`Place photo request failed (${response.status}).`, 502));
+  }
+
+  const contentType = response.headers.get("content-type") || "image/jpeg";
+  const body = Buffer.from(await response.arrayBuffer());
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.status(200).send(body);
 });

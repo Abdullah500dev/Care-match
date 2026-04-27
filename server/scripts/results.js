@@ -27,6 +27,13 @@ const MIN_GEO_FILTERED = 8;
 /** Block obvious placeholder / demo hosts (post-sanitize + prompt forbid). */
 const DISALLOWED_URL_HOST =
   /example\.com|example\.org|example\.net|placeholder|picsum\.photos|via\.placeholder|dummyimage|placehold\.co|loremflickr|fakeimg|test\.com|satisfied|localhost/i;
+const GOOGLE_MAPS_PLACES_API_KEY = String(
+  process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.VITE_GOOGLE_MAPS_API_KEY ||
+    ""
+).trim();
+const DISCOVERY_IMAGE_DEBUG = process.env.CAREMATCH_DISCOVERY_IMAGE_DEBUG === "1";
 
 const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spelling):
 - care_levels: string[]
@@ -91,6 +98,13 @@ export function parseGeoAnchorFromPayload(payload) {
 /** Remove placeholder / fake URLs so the UI never shows example.com. */
 function sanitizeDiscoveryResults(results) {
   if (!Array.isArray(results)) return;
+  const isAllowedImageUrl = (url) => {
+    const u = String(url || "").trim();
+    if (!u) return false;
+    if (/^https:\/\//i.test(u) && !DISALLOWED_URL_HOST.test(u)) return true;
+    if (/^\/api\/facilities\/google-place-photo\?/i.test(u)) return true;
+    return false;
+  };
   for (const f of results) {
     if (f && typeof f.website === "string" && DISALLOWED_URL_HOST.test(f.website)) {
       f.website = "";
@@ -100,9 +114,188 @@ function sanitizeDiscoveryResults(results) {
     }
     if (f && Array.isArray(f.images)) {
       f.images = f.images
-        .filter((u) => typeof u === "string" && /^https:\/\//i.test(u) && !DISALLOWED_URL_HOST.test(u))
+        .filter((u) => typeof u === "string" && isAllowedImageUrl(u))
         .slice(0, 3);
     }
+  }
+}
+
+async function fetchPlacePhotoUrls(placeId, apiKey) {
+  const safePlaceId = String(placeId || "").trim();
+  if (!safePlaceId || !apiKey) return [];
+
+  try {
+    const detailsUrl =
+      `https://maps.googleapis.com/maps/api/place/details/json?` +
+      `place_id=${encodeURIComponent(safePlaceId)}&fields=photos&key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(detailsUrl);
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    if (DISCOVERY_IMAGE_DEBUG) {
+      console.log(
+        `[discovery:image] place/details place_id=${safePlaceId} status=${data?.status || "unknown"}`
+      );
+    }
+    if (data?.status !== "OK" || !Array.isArray(data?.result?.photos)) return [];
+
+    const refs = data.result.photos
+      .map((p) => String(p?.photo_reference || "").trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    if (refs.length === 0) return [];
+
+    return refs.map(
+      (ref) =>
+        `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(ref)}&key=${encodeURIComponent(apiKey)}`
+    );
+  } catch {
+    if (DISCOVERY_IMAGE_DEBUG) {
+      console.log(`[discovery:image] place/details place_id=${safePlaceId} failed`);
+    }
+    return [];
+  }
+}
+
+async function findPlaceCandidateByText(result, apiKey) {
+  if (!result || typeof result !== "object" || !apiKey) return null;
+  const name = String(result.name || "").trim();
+  const address = String(result?.location?.full_address || "").trim();
+  const query = [name, address].filter(Boolean).join(", ").trim();
+  if (!query) return null;
+
+  const gp = result && typeof result.google_places === "object" && result.google_places
+    ? result.google_places
+    : {};
+  const lat = Number(gp.latitude ?? result.latitude);
+  const lng = Number(gp.longitude ?? result.longitude);
+  const locationBias =
+    Number.isFinite(lat) && Number.isFinite(lng)
+      ? `&locationbias=point:${lat},${lng}`
+      : "";
+
+  try {
+    const url =
+      `https://maps.googleapis.com/maps/api/place/findplacefromtext/json?` +
+      `input=${encodeURIComponent(query)}` +
+      `&inputtype=textquery` +
+      `&fields=place_id,photos` +
+      `${locationBias}` +
+      `&key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json().catch(() => ({}));
+    if (DISCOVERY_IMAGE_DEBUG) {
+      console.log(
+        `[discovery:image] findplace query="${query.slice(0, 80)}" status=${data?.status || "unknown"} candidates=${Array.isArray(data?.candidates) ? data.candidates.length : 0}`
+      );
+    }
+    if (data?.status !== "OK" || !Array.isArray(data?.candidates) || data.candidates.length === 0) {
+      return null;
+    }
+    return data.candidates[0] || null;
+  } catch {
+    if (DISCOVERY_IMAGE_DEBUG) {
+      console.log(`[discovery:image] findplace failed query="${query.slice(0, 80)}"`);
+    }
+    return null;
+  }
+}
+
+function buildGooglePhotoUrlsFromRefs(refs, apiKey) {
+  const list = Array.isArray(refs) ? refs : [];
+  return list
+    .map((r) => String(r || "").trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map(
+      (ref) =>
+        `/api/facilities/google-place-photo?photo_reference=${encodeURIComponent(ref)}&maxwidth=1200`
+    );
+}
+
+async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
+  if (!Array.isArray(results) || results.length === 0 || !GOOGLE_MAPS_PLACES_API_KEY) return;
+
+  const needsPhoto = results.filter((f) => {
+    if (!f || typeof f !== "object") return false;
+    const hasImages = Array.isArray(f.images) && f.images.length > 0;
+    if (hasImages) return false;
+    const gp = f && typeof f.google_places === "object" && f.google_places ? f.google_places : {};
+    const placeId = String(gp.place_id || "").trim();
+    return Boolean(placeId);
+  });
+
+  if (needsPhoto.length === 0) return;
+  if (DISCOVERY_IMAGE_DEBUG) {
+    console.log(
+      `[discovery:image] start enrich total=${results.length} missing_images=${needsPhoto.length}`
+    );
+  }
+
+  await Promise.all(
+    needsPhoto.map(async (f) => {
+      const facilityName = String(f?.name || "Unknown").trim();
+      const gp = f && typeof f.google_places === "object" && f.google_places ? f.google_places : {};
+      if (DISCOVERY_IMAGE_DEBUG) {
+        console.log(
+          `[discovery:image] facility="${facilityName}" initial_place_id=${String(gp.place_id || "").trim() || "none"}`
+        );
+      }
+      let photoUrls = await fetchPlacePhotoUrls(gp.place_id, GOOGLE_MAPS_PLACES_API_KEY);
+      if (photoUrls.length > 0) {
+        f.images = photoUrls;
+        if (DISCOVERY_IMAGE_DEBUG) {
+          console.log(
+            `[discovery:image] facility="${facilityName}" source=place_details photos=${photoUrls.length}`
+          );
+        }
+        return;
+      }
+
+      const candidate = await findPlaceCandidateByText(f, GOOGLE_MAPS_PLACES_API_KEY);
+      if (!candidate) {
+        if (DISCOVERY_IMAGE_DEBUG) {
+          console.log(`[discovery:image] facility="${facilityName}" no_findplace_candidate`);
+        }
+        return;
+      }
+
+      if (candidate.place_id) {
+        f.google_places = {
+          ...(f.google_places && typeof f.google_places === "object" ? f.google_places : {}),
+          place_id: candidate.place_id,
+        };
+      }
+
+      const candidateRefs = Array.isArray(candidate.photos)
+        ? candidate.photos
+          .map((p) => String(p?.photo_reference || "").trim())
+          .filter(Boolean)
+        : [];
+      photoUrls = buildGooglePhotoUrlsFromRefs(candidateRefs, GOOGLE_MAPS_PLACES_API_KEY);
+
+      if (photoUrls.length === 0 && candidate.place_id) {
+        photoUrls = await fetchPlacePhotoUrls(candidate.place_id, GOOGLE_MAPS_PLACES_API_KEY);
+      }
+
+      if (photoUrls.length > 0) {
+        f.images = photoUrls;
+        if (DISCOVERY_IMAGE_DEBUG) {
+          console.log(
+            `[discovery:image] facility="${facilityName}" source=findplace photos=${photoUrls.length}`
+          );
+        }
+      } else if (DISCOVERY_IMAGE_DEBUG) {
+        console.log(`[discovery:image] facility="${facilityName}" no_photos_resolved`);
+      }
+    })
+  );
+
+  if (DISCOVERY_IMAGE_DEBUG) {
+    const withImages = results.filter((r) => Array.isArray(r?.images) && r.images.length > 0).length;
+    console.log(
+      `[discovery:image] done enrich with_images=${withImages}/${results.length}`
+    );
   }
 }
 
@@ -337,6 +530,8 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
   }
 
   parsed.results = filtered;
+  sanitizeDiscoveryResults(parsed.results);
+  await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
   sanitizeDiscoveryResults(parsed.results);
   return parsed;
 }
