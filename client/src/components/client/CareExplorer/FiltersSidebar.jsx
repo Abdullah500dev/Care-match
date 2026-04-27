@@ -133,7 +133,6 @@ const FiltersSidebar = ({
   const locationQuery = filters?.locationQuery ?? "";
   const zipCode = filters?.zipCode ?? "";
   const maxMiles = filters?.maxMiles ?? "";
-  const additionalPreferences = filters?.additionalPreferences ?? "";
   const sortBy = filters?.sortBy ?? "bestMatch";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
   const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 15000;
@@ -242,33 +241,6 @@ const FiltersSidebar = ({
           <span className="rounded-lg px-3 py-1.5 text-sm font-semibold text-[#00CFF4] bg-[#00CFF4]/10">
             ${budgetMax.toLocaleString()}
           </span>
-        </div>
-
-        <div className="my-4 border-t border-[#E2E8F0]" />
-
-        <div className="mb-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-sm text-[#132329]">Additional Preferences</h3>
-            {additionalPreferences.trim() && (
-              <button
-                type="button"
-                onClick={() => setFilters({ additionalPreferences: "" })}
-                className="text-[11px] font-semibold text-[#00A8C8] hover:text-[#008BA7]"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-          <textarea
-            value={additionalPreferences}
-            onChange={(e) => setFilters({ additionalPreferences: e.target.value })}
-            placeholder="e.g. wheelchair-friendly entrance, accessible parking, outdoor areas, social activities, vibrant community"
-            rows={4}
-            className="w-full rounded-xl border border-[#E2E8F0] px-3 py-2.5 text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] resize-none"
-          />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-[#64748b]">
-            Use commas or new lines to add dynamic requirements. These are sent into live discovery and used in ranking.
-          </p>
         </div>
 
         <div className="my-4 border-t border-[#E2E8F0]" />

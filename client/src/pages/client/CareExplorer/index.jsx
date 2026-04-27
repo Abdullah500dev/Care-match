@@ -453,15 +453,6 @@ function amenityMatchVariants(selectedLower) {
   return [key];
 }
 
-function parseDynamicPreferenceTerms(rawValue) {
-  return [...new Set(
-    String(rawValue || "")
-      .split(/[\n,;]+/)
-      .map((item) => String(item || "").trim())
-      .filter(Boolean),
-  )].slice(0, 12);
-}
-
 function deriveServicesFromPreferencePhrases(values) {
   const text = (Array.isArray(values) ? values : [])
     .map((item) => String(item || "").toLowerCase())
@@ -475,6 +466,37 @@ function deriveServicesFromPreferencePhrases(values) {
   if (/\bwheelchair|accessible|mobility\b/.test(text)) services.push("wheelchair accessibility");
   if (/\bparking\b/.test(text)) services.push("accessible parking");
   return [...new Set(services)];
+}
+
+function deriveDiscoverKeywords(filters) {
+  const keywords = [];
+  const searchQuery = String(filters?.searchQuery || "").trim();
+  const selectedAvailability = Array.isArray(filters?.selectedAvailability)
+    ? filters.selectedAvailability
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+    : [];
+  const sortBy = String(filters?.sortBy || "").trim();
+
+  if (searchQuery) {
+    keywords.push(searchQuery);
+  }
+
+  if (selectedAvailability.length > 0) {
+    keywords.push(`Move-in timeline: ${selectedAvailability.join(", ")}`);
+  }
+
+  const sortKeywordMap = {
+    bestMatch: "Best overall match",
+    overallQuality: "Overall quality",
+    nearest: "Nearest first",
+    lowestPrice: "Lowest estimated price",
+  };
+  if (sortKeywordMap[sortBy]) {
+    keywords.push(`Ranking preference: ${sortKeywordMap[sortBy]}`);
+  }
+
+  return [...new Set(keywords)];
 }
 
 function buildEffectiveLocationQuery(locationQuery, zipCode) {
@@ -631,7 +653,6 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
         ? carrieFilters.careLevels.map((x) => String(x).toLowerCase())
         : ["assisted living"];
 
-  const dynamicPreferenceTerms = parseDynamicPreferenceTerms(filters.additionalPreferences);
   const amenities = [
     ...(Array.isArray(filters.selectedAmenities)
       ? filters.selectedAmenities.map((x) => String(x))
@@ -639,15 +660,12 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     ...(Array.isArray(carrieFilters?.amenityMustHaves)
       ? carrieFilters.amenityMustHaves.map((x) => String(x))
       : []),
-    ...dynamicPreferenceTerms,
   ]
     .map((x) => x.trim())
     .filter(Boolean);
 
-  const services = deriveServicesFromPreferencePhrases([
-    ...amenities,
-    ...dynamicPreferenceTerms,
-  ]);
+  const services = deriveServicesFromPreferencePhrases(amenities);
+  const keywords = deriveDiscoverKeywords(filters);
   const maxDistanceMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
 
   return {
@@ -656,13 +674,13 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     care_levels,
     amenities: [...new Set(amenities)],
     services: [...new Set(services)],
+    keywords,
     budget_min: Number(filters.budgetMin),
     budget_max: Number(filters.budgetMax),
     max_distance_miles:
       Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
         ? Math.round(maxDistanceMiles)
         : null,
-    keywords: dynamicPreferenceTerms,
   };
 }
 
@@ -700,7 +718,6 @@ const CareExplorer = () => {
     selectedCareTypes: [],
     selectedAvailability: ["Within 30 Days"],
     selectedAmenities: [],
-    additionalPreferences: "",
     sortBy: "bestMatch",
   });
   const mapContainerRef = useRef(null);
@@ -718,6 +735,7 @@ const CareExplorer = () => {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const discoverRunIdRef = useRef(0);
   const skipDiscoverMountRef = useRef(true);
+  const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
 
@@ -929,6 +947,16 @@ const CareExplorer = () => {
     };
   }, [fromCarrie]);
 
+  useEffect(() => {
+    if (skipQueryLogMountRef.current) {
+      skipQueryLogMountRef.current = false;
+      return;
+    }
+
+    const query = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
+    console.log("[CareExplorer] Updated discover query:", query);
+  }, [filters, carrieFilters, carrieLocationQuery]);
+
   // Debounced live discover when filters change (same engine as Carrie / results.js).
   useEffect(() => {
     if (skipDiscoverMountRef.current) {
@@ -970,11 +998,12 @@ const CareExplorer = () => {
     filters.budgetMax,
     filters.zipCode,
     filters.locationQuery,
+    filters.searchQuery,
     filters.maxMiles,
-    filters.additionalPreferences,
     filters.selectedAmenities,
     filters.selectedAvailability,
     filters.selectedCareTypes,
+    filters.sortBy,
     carrieFilters,
     carrieLocationQuery,
   ]);
@@ -1099,7 +1128,6 @@ const CareExplorer = () => {
     const selectedAvailability = (filters.selectedAvailability || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const customPreferenceTerms = parseDynamicPreferenceTerms(filters.additionalPreferences);
     const budgetMin = Number(filters.budgetMin) || 1000;
     const budgetMax = Number(filters.budgetMax) || 15000;
     const sortBy = String(filters.sortBy || "bestMatch");
@@ -1153,25 +1181,6 @@ const CareExplorer = () => {
       if (selectedAvailability.length > 0) {
         const availability = String(facility.availability || "").toLowerCase();
         if (availability && selectedAvailability.includes(availability)) score += 3;
-      }
-
-      if (customPreferenceTerms.length > 0) {
-        const pool = [
-          ...(facility.amenities || []).map(amenityText),
-          ...(facility.services || []).map(amenityText),
-          ...(facility.features || []).map(amenityText),
-          String(facility.description || ""),
-          String(facility.name || ""),
-          String(facility.address || ""),
-        ]
-          .map((x) => normMatchToken(x))
-          .filter(Boolean);
-        const hits = customPreferenceTerms.filter((term) => {
-          const want = normMatchToken(term);
-          if (!want) return false;
-          return pool.some((p) => p.includes(want) || want.includes(p));
-        }).length;
-        score += (hits / customPreferenceTerms.length) * 10;
       }
 
       const low = facility.priceMin ?? facility.priceMax;
@@ -1602,16 +1611,6 @@ const CareExplorer = () => {
                     <span className="font-semibold text-[#222c2e]">
                       {summaryNeedsText}
                     </span>
-                    {parseDynamicPreferenceTerms(filters.additionalPreferences).length > 0 && (
-                      <>
-                        {" "}including{" "}
-                        <span className="font-semibold text-[#132329]">
-                          {parseDynamicPreferenceTerms(filters.additionalPreferences)
-                            .slice(0, 2)
-                            .join(", ")}
-                        </span>
-                      </>
-                    )}
                     .
                   </>
                 )}
@@ -1657,7 +1656,6 @@ const CareExplorer = () => {
                     selectedCareTypes: [],
                     selectedAvailability: ["Within 30 Days"],
                     selectedAmenities: [],
-                    additionalPreferences: "",
                     sortBy: "bestMatch",
                   });
                 }}
