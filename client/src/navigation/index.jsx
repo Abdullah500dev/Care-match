@@ -287,27 +287,60 @@ const Layout = ({ children }) => {
   useEffect(() => {
     const REMINDER_INTERVAL_MS = 30 * 1000;
     const REMINDER_VISIBLE_MS = 3000;
+    const INITIAL_REMINDER_DELAY_MS = 5000;
 
     const showHelpReminder = () => {
       if (isChatOpen) return;
-      reminderToastIdRef.current = toast("Do you need any help?", {
+      const openCarrieChat = () => {
+        navigate("/", { state: { scrollTo: "search-bar" } });
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+        }, 250);
+      };
+
+      reminderToastIdRef.current = toast.custom(
+        () => (
+          <div className="pointer-events-auto flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={openCarrieChat}
+              className="max-w-[270px] rounded-[18px] border border-[#E5E7EB] bg-white px-5 py-4 text-left shadow-[0_10px_30px_rgba(15,23,42,0.18)] transition-transform hover:-translate-y-0.5"
+            >
+              <p className="text-[14px] font-semibold leading-[1.35] text-[#374151]">
+                Hi, I&apos;m Zoe. What can I help you with?
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={openCarrieChat}
+              className="relative flex h-[62px] w-[62px] items-center justify-center rounded-full border-4 border-white bg-white shadow-[0_10px_24px_rgba(15,23,42,0.2)] transition-transform hover:scale-105"
+              aria-label="Open Carrie chat"
+            >
+              <span className="absolute inset-0 rounded-full bg-[#00CFF4]/20 animate-ping" />
+              <img
+                src="/assets/images/favicon/favicon.svg"
+                alt="CareMatch logo"
+                className="relative z-10 h-[42px] w-[42px] animate-bounce object-contain"
+              />
+            </button>
+          </div>
+        ),
+        {
         id: "carematch-help-reminder",
         duration: REMINDER_VISIBLE_MS,
         position: "bottom-right",
         style: {
           marginBottom: "84px",
         },
-        action: {
-          label: "Ask Carrie",
-          onClick: () => {
-            navigate("/", { state: { scrollTo: "search-bar" } });
-            window.setTimeout(() => {
-              window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
-            }, 250);
-          },
         },
-      });
+      );
     };
+
+    const initialReminderTimeout = window.setTimeout(
+      showHelpReminder,
+      INITIAL_REMINDER_DELAY_MS,
+    );
 
     if (reminderIntervalRef.current) {
       window.clearInterval(reminderIntervalRef.current);
@@ -318,12 +351,14 @@ const Layout = ({ children }) => {
     );
 
     return () => {
+      window.clearTimeout(initialReminderTimeout);
       if (reminderIntervalRef.current) {
         window.clearInterval(reminderIntervalRef.current);
         reminderIntervalRef.current = null;
       }
       if (reminderToastIdRef.current) {
         toast.dismiss(reminderToastIdRef.current);
+        reminderToastIdRef.current = null;
       }
     };
   }, [isChatOpen, navigate, location.pathname]);
