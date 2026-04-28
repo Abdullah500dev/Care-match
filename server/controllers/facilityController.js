@@ -1575,3 +1575,73 @@ export const getGooglePlacePhotoProxy = catchAsyncError(async (req, res, next) =
   res.setHeader("Cache-Control", "public, max-age=86400");
   res.status(200).send(body);
 });
+
+/**
+ * GET /api/facilities/google-place-photo-by-place-id
+ * Resolves first available Google Place photo by place_id and proxies image bytes.
+ * Query: place_id (required), maxwidth (optional)
+ */
+export const getGooglePlacePhotoByPlaceIdProxy = catchAsyncError(async (req, res, next) => {
+  if (!GOOGLE_MAPS_PLACES_API_KEY) {
+    return next(new ErrorHandler("Google Places photo proxy is not configured.", 503));
+  }
+
+  const placeId = String(req.query?.place_id || req.query?.placeId || "").trim();
+  if (!placeId) {
+    return next(new ErrorHandler("place_id query param is required.", 400));
+  }
+
+  const parsedMax = Number.parseInt(String(req.query?.maxwidth || "1200"), 10);
+  const maxwidth = Number.isFinite(parsedMax)
+    ? Math.min(1600, Math.max(200, parsedMax))
+    : 1200;
+
+  const detailsUrl =
+    `https://maps.googleapis.com/maps/api/place/details/json?` +
+    `place_id=${encodeURIComponent(placeId)}` +
+    `&fields=photos` +
+    `&key=${encodeURIComponent(GOOGLE_MAPS_PLACES_API_KEY)}`;
+
+  let detailsResp;
+  try {
+    detailsResp = await fetch(detailsUrl);
+  } catch (error) {
+    return next(
+      new ErrorHandler(error?.message || "Failed to fetch place details for photos.", 502)
+    );
+  }
+
+  if (!detailsResp.ok) {
+    return next(new ErrorHandler(`Place details request failed (${detailsResp.status}).`, 502));
+  }
+
+  const details = await detailsResp.json().catch(() => ({}));
+  const photos = Array.isArray(details?.result?.photos) ? details.result.photos : [];
+  const photoReference = String(photos?.[0]?.photo_reference || "").trim();
+  if (!photoReference) {
+    return next(new ErrorHandler("No photos found for this place_id.", 404));
+  }
+
+  const photoUrl =
+    `https://maps.googleapis.com/maps/api/place/photo?` +
+    `maxwidth=${encodeURIComponent(String(maxwidth))}` +
+    `&photo_reference=${encodeURIComponent(photoReference)}` +
+    `&key=${encodeURIComponent(GOOGLE_MAPS_PLACES_API_KEY)}`;
+
+  let photoResp;
+  try {
+    photoResp = await fetch(photoUrl);
+  } catch (error) {
+    return next(new ErrorHandler(error?.message || "Failed to fetch place photo.", 502));
+  }
+
+  if (!photoResp.ok) {
+    return next(new ErrorHandler(`Place photo request failed (${photoResp.status}).`, 502));
+  }
+
+  const contentType = photoResp.headers.get("content-type") || "image/jpeg";
+  const body = Buffer.from(await photoResp.arrayBuffer());
+  res.setHeader("Content-Type", contentType);
+  res.setHeader("Cache-Control", "public, max-age=86400");
+  res.status(200).send(body);
+});

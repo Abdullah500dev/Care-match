@@ -283,6 +283,13 @@ function normalizeFacilityForCard(m) {
       }
     }
   }
+  const placeId =
+    typeof googlePlaces.place_id === "string" ? googlePlaces.place_id.trim() : "";
+  if (!imageSrc && placeId) {
+    imageSrc = resolveFacilityImageUrl(
+      `/api/facilities/google-place-photo-by-place-id?place_id=${encodeURIComponent(placeId)}&maxwidth=1200`,
+    );
+  }
   const mapsKey = getGoogleMapsApiKey();
   if (
     !imageSrc &&

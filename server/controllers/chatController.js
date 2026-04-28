@@ -8,8 +8,10 @@ import {
 import Facility from "../models/facilityModel.js";
 import {
   extractIntakeJsonBlock,
+  formatRecommendationsForChat,
   normalizeIntakePreferences,
   parseBudgetLikeValue,
+  rankFacilities,
 } from "../services/matchingEngine.js";
 import { getCareMatchResults } from "../scripts/results.js";
 import {
@@ -83,12 +85,42 @@ const buildDirectoryContextBlock = (facilities) => {
   return `FACILITY_DIRECTORY_DATA (use only this for “what we have”; do not invent listings):\n${summary}`;
 };
 
+const parseBoundedBudgetAmount = (value) => {
+  const n = parseBudgetLikeValue(value);
+  if (n == null || !Number.isFinite(n)) return null;
+  // Ignore likely non-budget values (e.g. ZIPs or malformed huge concatenations).
+  if (n < 300 || n > 100000) return null;
+  return n;
+};
+
+const inferBudgetFromText = (text) => {
+  const raw = String(text || "").toLowerCase().trim();
+  if (!raw) return null;
+
+  const range = raw.match(
+    /(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
+  );
+  if (range?.[1] && range?.[2]) {
+    const a = parseBoundedBudgetAmount(range[1]);
+    const b = parseBoundedBudgetAmount(range[2]);
+    if (a != null && b != null) return Math.max(a, b);
+  }
+
+  const hasBudgetHints =
+    /budget|month|monthly|\/mo|cost|price|afford|under|maximum|max|up to|range/i.test(raw) ||
+    raw.includes("$");
+  if (hasBudgetHints) {
+    const single = parseBoundedBudgetAmount(raw);
+    if (single != null) return single;
+  }
+
+  return null;
+};
+
 const inferBudgetFromMessages = (msgs) => {
   const users = msgs.filter((m) => m.role === "user").map((m) => m.content || "");
   for (let i = users.length - 1; i >= 0; i -= 1) {
-    const text = String(users[i]);
-    if (!/budget|month|monthly|\/mo|\$|cost|price|afford|under/i.test(text)) continue;
-    const parsed = parseBudgetLikeValue(text);
+    const parsed = inferBudgetFromText(users[i]);
     if (parsed != null && parsed > 0) return parsed;
   }
   return null;
@@ -186,7 +218,7 @@ const inferMaxDistanceFromMessages = (msgs) => {
   for (let i = users.length - 1; i >= 0; i -= 1) {
     const text = users[i].toLowerCase();
     const milesPattern =
-      /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:mile|miles|mi)\b/;
+      /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:-|\s)*(?:mile|miles|mi)\b/;
     const m = text.match(milesPattern);
     if (m?.[1]) {
       const value = Number.parseInt(m[1], 10);
@@ -217,10 +249,32 @@ const inferAmenityMustHavesFromMessages = (msgs) => {
     amenities.add("physical therapy");
   }
   if (/\bhospice\b/i.test(text)) amenities.add("hospice care");
+  if (/\bwheelchair[-\s]?accessible\b|\baccessible entrance\b|\bada\b/i.test(text)) {
+    amenities.add("wheelchair accessible entrance");
+  }
+  if (/\bwheelchair[-\s]?accessible parking\b|\baccessible parking\b/i.test(text)) {
+    amenities.add("wheelchair accessible parking");
+  }
   if (/\brespiratory\b/i.test(text)) amenities.add("respiratory support");
   if (/\bdialysis\b/i.test(text)) amenities.add("dialysis access nearby");
 
   return [...amenities];
+};
+
+const wantsRankedMatchesNow = (text) => {
+  const t = String(text || "");
+  if (!t.trim()) return false;
+  if (
+    /\b(?:ranked|top|best)\s+(?:matches|results|recommendations?|options)\b/i.test(t) ||
+    /\bprovide\s+(?:ranked\s+)?(?:matches|results|recommendations?|options)\b/i.test(t) ||
+    /\b(?:show|give|get|provide|return|find|list)\b.{0,100}\b(?:matches|results|rankings?|recommendations?|options)\b/i.test(
+      t
+    ) ||
+    /\bjust\s+(?:show|give|get|provide|return)\b.{0,50}\b(?:results|matches)\b/i.test(t)
+  ) {
+    return true;
+  }
+  return false;
 };
 
 const buildFriendlyDiscoveryFailureMessage = (error, aiParams) => {
@@ -295,13 +349,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     /\b(match|recommend|recommendation|rank|best fit|find|looking for|need|help me find|facility near|near me)\b/i.test(
       fullThreadText
     );
-  const explicitMatchNow =
-    /\b(show|give|get)\s+(me\s+|my\s+|our\s+)?(?:best\s+|top\s+|ranked\s+)?(matches|results|rankings?|recommendations?)\b/i.test(
-      latestUserText
-    ) ||
-    /\b(show|give|get).{0,60}\b(matches|results|rankings?|recommendations?)\b/i.test(
-      latestUserText
-    );
+  const explicitMatchNow = wantsRankedMatchesNow(latestUserText);
 
   const preludeUsed = hasMatchIntent ? 0 : Math.min(PRELUDE_MAX_USER_MESSAGES, userMessageCount);
   const intakeAnswerCount = Math.max(0, userMessageCount - preludeUsed);
@@ -327,8 +375,10 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   // We need care type + location at minimum to show results
   const essentialTotalPoints = 3; // care type + location + budget
   const essentialPointCount = essentialTotalPoints - missingEssentials.length;
+  const hasCoreEssentials = Boolean(inferredPrimaryCareType && (inferredLocation || inferredZipCode));
   const shouldReturnResults =
     explicitMatchNow ||
+    (hasMatchIntent && hasCoreEssentials) ||
     essentialPointCount >= essentialTotalPoints ||
     intakeAnswerCount >= QUESTION_COUNT;
 
@@ -546,8 +596,29 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       }
     }
 
-    const matchSection = aiMatchRows.length
-      ? formatAiDiscoveryMatchesForChat(aiMatchRows, 6)
+    let finalMatchRows = aiMatchRows;
+    let fallbackRuleBasedSection = "";
+    if (finalMatchRows.length === 0) {
+      try {
+        const localFacilities = await Facility.find()
+          .select(
+            "name address pricing care_levels website specialty description source_platform is_external amenities services external_data images"
+          )
+          .lean();
+        const fallbackRows = rankFacilities(localFacilities, prefs, { limit: 6 });
+        if (fallbackRows.length > 0) {
+          finalMatchRows = fallbackRows;
+          fallbackRuleBasedSection = formatRecommendationsForChat(localFacilities, prefs);
+        }
+      } catch (err) {
+        console.error("[sendChat] Rule-based fallback failed:", err?.message || err);
+      }
+    }
+
+    const matchSection = finalMatchRows.length > 0
+      ? aiMatchRows.length > 0
+        ? formatAiDiscoveryMatchesForChat(aiMatchRows, 6)
+        : fallbackRuleBasedSection
       : aiMatchError
         ? buildFriendlyDiscoveryFailureMessage(aiMatchError, aiParams)
       : aiParams
@@ -556,7 +627,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
 
     finalContent = `Here's what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
     if (prefs) {
-      matchedFacilities = aiMatchRows;
+      matchedFacilities = finalMatchRows;
       matchedPreferences = prefs;
     }
   }
