@@ -616,37 +616,25 @@ function averageFacilityPrice(facility) {
   return Number.POSITIVE_INFINITY;
 }
 
-function normalizedFacilityTokens(facility) {
+function facilityDedupKey(facility) {
   const normalize = (value) =>
     String(value || "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
-  const normalizeDigits = (value) =>
-    String(value || "")
-      .replace(/[^\d]/g, "")
-      .trim();
 
   const name = normalize(facility?.name);
   const address = normalize(facility?.address);
   const zip = normalize(facility?.zipCode);
-  const phoneDigits = normalizeDigits(facility?.phone);
-  const phone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : phoneDigits;
-  const facilityId = normalize(facility?.facilityId || facility?.key);
+  const phone = normalize(facility?.phone);
 
-  return { name, address, zip, phone, facilityId };
-}
-
-function facilityDedupKeys(facility) {
-  const { name, address, zip, phone, facilityId } = normalizedFacilityTokens(facility);
-  const keys = [];
-  if (facilityId) keys.push(`id:${facilityId}`);
-  if (name && address) keys.push(`nameaddr:${name}|${address}`);
-  if (name && zip) keys.push(`namezip:${name}|${zip}`);
-  if (name && phone) keys.push(`namephone:${name}|${phone}`);
-  // Final safety net for noisy sources that change address formatting.
-  if (name) keys.push(`name:${name}`);
-  return [...new Set(keys)];
+  // Prefer name + address for canonical facility identity.
+  if (name && address) return `name:${name}|addr:${address}`;
+  // Fallbacks when address is missing.
+  if (name && zip) return `name:${name}|zip:${zip}`;
+  if (name && phone) return `name:${name}|phone:${phone}`;
+  if (name) return `name:${name}`;
+  return String(facility?.key || "").trim();
 }
 
 function facilityCompletenessScore(facility) {
@@ -664,23 +652,18 @@ function facilityCompletenessScore(facility) {
 }
 
 function dedupeFacilities(facilities) {
-  const selected = [];
-  const keyToIndex = new Map();
+  const selected = new Map();
 
   (Array.isArray(facilities) ? facilities : []).forEach((facility) => {
-    const dedupKeys = facilityDedupKeys(facility);
-    if (dedupKeys.length === 0) return;
-    const existingIndex = dedupKeys.find((key) => keyToIndex.has(key));
+    const dedupKey = facilityDedupKey(facility);
+    if (!dedupKey) return;
 
-    if (!existingIndex) {
-      const newIndex = selected.length;
-      selected.push(facility);
-      dedupKeys.forEach((key) => keyToIndex.set(key, newIndex));
+    const existing = selected.get(dedupKey);
+    if (!existing) {
+      selected.set(dedupKey, facility);
       return;
     }
 
-    const targetIndex = keyToIndex.get(existingIndex);
-    const existing = selected[targetIndex];
     const existingMatch = Number(existing?.matchPercent) || 0;
     const incomingMatch = Number(facility?.matchPercent) || 0;
     const existingRichness = facilityCompletenessScore(existing);
@@ -690,13 +673,11 @@ function dedupeFacilities(facilities) {
       incomingMatch > existingMatch ||
       (incomingMatch === existingMatch && incomingRichness > existingRichness)
     ) {
-      selected[targetIndex] = facility;
+      selected.set(dedupKey, facility);
     }
-
-    dedupKeys.forEach((key) => keyToIndex.set(key, targetIndex));
   });
 
-  return selected;
+  return Array.from(selected.values());
 }
 
 function sanitizeMonthlyBudgetValue(value) {
