@@ -84,7 +84,6 @@ function LocationAutocompleteInput({ value, onChange, placeholder, className }) 
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const careTypes = ["Assisted Living"];
 const amenities = ["24/7 Care", "Private Rooms", "Therapy Services", "Pet Friendly"];
 
 const toggleInArray = (arr, value) =>
@@ -124,7 +123,6 @@ const FiltersSidebar = ({
   filters,
   onFiltersChange,
   onReset,
-  careTypeOptions = careTypes,
   amenityOptions = amenities,
   onAskCarrie,
 }) => {
@@ -136,9 +134,6 @@ const FiltersSidebar = ({
   const sortBy = filters?.sortBy ?? "bestMatch";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
   const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 15000;
-  const selectedCareTypes = Array.isArray(filters?.selectedCareTypes)
-    ? filters.selectedCareTypes
-    : [];
   const selectedAmenities = Array.isArray(filters?.selectedAmenities)
     ? filters.selectedAmenities
     : [];
@@ -239,31 +234,8 @@ const FiltersSidebar = ({
             ${budgetMin.toLocaleString()}
           </span>
           <span className="rounded-lg px-3 py-1.5 text-sm font-semibold text-[#00CFF4] bg-[#00CFF4]/10">
-            ${budgetMax.toLocaleString()}
+            ${budgetMax.toLocaleString()}+
           </span>
-        </div>
-
-        <div className="my-4 border-t border-[#E2E8F0]" />
-
-        <h3 className="font-semibold text-sm text-[#132329] mb-3">Care Type</h3>
-        <div className="space-y-2.5">
-          {careTypeOptions.map((type) => (
-            <label
-              key={type}
-              className="flex items-center gap-2 text-sm text-[#364153] cursor-pointer"
-            >
-              <Checkbox
-                checked={hasSemanticSelection(selectedCareTypes, type)}
-                onCheckedChange={() =>
-                  setFilters({
-                    selectedCareTypes: toggleInArray(selectedCareTypes, type),
-                  })
-                }
-                className="border-[#00CFF4] bg-[#64748b]/10 data-[state=checked]:bg-[#00CFF4] data-[state=checked]:border-[#00CFF4] focus-visible:ring-[#00CFF4]"
-              />
-              {type}
-            </label>
-          ))}
         </div>
 
         <div className="my-4 border-t border-[#E2E8F0]" />
