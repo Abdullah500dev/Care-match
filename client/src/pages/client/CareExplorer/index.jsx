@@ -616,25 +616,37 @@ function averageFacilityPrice(facility) {
   return Number.POSITIVE_INFINITY;
 }
 
-function facilityDedupKey(facility) {
+function normalizedFacilityTokens(facility) {
   const normalize = (value) =>
     String(value || "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, " ")
       .trim();
+  const normalizeDigits = (value) =>
+    String(value || "")
+      .replace(/[^\d]/g, "")
+      .trim();
 
   const name = normalize(facility?.name);
   const address = normalize(facility?.address);
   const zip = normalize(facility?.zipCode);
-  const phone = normalize(facility?.phone);
+  const phoneDigits = normalizeDigits(facility?.phone);
+  const phone = phoneDigits.length >= 10 ? phoneDigits.slice(-10) : phoneDigits;
+  const facilityId = normalize(facility?.facilityId || facility?.key);
 
-  // Prefer name + address for canonical facility identity.
-  if (name && address) return `name:${name}|addr:${address}`;
-  // Fallbacks when address is missing.
-  if (name && zip) return `name:${name}|zip:${zip}`;
-  if (name && phone) return `name:${name}|phone:${phone}`;
-  if (name) return `name:${name}`;
-  return String(facility?.key || "").trim();
+  return { name, address, zip, phone, facilityId };
+}
+
+function facilityDedupKeys(facility) {
+  const { name, address, zip, phone, facilityId } = normalizedFacilityTokens(facility);
+  const keys = [];
+  if (facilityId) keys.push(`id:${facilityId}`);
+  if (name && address) keys.push(`nameaddr:${name}|${address}`);
+  if (name && zip) keys.push(`namezip:${name}|${zip}`);
+  if (name && phone) keys.push(`namephone:${name}|${phone}`);
+  // Final safety net for noisy sources that change address formatting.
+  if (name) keys.push(`name:${name}`);
+  return [...new Set(keys)];
 }
 
 function facilityCompletenessScore(facility) {
@@ -652,18 +664,23 @@ function facilityCompletenessScore(facility) {
 }
 
 function dedupeFacilities(facilities) {
-  const selected = new Map();
+  const selected = [];
+  const keyToIndex = new Map();
 
   (Array.isArray(facilities) ? facilities : []).forEach((facility) => {
-    const dedupKey = facilityDedupKey(facility);
-    if (!dedupKey) return;
+    const dedupKeys = facilityDedupKeys(facility);
+    if (dedupKeys.length === 0) return;
+    const existingIndex = dedupKeys.find((key) => keyToIndex.has(key));
 
-    const existing = selected.get(dedupKey);
-    if (!existing) {
-      selected.set(dedupKey, facility);
+    if (!existingIndex) {
+      const newIndex = selected.length;
+      selected.push(facility);
+      dedupKeys.forEach((key) => keyToIndex.set(key, newIndex));
       return;
     }
 
+    const targetIndex = keyToIndex.get(existingIndex);
+    const existing = selected[targetIndex];
     const existingMatch = Number(existing?.matchPercent) || 0;
     const incomingMatch = Number(facility?.matchPercent) || 0;
     const existingRichness = facilityCompletenessScore(existing);
@@ -673,18 +690,40 @@ function dedupeFacilities(facilities) {
       incomingMatch > existingMatch ||
       (incomingMatch === existingMatch && incomingRichness > existingRichness)
     ) {
-      selected.set(dedupKey, facility);
+      selected[targetIndex] = facility;
     }
+
+    dedupKeys.forEach((key) => keyToIndex.set(key, targetIndex));
   });
 
-  return Array.from(selected.values());
+  return selected;
 }
 
 function sanitizeMonthlyBudgetValue(value) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  if (parsed > 100000) return null;
-  return Math.round(parsed);
+  if (value == null) return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) return null;
+    if (value > 100000) return null;
+    return Math.round(value);
+  }
+
+  const raw = String(value).toLowerCase().trim();
+  if (!raw) return null;
+
+  const kMatch = raw.match(/(\d+(?:\.\d+)?)\s*k\b/);
+  if (kMatch) {
+    const n = Number.parseFloat(kMatch[1]);
+    if (!Number.isNaN(n) && n > 0) {
+      const parsedK = Math.round(n * 1000);
+      return parsedK > 100000 ? null : parsedK;
+    }
+  }
+
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return null;
+  const parsed = Number.parseInt(digits, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100000) return null;
+  return parsed;
 }
 
 /** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
@@ -940,12 +979,15 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
-    const maxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly) ?? 15000;
-    const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
-    const minBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly) ?? 1000;
-    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(minBudget)));
-    setFilters((prev) => ({
-      ...prev,
+    const parsedMaxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly);
+    const parsedMinBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly);
+    const effectiveMaxBudget = parsedMaxBudget ?? parsedMinBudget ?? 15000;
+    const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
+    const effectiveMinBudget = parsedMinBudget ?? Math.min(1000, safeMax);
+    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(effectiveMinBudget)));
+
+    const nextFilters = {
+      ...initialFilters,
       locationQuery: normalizeLocationFieldValue(
         carrieLocationQuery,
         carrieZipCode,
@@ -959,26 +1001,37 @@ const CareExplorer = () => {
           careTypeOptions,
           CARE_TYPE_ALIASES,
         )
-        : prev.selectedCareTypes,
+        : initialFilters.selectedCareTypes,
       selectedAmenities: Array.isArray(carrieFilters.amenityMustHaves)
         ? mapSelectionsToOptions(
           carrieFilters.amenityMustHaves.map((x) => String(x).trim()),
           amenityOptions,
           AMENITY_ALIASES,
         )
-        : prev.selectedAmenities,
+        : initialFilters.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
           carrieFilters.availability.trim()
           ? [carrieFilters.availability.trim()]
-          : prev.selectedAvailability,
+          : initialFilters.selectedAvailability,
       maxMiles:
         carrieFilters.maxDistanceMiles != null &&
           !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
           ? String(carrieFilters.maxDistanceMiles)
-          : prev.maxMiles,
-    }));
-  }, [fromCarrie, carrieFilters, carrieLocationQuery, carrieMatches, careTypeOptions, amenityOptions]);
+          : initialFilters.maxMiles,
+    };
+
+    setFilters(nextFilters);
+    setAppliedFilters(nextFilters);
+  }, [
+    fromCarrie,
+    carrieFilters,
+    carrieLocationQuery,
+    carrieMatches,
+    careTypeOptions,
+    amenityOptions,
+    initialFilters,
+  ]);
 
   useEffect(() => {
     const query = buildEffectiveLocationQuery(
