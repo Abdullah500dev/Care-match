@@ -741,6 +741,7 @@ const CareExplorer = () => {
   const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const discoverRunIdRef = useRef(0);
+  const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
@@ -970,6 +971,11 @@ const CareExplorer = () => {
       skipDiscoverMountRef.current = false;
       return;
     }
+    // Keep Carrie results stable on initial load; only refresh live results
+    // after the user intentionally changes filters in this view.
+    if (fromCarrie && !hasUserTouchedFiltersRef.current) {
+      return;
+    }
 
     const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
     if (!body.zip_code || !String(body.location || "").trim()) {
@@ -1013,6 +1019,7 @@ const CareExplorer = () => {
     filters.sortBy,
     carrieFilters,
     carrieLocationQuery,
+    fromCarrie,
   ]);
 
   useEffect(() => {
@@ -1648,9 +1655,13 @@ const CareExplorer = () => {
             >
               <FiltersSidebar
                 filters={filters}
-                onFiltersChange={setFilters}
+                onFiltersChange={(nextFilters) => {
+                  hasUserTouchedFiltersRef.current = true;
+                  setFilters(nextFilters);
+                }}
                 onReset={() => {
                   discoverRunIdRef.current += 1;
+                  hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);
                   setDiscoverOverrideRows(undefined);
                   setFilters({
