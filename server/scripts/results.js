@@ -22,7 +22,10 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") });
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
 
 /** When the model drifts to another metro, keep at least this many after geo filter before skipping retry. */
-const MIN_GEO_FILTERED = 8;
+const MIN_GEO_FILTERED = 5;
+/** Allow practical partial result sets instead of hard-failing on low count. */
+const MIN_ACCEPTABLE_RESULTS = 1;
+const MAX_RESULTS = 20;
 
 /** Block obvious placeholder / demo hosts (post-sanitize + prompt forbid). */
 const DISALLOWED_URL_HOST =
@@ -144,10 +147,7 @@ async function fetchPlacePhotoUrls(placeId, apiKey) {
       .slice(0, 3);
     if (refs.length === 0) return [];
 
-    return refs.map(
-      (ref) =>
-        `https://maps.googleapis.com/maps/api/place/photo?maxwidth=1200&photo_reference=${encodeURIComponent(ref)}&key=${encodeURIComponent(apiKey)}`
-    );
+    return buildGooglePhotoUrlsFromRefs(refs);
   } catch {
     if (DISCOVERY_IMAGE_DEBUG) {
       console.log(`[discovery:image] place/details place_id=${safePlaceId} failed`);
@@ -201,7 +201,7 @@ async function findPlaceCandidateByText(result, apiKey) {
   }
 }
 
-function buildGooglePhotoUrlsFromRefs(refs, apiKey) {
+function buildGooglePhotoUrlsFromRefs(refs) {
   const list = Array.isArray(refs) ? refs : [];
   return list
     .map((r) => String(r || "").trim())
@@ -218,11 +218,13 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
 
   const needsPhoto = results.filter((f) => {
     if (!f || typeof f !== "object") return false;
-    const hasImages = Array.isArray(f.images) && f.images.length > 0;
-    if (hasImages) return false;
-    const gp = f && typeof f.google_places === "object" && f.google_places ? f.google_places : {};
-    const placeId = String(gp.place_id || "").trim();
-    return Boolean(placeId);
+    const images = Array.isArray(f.images) ? f.images : [];
+    const hasProxyImage = images.some((u) =>
+      /^\/api\/facilities\/google-place-photo\?/i.test(String(u || "").trim())
+    );
+    // Keep trying when images are missing or only non-proxy links.
+    // This makes image delivery more reliable in the browser.
+    return !hasProxyImage;
   });
 
   if (needsPhoto.length === 0) return;
@@ -272,7 +274,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
           .map((p) => String(p?.photo_reference || "").trim())
           .filter(Boolean)
         : [];
-      photoUrls = buildGooglePhotoUrlsFromRefs(candidateRefs, GOOGLE_MAPS_PLACES_API_KEY);
+      photoUrls = buildGooglePhotoUrlsFromRefs(candidateRefs);
 
       if (photoUrls.length === 0 && candidate.place_id) {
         photoUrls = await fetchPlacePhotoUrls(candidate.place_id, GOOGLE_MAPS_PLACES_API_KEY);
@@ -420,12 +422,12 @@ GEOGRAPHY (NON-NEGOTIABLE):
 - location.zip_code should share the same broad regional prefix as the anchor ZIP when possible (same first 2 digits at minimum for the same state).
 
 Return ONLY valid JSON with this top-level shape:
-{ "results": [ /* EXACTLY 20 facility objects */ ] }
+{ "results": [ /* up to 20 facility objects */ ] }
 
 ${FACILITY_SHAPE}
 
 Rules:
-1. results MUST have length exactly 20 before you stop.
+1. Return as many high-confidence rows as you can find, up to 20 (do not fabricate filler rows just to hit a number).
 2. Names, addresses, coordinates, and ZIP codes must all be mutually consistent with the anchor location and zip_code.
 3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility, services, lifestyle fit, and overall quality in amenities or description.
 4. Vary facility names; do not copy one template 20 times.
@@ -441,6 +443,35 @@ RETRY / CORRECTION (read carefully):
 The previous attempt may have included ANY community outside ${JSON.stringify(anchor.location)} with ZIP region ${JSON.stringify(anchor.zip)}.
 Regenerate the ENTIRE JSON from scratch. ALL 20 rows must be in that same metro and state (no Massachusetts listings for a California anchor, no cross-country filler). If a street name is ambiguous, pick only addresses that unambiguously match the anchor city or neighboring suburbs in the same state.
 Use web_search again for every row: real https website and real image URLs only — no example.com or placeholders.`;
+}
+
+/**
+ * Softer geography fallback: prefer same-state rows, then same ZIP prefix rows.
+ * This prevents complete no-result failures when strict filtering is too narrow.
+ * @param {object[]} results
+ * @param {{ zip: string, stateAbbr: string|null }} anchor
+ */
+function fallbackGeoSubset(results, anchor) {
+  const rows = Array.isArray(results) ? results : [];
+  const wantState = anchor?.stateAbbr ? String(anchor.stateAbbr).toUpperCase() : "";
+  const anchorZip = String(anchor?.zip || "").replace(/\D/g, "").slice(0, 5);
+  const zipPrefix = anchorZip.length >= 2 ? anchorZip.slice(0, 2) : "";
+
+  const sameState = rows.filter((f) => {
+    const rowState = String(f?.location?.state || "").trim().toUpperCase();
+    return Boolean(wantState) && rowState.length === 2 && rowState === wantState;
+  });
+  if (sameState.length > 0) return sameState;
+
+  if (zipPrefix) {
+    const sameZipPrefix = rows.filter((f) => {
+      const rowZip = String(f?.location?.zip_code || "").replace(/\D/g, "").slice(0, 5);
+      return rowZip.length === 5 && rowZip.startsWith(zipPrefix);
+    });
+    if (sameZipPrefix.length > 0) return sameZipPrefix;
+  }
+
+  return rows;
 }
 
 /** Strip optional ```json ... ``` wrapper from model text. */
@@ -489,15 +520,17 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
       throw err;
     }
 
-    if (parsed.results.length < 20) {
-      const err = new Error(`Expected at least 20 results, got ${parsed.results.length}`);
+    if (parsed.results.length < MIN_ACCEPTABLE_RESULTS) {
+      const err = new Error(
+        `Expected at least ${MIN_ACCEPTABLE_RESULTS} results, got ${parsed.results.length}`
+      );
       err.status = 502;
       err.partial = parsed;
       throw err;
     }
 
-    if (parsed.results.length > 20) {
-      parsed.results = parsed.results.slice(0, 20);
+    if (parsed.results.length > MAX_RESULTS) {
+      parsed.results = parsed.results.slice(0, MAX_RESULTS);
     }
 
     sanitizeDiscoveryResults(parsed.results);
@@ -521,6 +554,15 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
   }
 
   if (filtered.length === 0) {
+    const fallback = fallbackGeoSubset(parsed.results, anchor);
+    if (fallback.length > 0) {
+      parsed.results = fallback.slice(0, MAX_RESULTS);
+      sanitizeDiscoveryResults(parsed.results);
+      await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
+      sanitizeDiscoveryResults(parsed.results);
+      return parsed;
+    }
+
     const err = new Error(
       "No communities passed geographic validation for your area. Try again with a complete city, state, and ZIP (e.g. San Francisco, CA 94102)."
     );
