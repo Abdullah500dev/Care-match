@@ -803,6 +803,7 @@ const CareExplorer = () => {
 
   const activeFilters = AUTO_APPLY_FILTERS ? filters : appliedFilters;
   const mapContainerRef = useRef(null);
+  const listingTopRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const mapMarkersRef = useRef([]);
   const geocoderRef = useRef(null);
@@ -832,16 +833,19 @@ const CareExplorer = () => {
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
 
-  useEffect(() => {
-    if (!discoverLoading) {
-      setDiscoverThinkingIndex(0);
+
+  const scrollToListingTop = () => {
+    if (listingTopRef.current) {
+      listingTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
-    const id = window.setInterval(() => {
-      setDiscoverThinkingIndex((prev) => (prev + 1) % discoverThinkingMessages.length);
-    }, 1800);
-    return () => window.clearInterval(id);
-  }, [discoverLoading, discoverThinkingMessages.length]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handlePageChange = (nextPage) => {
+    setPage(nextPage);
+    scrollToListingTop();
+  };
 
   // Preload Google Maps + Places so the location autocomplete works immediately
   useEffect(() => {
@@ -1913,6 +1917,7 @@ const CareExplorer = () => {
 
           {view === "listing" ? (
             <div
+              ref={listingTopRef}
               className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${layout === "single"
                 ? "space-y-3 sm:space-y-4"
                 : layout === "two"
@@ -2000,7 +2005,7 @@ const CareExplorer = () => {
                 <div className="col-span-full mt-2 flex items-center justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
                     disabled={currentPage === 1}
                     className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#132329] disabled:opacity-50"
                   >
@@ -2022,7 +2027,7 @@ const CareExplorer = () => {
                         <button
                           key={`page-${p}`}
                           type="button"
-                          onClick={() => setPage(Number(p))}
+                          onClick={() => handlePageChange(Number(p))}
                           className={`rounded-lg border px-2.5 py-1.5 text-sm ${currentPage === p
                             ? "border-[#00CFF4] bg-[#00CFF4] text-white"
                             : "border-[#E2E8F0] bg-white text-[#132329]"
@@ -2035,7 +2040,7 @@ const CareExplorer = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
                     disabled={currentPage === totalPages}
                     className="rounded-lg border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm text-[#132329] disabled:opacity-50"
                   >
