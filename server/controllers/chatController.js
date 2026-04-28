@@ -22,6 +22,7 @@ import {
 
 const PRELUDE_MAX_USER_MESSAGES = 2;
 const QUESTION_COUNT = 5;
+const ASSISTED_ONLY_CARE_LEVEL = "assisted living";
 
 const topValues = (items, limit = 6) => {
   const counts = new Map();
@@ -154,39 +155,13 @@ const inferBudgetRangeFromMessages = (msgs) => {
 };
 
 const inferCareLevelsFromMessages = (msgs) => {
-  const text = msgs
-    .filter((m) => m.role === "user")
-    .map((m) => String(m.content || ""))
-    .join(" \n ")
-    .toLowerCase();
-  const levels = new Set();
-  if (/\bskilled nursing|snf|nursing home|subacute\b/i.test(text)) levels.add("skilled nursing");
-  if (/\bmemory care|dementia|alzheimer\b/i.test(text)) levels.add("memory care");
-  if (/\bassisted living|assisted\b/i.test(text)) levels.add("assisted living");
-  if (/\bindependent living|independent\b/i.test(text)) levels.add("independent living");
-  if (/\brespite\b/i.test(text)) levels.add("respite");
-  if (/\bhospice\b/i.test(text)) levels.add("hospice");
-  return [...levels];
+  return [ASSISTED_ONLY_CARE_LEVEL];
 };
 
 /**
- * Infer the PRIMARY care type (hard filter) from messages.
- * Priority: Skilled Nursing > Memory Care > Assisted Living > Independent Living > Respite > Hospice
- * Returns a single string or null.
+ * We currently support assisted living only.
  */
-const inferPrimaryCareTypeFromMessages = (msgs) => {
-  const text = msgs
-    .filter((m) => m.role === "user")
-    .map((m) => String(m.content || ""))
-    .join(" \n ");
-  if (/\bskilled nursing|\bsnf\b|nursing home|subacute/i.test(text)) return "skilled nursing";
-  if (/\bmemory care|dementia|alzheimer/i.test(text)) return "memory care";
-  if (/\bassisted living/i.test(text)) return "assisted living";
-  if (/\bindependent living/i.test(text)) return "independent living";
-  if (/\brespite/i.test(text)) return "respite";
-  if (/\bhospice/i.test(text)) return "hospice";
-  return null;
-};
+const inferPrimaryCareTypeFromMessages = () => ASSISTED_ONLY_CARE_LEVEL;
 
 /**
  * Infer ZIP code from messages (5-digit US ZIP).
@@ -396,14 +371,13 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   // 4. Amenities (not tracked here, handled by GPT)
   // 5. Care level sub-needs (lower priority)
   const missingEssentials = [
-    ...(inferredPrimaryCareType ? [] : ["care type (assisted living, skilled nursing, memory care, etc.)"]),
     ...((inferredLocation || inferredZipCode) ? [] : ["location (city/state or ZIP code)"]),
     ...(inferredBudget ? [] : ["approximate monthly budget"]),
   ];
-  // We need care type + location at minimum to show results
-  const essentialTotalPoints = 3; // care type + location + budget
+  // Assisted-living-only mode: collect location + budget as essentials.
+  const essentialTotalPoints = 2; // location + budget
   const essentialPointCount = essentialTotalPoints - missingEssentials.length;
-  const hasCoreEssentials = Boolean(inferredPrimaryCareType && (inferredLocation || inferredZipCode));
+  const hasCoreEssentials = Boolean(inferredLocation || inferredZipCode);
   const shouldReturnResults =
     explicitMatchNow ||
     (hasMatchIntent && hasCoreEssentials) ||
@@ -453,8 +427,8 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       `- Inferred location: ${inferredLocation || inferredZipCode || "NOT YET KNOWN"}.\n` +
       `- Inferred budget: ${inferredBudget ? `$${inferredBudget}/mo` : "NOT YET KNOWN"}.\n` +
       `- Missing essentials (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
-      `- PRIORITY ORDER for questions: (1) Care Type → (2) Location + ZIP → (3) Budget → (4) Amenities → (5) Care Level sub-needs.\n` +
-      `- CRITICAL: If care type is known, NEVER ask about or suggest the opposite type (e.g., if user said assisted living, never mention skilled nursing).\n` +
+      `- PRIORITY ORDER for questions: (1) Location + ZIP → (2) Budget → (3) Amenities → (4) Assisted-living sub-needs.\n` +
+      `- CRITICAL: We support assisted living only. Never ask for or suggest any other care type.\n` +
       `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until the user has sent **at least ${minMessagesBeforeJson}** messages, **unless** they clearly insist on seeing matches right now and you can honestly fill the JSON from the thread.\n` +
       `- If you are not outputting that JSON block yet, **do not** include those delimiters at all.\n` +
       `- Keep replies feeling human; one gentle question max when you need info.\n` +
@@ -509,7 +483,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. careLevels must be lowercase standard terms: "assisted living", "memory care", "independent living", "skilled nursing".\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -543,13 +517,11 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   if (rawPrefs) {
     const prefs = normalizeIntakePreferences(rawPrefs);
 
-    // Backfill primaryCareType from inference if GPT didn't extract it
-    if (prefs && !prefs.primaryCareType && inferredPrimaryCareType) {
-      prefs.primaryCareType = inferredPrimaryCareType;
-    }
-    // Ensure careLevels is consistent with primaryCareType
-    if (prefs && prefs.primaryCareType && (!prefs.careLevels || prefs.careLevels.length === 0)) {
-      prefs.careLevels = [prefs.primaryCareType];
+    // Enforce assisted-living-only mode.
+    if (prefs) {
+      prefs.primaryCareType = ASSISTED_ONLY_CARE_LEVEL;
+      prefs.careLevels = [ASSISTED_ONLY_CARE_LEVEL];
+      prefs.snfReadiness = false;
     }
 
     // Backfill ZIP code
@@ -686,5 +658,64 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     },
     ...(matchedFacilities != null && { matchedFacilities }),
     ...(matchedPreferences != null && { matchedPreferences }),
+  });
+});
+
+/**
+ * POST /api/chat/transcribe
+ * multipart/form-data: { file: audio/* }
+ */
+export const transcribeAudio = catchAsyncError(async (req, res, next) => {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    return next(
+      new ErrorHandler(
+        "Transcription is not configured (missing OPENAI_API_KEY on the server).",
+        503
+      )
+    );
+  }
+
+  const file = req.file;
+  if (!file || !file.buffer || file.size <= 0) {
+    return next(new ErrorHandler("Audio file is required.", 400));
+  }
+
+  const formData = new FormData();
+  const blob = new Blob([file.buffer], {
+    type: file.mimetype || "audio/webm",
+  });
+  formData.append("file", blob, file.originalname || "voice-input.webm");
+  formData.append("model", "gpt-4o-mini-transcribe");
+
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+  } catch (err) {
+    return next(
+      new ErrorHandler(err?.message || "Failed to reach OpenAI transcription API.", 502)
+    );
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const rawMsg = String(data?.error?.message || "").trim();
+    const isInvalidKey = /incorrect api key|invalid api key|api key/i.test(rawMsg);
+    const msg = isInvalidKey
+      ? "Transcription is temporarily unavailable due to OpenAI configuration."
+      : rawMsg || `OpenAI transcription error (${response.status})`;
+    return next(new ErrorHandler(msg, response.status >= 500 ? 502 : 400));
+  }
+
+  const transcript = String(data?.text || "").trim();
+  res.status(200).json({
+    success: true,
+    text: transcript,
   });
 });

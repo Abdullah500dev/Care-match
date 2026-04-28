@@ -47,22 +47,10 @@ const FIXED_AMENITY_OPTIONS = [
   "Respiratory support",
   "Dialysis access nearby",
 ];
-const FIXED_CARE_TYPE_OPTIONS = [
-  "Assisted Living",
-  "Skilled Nursing",
-  "Hospice Care",
-  "Physical Therapy",
-  "Memory Care",
-  "Independent Living",
-];
+const FIXED_CARE_TYPE_OPTIONS = ["Assisted Living"];
 
 const CARE_TYPE_ALIASES = {
   "assisted living": ["assisted living", "assisted"],
-  "skilled nursing": ["skilled nursing", "snf", "nursing home", "subacute"],
-  "memory care": ["memory care", "dementia", "alzheimer"],
-  "independent living": ["independent living", "independent"],
-  hospice: ["hospice"],
-  "physical therapy": ["physical therapy", "therapy"],
 };
 
 const AMENITY_ALIASES = {
@@ -718,12 +706,7 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     locRaw || String(carrieFilters?.searchLocation || "").trim();
   const location = buildEffectiveLocationQuery(baseLocation, zip);
 
-  const care_levels =
-    Array.isArray(filters.selectedCareTypes) && filters.selectedCareTypes.length > 0
-      ? filters.selectedCareTypes.map((x) => String(x).toLowerCase())
-      : Array.isArray(carrieFilters?.careLevels) && carrieFilters.careLevels.length > 0
-        ? carrieFilters.careLevels.map((x) => String(x).toLowerCase())
-        : ["assisted living"];
+  const care_levels = ["assisted living"];
 
   const amenities = [
     ...(Array.isArray(filters.selectedAmenities)
@@ -1223,6 +1206,19 @@ const CareExplorer = () => {
     };
 
     const matchesFacility = (facility, { amenityMode }) => {
+      const assistedOnlyLevels = [
+        ...(facility.careLevels || []).map((x) => normMatchToken(x)),
+        normMatchToken(facility.category),
+      ].filter(Boolean);
+      const hasAssistedLiving = assistedOnlyLevels.some(
+        (level) =>
+          level.includes("assisted living") ||
+          level.includes("assisted") ||
+          level.includes("retirement community") ||
+          level.includes("assisted living facility"),
+      );
+      if (!hasAssistedLiving) return false;
+
       if (locationQuery && !isZipOnlyLocationQuery) {
         // Use improved location matching that handles state names and abbreviations
         if (!addressMatchesLocation(facility.address, locationQuery)) return false;

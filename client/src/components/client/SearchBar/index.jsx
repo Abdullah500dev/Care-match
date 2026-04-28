@@ -9,7 +9,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { sendChatMessages } from "@/services/chatService";
+import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
 
 export default function SearchBar() {
   const navigate = useNavigate();
@@ -38,7 +38,6 @@ export default function SearchBar() {
   const transcribingToastIdRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const chatMessagesRef = useRef(chatMessages);
-  const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
   useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -222,41 +221,12 @@ export default function SearchBar() {
   };
 
   const transcribeAudio = async (audioBlob) => {
-    if (!OPENAI_API_KEY) {
-      const message = "Missing OpenAI key. Use browser voice recognition instead.";
-      toast.error("Voice transcription unavailable", { description: message });
-      return;
-    }
-
     setIsTranscribing(true);
     transcribingToastIdRef.current = toast.loading("Transcribing your voice...");
 
     try {
-      const file = new File([audioBlob], "voice-input.webm", {
-        type: audioBlob.type || "audio/webm",
-      });
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("model", "gpt-4o-mini-transcribe");
-
-      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => ({}));
-        const errorMessage =
-          errorPayload?.error?.message || "Transcription failed. Please try again.";
-        throw new Error(errorMessage);
-      }
-
-      const payload = await response.json();
-      const transcript = (payload?.text || "").trim();
+      const { data } = await transcribeAudioBlob(audioBlob);
+      const transcript = (data?.text || "").trim();
 
       if (!transcript) {
         const message = "No speech detected. Please try speaking clearly.";
@@ -340,11 +310,6 @@ export default function SearchBar() {
 
   const startRecording = async () => {
     clearTypingAnimation();
-
-    if (!OPENAI_API_KEY) {
-      startBrowserSpeechRecognition();
-      return;
-    }
 
     if (typeof MediaRecorder === "undefined") {
       startBrowserSpeechRecognition();
