@@ -955,6 +955,8 @@ const CareExplorer = () => {
     if (!fromCarrie || !carrieFilters) return;
     const maxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly) ?? 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
+    const minBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly) ?? 1000;
+    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(minBudget)));
     setFilters((prev) => ({
       ...prev,
       locationQuery: normalizeLocationFieldValue(
@@ -962,6 +964,7 @@ const CareExplorer = () => {
         carrieZipCode,
       ) || inferCityStateFromMatches(carrieMatches),
       zipCode: carrieZipCode,
+      budgetMin: safeMin,
       budgetMax: safeMax,
       selectedCareTypes: Array.isArray(carrieFilters.careLevels)
         ? mapSelectionsToOptions(

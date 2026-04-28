@@ -18,6 +18,10 @@ export function normalizeIntakePreferences(raw) {
   const amenityMustHaves = Array.isArray(raw.amenityMustHaves)
     ? raw.amenityMustHaves.map((x) => String(x).trim()).filter(Boolean)
     : [];
+  let budgetMinMonthly = null;
+  if (raw.budgetMinMonthly != null && raw.budgetMinMonthly !== "") {
+    budgetMinMonthly = parseBudgetLikeValue(raw.budgetMinMonthly);
+  }
   let budgetMaxMonthly = null;
   if (raw.budgetMaxMonthly != null && raw.budgetMaxMonthly !== "") {
     budgetMaxMonthly = parseBudgetLikeValue(raw.budgetMaxMonthly);
@@ -40,6 +44,7 @@ export function normalizeIntakePreferences(raw) {
   return {
     careLevels,
     amenityMustHaves,
+    budgetMinMonthly,
     budgetMaxMonthly,
     searchLocation,
     searchZipCode,

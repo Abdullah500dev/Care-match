@@ -93,6 +93,24 @@ const parseBoundedBudgetAmount = (value) => {
   return n;
 };
 
+const inferBudgetRangeFromText = (text) => {
+  const raw = String(text || "").toLowerCase().trim();
+  if (!raw) return null;
+
+  const range = raw.match(
+    /(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
+  );
+  if (!range?.[1] || !range?.[2]) return null;
+
+  const a = parseBoundedBudgetAmount(range[1]);
+  const b = parseBoundedBudgetAmount(range[2]);
+  if (a == null || b == null) return null;
+  const min = Math.min(a, b);
+  const max = Math.max(a, b);
+  if (min <= 0 || max <= 0) return null;
+  return { min, max };
+};
+
 const inferBudgetFromText = (text) => {
   const raw = String(text || "").toLowerCase().trim();
   if (!raw) return null;
@@ -122,6 +140,15 @@ const inferBudgetFromMessages = (msgs) => {
   for (let i = users.length - 1; i >= 0; i -= 1) {
     const parsed = inferBudgetFromText(users[i]);
     if (parsed != null && parsed > 0) return parsed;
+  }
+  return null;
+};
+
+const inferBudgetRangeFromMessages = (msgs) => {
+  const users = msgs.filter((m) => m.role === "user").map((m) => m.content || "");
+  for (let i = users.length - 1; i >= 0; i -= 1) {
+    const parsed = inferBudgetRangeFromText(users[i]);
+    if (parsed?.min != null && parsed?.max != null) return parsed;
   }
   return null;
 };
@@ -354,6 +381,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const preludeUsed = hasMatchIntent ? 0 : Math.min(PRELUDE_MAX_USER_MESSAGES, userMessageCount);
   const intakeAnswerCount = Math.max(0, userMessageCount - preludeUsed);
   const inferredBudget = inferBudgetFromMessages(sanitized);
+  const inferredBudgetRange = inferBudgetRangeFromMessages(sanitized);
   const inferredCareLevels = inferCareLevelsFromMessages(sanitized);
   const inferredPrimaryCareType = inferPrimaryCareTypeFromMessages(sanitized);
   const inferredLocation = inferLocationFromMessages(sanitized);
@@ -529,8 +557,26 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       prefs.searchZipCode = inferredZipCode;
     }
 
-    if (prefs && (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) && inferredBudget) {
+    if (
+      prefs &&
+      (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) &&
+      inferredBudget
+    ) {
       prefs.budgetMaxMonthly = inferredBudget;
+    }
+    if (
+      prefs &&
+      (prefs.budgetMinMonthly == null || prefs.budgetMinMonthly <= 0) &&
+      inferredBudgetRange?.min != null
+    ) {
+      prefs.budgetMinMonthly = inferredBudgetRange.min;
+    }
+    if (
+      prefs &&
+      (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) &&
+      inferredBudgetRange?.max != null
+    ) {
+      prefs.budgetMaxMonthly = inferredBudgetRange.max;
     }
     if (
       prefs &&
