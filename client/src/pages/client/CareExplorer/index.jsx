@@ -782,16 +782,16 @@ const CareExplorer = () => {
   const [page, setPage] = useState(1);
   const initialFilters = useMemo(
     () => ({
-      locationQuery: inferredCarrieLocationQuery,
-      zipCode: carrieZipCode,
-      searchQuery: "",
-      maxMiles: "",
-      budgetMin: 1000,
-      budgetMax: 15000,
-      selectedCareTypes: [],
-      selectedAvailability: ["Within 30 Days"],
-      selectedAmenities: [],
-      sortBy: "bestMatch",
+    locationQuery: inferredCarrieLocationQuery,
+    zipCode: carrieZipCode,
+    searchQuery: "",
+    maxMiles: "",
+    budgetMin: 1000,
+    budgetMax: 15000,
+    selectedCareTypes: [],
+    selectedAvailability: ["Within 30 Days"],
+    selectedAmenities: [],
+    sortBy: "bestMatch",
     }),
     [inferredCarrieLocationQuery, carrieZipCode],
   );
@@ -959,6 +959,8 @@ const CareExplorer = () => {
     if (!fromCarrie || !carrieFilters) return;
     const maxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly) ?? 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(maxBudget)));
+    const minBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly) ?? 1000;
+    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(minBudget)));
     setFilters((prev) => ({
       ...prev,
       locationQuery: normalizeLocationFieldValue(
@@ -966,6 +968,7 @@ const CareExplorer = () => {
         carrieZipCode,
       ) || inferCityStateFromMatches(carrieMatches),
       zipCode: carrieZipCode,
+      budgetMin: safeMin,
       budgetMax: safeMax,
       selectedCareTypes: Array.isArray(carrieFilters.careLevels)
         ? mapSelectionsToOptions(
@@ -1198,21 +1201,42 @@ const CareExplorer = () => {
       (activeFilters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
     );
 
-    return scopedFacilities.filter((f) => {
+    const getAmenityHits = (facility) => {
+      if (selectedAmenities.length === 0) return 0;
+      const pool = [
+        ...(facility.amenities || []).map(amenityText),
+        ...(facility.services || []).map(amenityText),
+        ...(facility.features || []).map(amenityText),
+        String(facility.description || ""),
+        String(facility.name || ""),
+      ]
+        .map((x) => normMatchToken(x))
+        .filter(Boolean);
+
+      return selectedAmenities.filter((a) => {
+        const variants = amenityMatchVariants(a);
+        if (variants.length === 0) return true;
+        return variants.some((want) =>
+          pool.some((p) => p.includes(want) || want.includes(p)),
+        );
+      }).length;
+    };
+
+    const matchesFacility = (facility, { amenityMode }) => {
       if (locationQuery && !isZipOnlyLocationQuery) {
         // Use improved location matching that handles state names and abbreviations
-        if (!addressMatchesLocation(f.address, locationQuery)) return false;
+        if (!addressMatchesLocation(facility.address, locationQuery)) return false;
       }
 
       if (q) {
         const text =
-          `${f.name || ""} ${f.category || ""} ${f.address || ""} ${(f.features || []).join(" ")}`.toLowerCase();
+          `${facility.name || ""} ${facility.category || ""} ${facility.address || ""} ${(facility.features || []).join(" ")}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
 
-      if (f.priceMin != null || f.priceMax != null) {
-        const low = f.priceMin ?? f.priceMax;
-        const high = f.priceMax ?? f.priceMin;
+      if (facility.priceMin != null || facility.priceMax != null) {
+        const low = facility.priceMin ?? facility.priceMax;
+        const high = facility.priceMax ?? facility.priceMin;
         if (low != null && high != null) {
           const overlaps = low <= budgetMax && high >= budgetMin;
           if (!overlaps) return false;
@@ -1221,8 +1245,8 @@ const CareExplorer = () => {
 
       if (selectedCare.size > 0) {
         const levels = [
-          ...(f.careLevels || []).map((x) => normMatchToken(x)),
-          normMatchToken(f.category),
+          ...(facility.careLevels || []).map((x) => normMatchToken(x)),
+          normMatchToken(facility.category),
         ].filter(Boolean);
         const hasCare = [...selectedCare].some((c) => {
           const cn = normMatchToken(c);
@@ -1233,38 +1257,34 @@ const CareExplorer = () => {
       }
 
       if (selectedAmenities.length > 0) {
-        const pool = [
-          ...(f.amenities || []).map(amenityText),
-          ...(f.services || []).map(amenityText),
-          ...(f.features || []).map(amenityText),
-          String(f.description || ""),
-          String(f.name || ""),
-        ]
-          .map((x) => normMatchToken(x))
-          .filter(Boolean);
-        const hasAllMustHaves = selectedAmenities.every((a) => {
-          const variants = amenityMatchVariants(a);
-          if (variants.length === 0) return true;
-          return variants.some((want) =>
-            pool.some((p) => p.includes(want) || want.includes(p)),
-          );
-        });
-        if (!hasAllMustHaves) return false;
+        const hits = getAmenityHits(facility);
+        if (amenityMode === "all") {
+          if (hits !== selectedAmenities.length) return false;
+        } else if (amenityMode === "half") {
+          const threshold = Math.max(1, Math.ceil(selectedAmenities.length * 0.5));
+          if (hits < threshold) return false;
+        }
       }
 
       if (selectedAvailability.size > 0) {
-        const a = String(f.availability || "").toLowerCase();
+        const a = String(facility.availability || "").toLowerCase();
         if (a && !selectedAvailability.has(a)) return false;
       }
 
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        const facilityMiles = computeFacilityMiles(f, locationCenterCoords);
+        const facilityMiles = computeFacilityMiles(facility, locationCenterCoords);
         if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
           return false;
       }
 
       return true;
-    });
+    };
+
+    const strict = scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "all" }));
+    if (selectedAmenities.length > 0 && strict.length === 0) {
+      return scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "half" }));
+    }
+    return strict;
   }, [activeFilters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
 
   const rankedFacilities = useMemo(() => {
