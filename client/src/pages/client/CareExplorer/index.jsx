@@ -283,6 +283,13 @@ function normalizeFacilityForCard(m) {
       }
     }
   }
+  const placeId =
+    typeof googlePlaces.place_id === "string" ? googlePlaces.place_id.trim() : "";
+  if (!imageSrc && placeId) {
+    imageSrc = resolveFacilityImageUrl(
+      `/api/facilities/google-place-photo-by-place-id?place_id=${encodeURIComponent(placeId)}&maxwidth=1200`,
+    );
+  }
   const mapsKey = getGoogleMapsApiKey();
   if (
     !imageSrc &&
@@ -620,6 +627,70 @@ function averageFacilityPrice(facility) {
   return Number.POSITIVE_INFINITY;
 }
 
+function facilityDedupKey(facility) {
+  const normalize = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+
+  const name = normalize(facility?.name);
+  const address = normalize(facility?.address);
+  const zip = normalize(facility?.zipCode);
+  const phone = normalize(facility?.phone);
+
+  // Prefer name + address for canonical facility identity.
+  if (name && address) return `name:${name}|addr:${address}`;
+  // Fallbacks when address is missing.
+  if (name && zip) return `name:${name}|zip:${zip}`;
+  if (name && phone) return `name:${name}|phone:${phone}`;
+  if (name) return `name:${name}`;
+  return String(facility?.key || "").trim();
+}
+
+function facilityCompletenessScore(facility) {
+  let score = 0;
+  if (String(facility?.address || "").trim()) score += 1;
+  if (String(facility?.phone || "").trim() && String(facility?.phone || "").trim() !== "N/A") score += 1;
+  if (String(facility?.website || "").trim()) score += 1;
+  if (String(facility?.imageSrc || "").trim() && String(facility?.imageSrc || "").trim() !== DEFAULT_CARD_IMAGE) score += 1;
+  if (Number.isFinite(Number(facility?.reviewCount)) && Number(facility?.reviewCount) > 0) score += 1;
+  if (Number.isFinite(Number(facility?.rating)) && Number(facility?.rating) > 0) score += 1;
+  if ((facility?.features || []).length > 0) score += 1;
+  if ((facility?.amenities || []).length > 0) score += 1;
+  if ((facility?.careLevels || []).length > 0) score += 1;
+  return score;
+}
+
+function dedupeFacilities(facilities) {
+  const selected = new Map();
+
+  (Array.isArray(facilities) ? facilities : []).forEach((facility) => {
+    const dedupKey = facilityDedupKey(facility);
+    if (!dedupKey) return;
+
+    const existing = selected.get(dedupKey);
+    if (!existing) {
+      selected.set(dedupKey, facility);
+      return;
+    }
+
+    const existingMatch = Number(existing?.matchPercent) || 0;
+    const incomingMatch = Number(facility?.matchPercent) || 0;
+    const existingRichness = facilityCompletenessScore(existing);
+    const incomingRichness = facilityCompletenessScore(facility);
+
+    if (
+      incomingMatch > existingMatch ||
+      (incomingMatch === existingMatch && incomingRichness > existingRichness)
+    ) {
+      selected.set(dedupKey, facility);
+    }
+  });
+
+  return Array.from(selected.values());
+}
+
 function sanitizeMonthlyBudgetValue(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
@@ -734,6 +805,7 @@ const CareExplorer = () => {
   const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const discoverRunIdRef = useRef(0);
+  const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
@@ -826,6 +898,10 @@ const CareExplorer = () => {
     if (directoryFacilities.length) return directoryFacilities;
     return [];
   }, [discoverOverrideRows, liveFacilities, directoryFacilities]);
+  const uniqueBaseFacilities = useMemo(
+    () => dedupeFacilities(baseFacilities),
+    [baseFacilities],
+  );
 
   const careTypeOptions = useMemo(() => {
     return FIXED_CARE_TYPE_OPTIONS;
@@ -835,13 +911,13 @@ const CareExplorer = () => {
   const availabilityOptions = useMemo(() => {
     const base = [
       ...new Set(
-        baseFacilities
+        uniqueBaseFacilities
           .map((f) => String(f.availability || "").trim())
           .filter(Boolean),
       ),
     ];
     return base.length ? base : ["Immediate", "Within 30 Days", "Future Planning"];
-  }, [baseFacilities]);
+  }, [uniqueBaseFacilities]);
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
@@ -963,6 +1039,11 @@ const CareExplorer = () => {
       skipDiscoverMountRef.current = false;
       return;
     }
+    // Keep Carrie results stable on initial load; only refresh live results
+    // after the user intentionally changes filters in this view.
+    if (fromCarrie && !hasUserTouchedFiltersRef.current) {
+      return;
+    }
 
     const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
     if (!body.zip_code || !String(body.location || "").trim()) {
@@ -1006,6 +1087,7 @@ const CareExplorer = () => {
     filters.sortBy,
     carrieFilters,
     carrieLocationQuery,
+    fromCarrie,
   ]);
 
   useEffect(() => {
@@ -1015,12 +1097,12 @@ const CareExplorer = () => {
   }, [discoverOverrideRows]);
 
   const scopedFacilities = useMemo(() => {
-    if (scope !== "saved") return baseFacilities;
+    if (scope !== "saved") return uniqueBaseFacilities;
     const favoriteSet = new Set(favoriteFacilityIds.map((id) => String(id)));
-    return baseFacilities.filter((f) =>
+    return uniqueBaseFacilities.filter((f) =>
       favoriteSet.has(String(f.key ?? f.facilityId ?? f.name)),
     );
-  }, [scope, baseFacilities, favoriteFacilityIds]);
+  }, [scope, uniqueBaseFacilities, favoriteFacilityIds]);
 
   const filteredFacilities = useMemo(() => {
     const q = String(filters.searchQuery || "")
@@ -1641,9 +1723,13 @@ const CareExplorer = () => {
             >
               <FiltersSidebar
                 filters={filters}
-                onFiltersChange={setFilters}
+                onFiltersChange={(nextFilters) => {
+                  hasUserTouchedFiltersRef.current = true;
+                  setFilters(nextFilters);
+                }}
                 onReset={() => {
                   discoverRunIdRef.current += 1;
+                  hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);
                   setDiscoverOverrideRows(undefined);
                   setFilters({
