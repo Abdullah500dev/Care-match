@@ -1489,10 +1489,14 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   }
 
   const body = req.body || {};
+  const zipCode = String(body.zip_code || "").trim();
+  const location = String(body.location || "").trim() || zipCode;
+  const careLevelsRaw = Array.isArray(body.care_levels) ? body.care_levels : [];
+  const careLevels = careLevelsRaw.length ? careLevelsRaw : ["assisted living"];
   const payload = {
-    zip_code: String(body.zip_code || "").trim(),
-    location: String(body.location || "").trim(),
-    care_levels: Array.isArray(body.care_levels) ? body.care_levels : [],
+    zip_code: zipCode,
+    location,
+    care_levels: careLevels,
     amenities: Array.isArray(body.amenities) ? body.amenities : [],
     services: Array.isArray(body.services) ? body.services : [],
     keywords: Array.isArray(body.keywords) ? body.keywords : [],

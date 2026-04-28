@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { MessageCircle, MapPin, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BudgetRangeSlider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { getUser } from "@/store/auth/authSlice";
 import {
   getGoogleMapsApiKey,
   loadGoogleMapsScript,
@@ -10,7 +12,13 @@ import {
 
 // ─── Google Places Autocomplete Input ───────────────────────────────────────
 
-function LocationAutocompleteInput({ value, onChange, placeholder, className }) {
+function LocationAutocompleteInput({
+  value,
+  onChange,
+  onPlaceSelected,
+  placeholder,
+  className,
+}) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -42,6 +50,7 @@ function LocationAutocompleteInput({ value, onChange, placeholder, className }) 
       const admin1Short   = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name;
       const admin1Long    = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name;
       const country       = comps.find((c) => c.types.includes("country"))?.short_name;
+      const postalCode    = comps.find((c) => c.types.includes("postal_code"))?.long_name;
 
       if (locality && admin1Short && country === "US") {
         label = `${locality}, ${admin1Short}`;
@@ -52,10 +61,17 @@ function LocationAutocompleteInput({ value, onChange, placeholder, className }) 
       }
 
       onChange(label);
+
+      onPlaceSelected?.({
+        city: locality || "",
+        state: admin1Short || admin1Long || "",
+        zipCode: postalCode || "",
+        country: country || "",
+      });
     });
 
     autocompleteRef.current = ac;
-  }, [ready, onChange]);
+  }, [ready, onChange, onPlaceSelected]);
 
   return (
     <div className="relative">
@@ -123,8 +139,11 @@ const FiltersSidebar = ({
   filters,
   onFiltersChange,
   onReset,
+  careTypeOptions = careTypes,
   amenityOptions = amenities,
   onAskCarrie,
+  onApplyFilters,
+  isApplying = false,
 }) => {
   const DEFAULT_AMENITIES_VISIBLE = 12;
 
@@ -134,10 +153,50 @@ const FiltersSidebar = ({
   const sortBy = filters?.sortBy ?? "bestMatch";
   const budgetMin = Number.isFinite(filters?.budgetMin) ? filters.budgetMin : 1000;
   const budgetMax = Number.isFinite(filters?.budgetMax) ? filters.budgetMax : 15000;
+  const selectedCareTypes = Array.isArray(filters?.selectedCareTypes)
+    ? filters.selectedCareTypes
+    : [];
   const selectedAmenities = Array.isArray(filters?.selectedAmenities)
     ? filters.selectedAmenities
     : [];
   const [showAllAmenities, setShowAllAmenities] = useState(false);
+  const lastAutofillZipRef = useRef("");
+  const lastAutofillLocationRef = useRef("");
+
+  useEffect(() => {
+    const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+    if (zip.length !== 5) return;
+
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) return;
+    if (!window.google?.maps?.Geocoder) return;
+
+    const shouldAutofillLocation =
+      !String(locationQuery || "").trim() ||
+      (lastAutofillZipRef.current === zip &&
+        lastAutofillLocationRef.current === String(locationQuery || ""));
+    if (!shouldAutofillLocation) return;
+
+    lastAutofillZipRef.current = zip;
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode({ address: zip }, (results, status) => {
+      if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
+      const comps = results[0]?.address_components || [];
+      const city =
+        comps.find((c) => c.types.includes("locality"))?.long_name ||
+        comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+        comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+        "";
+      const state = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
+      const country = comps.find((c) => c.types.includes("country"))?.short_name || "";
+
+      if (!city || !state || country !== "US") return;
+      const nextLocation = `${city}, ${state}`;
+      lastAutofillLocationRef.current = nextLocation;
+      setFilters({ locationQuery: nextLocation });
+    });
+  }, [zipCode, locationQuery]);
 
   const normalizedAmenityOptions = [...new Set(
     amenityOptions
@@ -170,6 +229,15 @@ const FiltersSidebar = ({
             placeholder="City or state"
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
+            onPlaceSelected={(payload) => {
+              const incomingZip = String(payload?.zipCode || "")
+                .replace(/\D/g, "")
+                .slice(0, 5);
+              if (incomingZip.length === 5) {
+                lastAutofillZipRef.current = incomingZip;
+                setFilters({ zipCode: incomingZip });
+              }
+            }}
           />
         </div>
 
@@ -281,8 +349,24 @@ const FiltersSidebar = ({
 
         <button
           type="button"
+          onClick={() => onApplyFilters?.()}
+          disabled={isApplying}
+          className="mt-5 w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+        >
+          {isApplying ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <span className="h-4 w-4 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+              Applying...
+            </span>
+          ) : (
+            "Apply Filters"
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={onReset}
-          className="mt-5 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
+          className="mt-3 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
         >
           Reset All Filters
         </button>
@@ -333,15 +417,15 @@ const FiltersSidebar = ({
               </p>
             </div>
           </div>
-          <button
+          {/* <button
             type="button"
             onClick={() => onAskCarrie?.()}
             className="w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={{ boxShadow: "0 4px 14px rgba(0, 0, 0, 0.25)" }}
           >
             <MessageCircle className="w-4 h-4" />
-            Ask Carrie
-          </button>
+            Ask {userName || "CareMatch"}
+          </button> */}
         </div>
     </aside>
   );

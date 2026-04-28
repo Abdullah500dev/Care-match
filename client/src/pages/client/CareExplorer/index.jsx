@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { ChevronDown, ChevronUp, Info } from "lucide-react";
+import { ChevronDown, ChevronUp, Info, MessageCircle } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { apiClient } from "../../../services/api";
@@ -33,6 +33,7 @@ const DEFAULT_PRICE_RANGE = "Price on call";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
+const AUTO_APPLY_FILTERS = false;
 const FIXED_AMENITY_OPTIONS = [
   "Private room preferred",
   "Pet-friendly",
@@ -779,18 +780,28 @@ const CareExplorer = () => {
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState({
-    locationQuery: inferredCarrieLocationQuery,
-    zipCode: carrieZipCode,
-    searchQuery: "",
-    maxMiles: "",
-    budgetMin: 1000,
-    budgetMax: 15000,
-    selectedCareTypes: [],
-    selectedAvailability: ["Within 30 Days"],
-    selectedAmenities: [],
-    sortBy: "bestMatch",
-  });
+  const initialFilters = useMemo(
+    () => ({
+      locationQuery: inferredCarrieLocationQuery,
+      zipCode: carrieZipCode,
+      searchQuery: "",
+      maxMiles: "",
+      budgetMin: 1000,
+      budgetMax: 15000,
+      selectedCareTypes: [],
+      selectedAvailability: ["Within 30 Days"],
+      selectedAmenities: [],
+      sortBy: "bestMatch",
+    }),
+    [inferredCarrieLocationQuery, carrieZipCode],
+  );
+
+  // `filters` are the draft values (typing/selecting in the sidebar)
+  const [filters, setFilters] = useState(initialFilters);
+  // `appliedFilters` are what the listing uses (updated only on Apply)
+  const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+
+  const activeFilters = AUTO_APPLY_FILTERS ? filters : appliedFilters;
   const mapContainerRef = useRef(null);
   const listingTopRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -805,12 +816,23 @@ const CareExplorer = () => {
   /** `undefined` = use Carrie / directory; array = last live discover from filters (may be empty). */
   const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const discoverThinkingMessages = useMemo(
+    () => [
+      "Reviewing care preferences",
+      "Comparing nearby communities",
+      "Ranking the strongest matches",
+      "Checking care and lifestyle fit",
+    ],
+    [],
+  );
+  const [discoverThinkingIndex, setDiscoverThinkingIndex] = useState(0);
   const discoverRunIdRef = useRef(0);
   const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
+
 
   const scrollToListingTop = () => {
     if (listingTopRef.current) {
@@ -1053,6 +1075,10 @@ const CareExplorer = () => {
       skipDiscoverMountRef.current = false;
       return;
     }
+
+    if (!AUTO_APPLY_FILTERS) {
+      return;
+    }
     // Keep Carrie results stable on initial load; only refresh live results
     // after the user intentionally changes filters in this view.
     if (fromCarrie && !hasUserTouchedFiltersRef.current) {
@@ -1104,6 +1130,37 @@ const CareExplorer = () => {
     fromCarrie,
   ]);
 
+  const handleApplyFilters = async () => {
+    hasUserTouchedFiltersRef.current = true;
+    setAppliedFilters(filters);
+    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
+    if (!body.zip_code || !String(body.location || "").trim()) {
+      toast.error("Please provide a city/state and ZIP code to search.");
+      return;
+    }
+
+    const runId = ++discoverRunIdRef.current;
+    setDiscoverLoading(true);
+    try {
+      const { data } = await apiClient.post("/api/facilities/discover", body);
+      if (runId !== discoverRunIdRef.current) return;
+      const rows = Array.isArray(data?.facilities) ? data.facilities : [];
+      setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
+    } catch (err) {
+      if (runId !== discoverRunIdRef.current) return;
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Request failed";
+      toast.error("Could not refresh listings", { description: String(msg) });
+    } finally {
+      if (runId === discoverRunIdRef.current) {
+        setDiscoverLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     if (discoverOverrideRows !== undefined) {
       setPage(1);
@@ -1119,26 +1176,26 @@ const CareExplorer = () => {
   }, [scope, uniqueBaseFacilities, favoriteFacilityIds]);
 
   const filteredFacilities = useMemo(() => {
-    const q = String(filters.searchQuery || "")
+    const q = String(activeFilters.searchQuery || "")
       .trim()
       .toLowerCase();
-    const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
+    const locationQuery = String(activeFilters.locationQuery || carrieLocationQuery || "")
       .trim()
       .toLowerCase();
     const isZipOnlyLocationQuery = /^\d{5}$/.test(locationQuery);
     const maxMilesNum = Number.parseFloat(
-      String(filters.maxMiles || "").trim(),
+      String(activeFilters.maxMiles || "").trim(),
     );
-    const budgetMin = Number(filters.budgetMin) || 1000;
-    const budgetMax = Number(filters.budgetMax) || 15000;
+    const budgetMin = Number(activeFilters.budgetMin) || 1000;
+    const budgetMax = Number(activeFilters.budgetMax) || 15000;
     const selectedCare = new Set(
-      (filters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
+      (activeFilters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
     );
-    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
+    const selectedAmenities = (activeFilters.selectedAmenities || []).map((x) =>
       String(x).toLowerCase(),
     );
     const selectedAvailability = new Set(
-      (filters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
+      (activeFilters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
     );
 
     return scopedFacilities.filter((f) => {
@@ -1208,25 +1265,25 @@ const CareExplorer = () => {
 
       return true;
     });
-  }, [filters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
+  }, [activeFilters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
 
   const rankedFacilities = useMemo(() => {
-    const locationQuery = String(filters.locationQuery || carrieLocationQuery || "")
+    const locationQuery = String(activeFilters.locationQuery || carrieLocationQuery || "")
       .trim()
       .toLowerCase();
-    const searchQuery = String(filters.searchQuery || "").trim().toLowerCase();
-    const selectedCare = (filters.selectedCareTypes || []).map((x) =>
+    const searchQuery = String(activeFilters.searchQuery || "").trim().toLowerCase();
+    const selectedCare = (activeFilters.selectedCareTypes || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
+    const selectedAmenities = (activeFilters.selectedAmenities || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const selectedAvailability = (filters.selectedAvailability || []).map((x) =>
+    const selectedAvailability = (activeFilters.selectedAvailability || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const budgetMin = Number(filters.budgetMin) || 1000;
-    const budgetMax = Number(filters.budgetMax) || 15000;
-    const sortBy = String(filters.sortBy || "bestMatch");
+    const budgetMin = Number(activeFilters.budgetMin) || 1000;
+    const budgetMax = Number(activeFilters.budgetMax) || 15000;
+    const sortBy = String(activeFilters.sortBy || "bestMatch");
 
     const getRelevanceScore = (facility) => {
       let score = 0;
@@ -1335,7 +1392,7 @@ const CareExplorer = () => {
         if (backendDiff !== 0) return backendDiff;
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
-  }, [filteredFacilities, filters, carrieLocationQuery, locationCenterCoords]);
+  }, [filteredFacilities, activeFilters, carrieLocationQuery, locationCenterCoords]);
 
   const mapFacilities = useMemo(
     () =>
@@ -1362,62 +1419,62 @@ const CareExplorer = () => {
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     buildEffectiveLocationQuery(
-      String(filters.locationQuery || "").trim() || carrieLocationQuery,
-      filters.zipCode,
+      String(appliedFilters.locationQuery || "").trim() || carrieLocationQuery,
+      appliedFilters.zipCode,
     ) ||
-    String(filters.searchQuery || "").trim() ||
+    String(appliedFilters.searchQuery || "").trim() ||
     "your area";
   const summaryCareText =
-    filters.selectedCareTypes.length > 0
-      ? filters.selectedCareTypes.join(", ")
+    appliedFilters.selectedCareTypes.length > 0
+      ? appliedFilters.selectedCareTypes.join(", ")
       : "senior living";
-  const summaryBudgetText = `$${Number(filters.budgetMin || 1000).toLocaleString()}-$${Number(filters.budgetMax || 15000).toLocaleString()}/mo`;
+  const summaryBudgetText = `$${Number(appliedFilters.budgetMin || 1000).toLocaleString()}-$${Number(appliedFilters.budgetMax || 15000).toLocaleString()}/mo`;
   const summaryNeedsText =
-    filters.selectedAmenities.length > 0
-      ? filters.selectedAmenities.slice(0, 2).join(", ")
+    appliedFilters.selectedAmenities.length > 0
+      ? appliedFilters.selectedAmenities.slice(0, 2).join(", ")
       : "your selected preferences";
   const hasNonDefaultAvailability =
-    filters.selectedAvailability.length > 0 &&
+    appliedFilters.selectedAvailability.length > 0 &&
     !(
-      filters.selectedAvailability.length === 1 &&
-      String(filters.selectedAvailability[0]).trim().toLowerCase() === "within 30 days"
+      appliedFilters.selectedAvailability.length === 1 &&
+      String(appliedFilters.selectedAvailability[0]).trim().toLowerCase() === "within 30 days"
     );
   const promptCriteria = [];
   if (locationLabelForHeader) {
     promptCriteria.push({ label: "Location", value: locationLabelForHeader });
   }
-  if (filters.selectedCareTypes.length > 0) {
+  if (appliedFilters.selectedCareTypes.length > 0) {
     promptCriteria.push({
       label: "Care Type",
-      value: filters.selectedCareTypes.join(", "),
+      value: appliedFilters.selectedCareTypes.join(", "),
     });
   }
   if (
     sanitizeMonthlyBudgetValue(carrieFilters?.budgetMaxMonthly) != null ||
-    Number(filters.budgetMin) !== 1000 ||
-    Number(filters.budgetMax) !== 15000
+    Number(appliedFilters.budgetMin) !== 1000 ||
+    Number(appliedFilters.budgetMax) !== 15000
   ) {
     promptCriteria.push({
       label: "Budget",
       value: summaryBudgetText,
     });
   }
-  if (String(filters.maxMiles || "").trim()) {
+  if (String(appliedFilters.maxMiles || "").trim()) {
     promptCriteria.push({
       label: "Distance",
-      value: `Within ${String(filters.maxMiles).trim()} miles`,
+      value: `Within ${String(appliedFilters.maxMiles).trim()} miles`,
     });
   }
-  if (filters.selectedAmenities.length > 0) {
+  if (appliedFilters.selectedAmenities.length > 0) {
     promptCriteria.push({
       label: "Must-Have Needs",
-      value: filters.selectedAmenities.join(", "),
+      value: appliedFilters.selectedAmenities.join(", "),
     });
   }
   if (hasNonDefaultAvailability) {
     promptCriteria.push({
       label: "Move-In Timeline",
-      value: filters.selectedAvailability.join(", "),
+      value: appliedFilters.selectedAvailability.join(", "),
     });
   }
   const totalPages = Math.max(
@@ -1630,6 +1687,86 @@ const CareExplorer = () => {
           backgroundPosition: "145% 100%, center",
         }}
       >
+        {discoverLoading && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white/60 px-4 py-8 backdrop-blur-sm">
+            <div
+              className="w-full max-w-lg rounded-3xl border border-[#E2E8F0] bg-white px-8 py-10 text-center shadow-xl sm:px-10 sm:py-12"
+              style={{
+                boxShadow:
+                  "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
+              }}
+            >
+              <div className="relative mb-8 flex h-24 items-center justify-center">
+                <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
+                  <MessageCircle className="h-9 w-9" />
+                </div>
+                <div
+                  className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  style={{ animationDelay: "0ms" }}
+                >
+                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                </div>
+                <div
+                  className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  style={{ animationDelay: "180ms" }}
+                >
+                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                </div>
+                <div
+                  className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  style={{ animationDelay: "360ms" }}
+                >
+                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                </div>
+                <div
+                  className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  style={{ animationDelay: "540ms" }}
+                >
+                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                </div>
+              </div>
+              <h1 className="mb-3 text-2xl font-bold italic text-[#1D293D] sm:text-3xl">
+                Finding Your Matches...
+              </h1>
+              <p className="mx-auto mb-6 max-w-sm text-base text-[#64748b]">
+                {discoverThinkingMessages[discoverThinkingIndex]}
+              </p>
+              <ul className="mx-auto max-w-xs space-y-2 text-left text-[#334155]">
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
+                  Matching care needs...
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
+                  Checking availability...
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
+                  Calculating match scores....
+                </li>
+              </ul>
+              <div className="mt-7 flex items-center justify-center gap-2 text-sm text-slate-600">
+                <span className="h-4 w-4 rounded-full border-2 border-[#94a3b8]/40 border-t-[#00CFF4] animate-spin" />
+                Please wait
+              </div>
+            </div>
+          </div>
+        )}
+        <style jsx global>{`
+          @keyframes careExplorerFloatLeftRight {
+            0%, 100% {
+              transform: translateX(0px) translateY(0px);
+            }
+            50% {
+              transform: translateX(3px) translateY(-2px);
+            }
+          }
+
+          .animate-float-left-right {
+            animation: careExplorerFloatLeftRight 2.2s ease-in-out infinite;
+            will-change: transform;
+          }
+        `}</style>
         <CareExplorerBar
           view={view}
           onViewChange={setView}
@@ -1746,22 +1883,14 @@ const CareExplorer = () => {
                   hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);
                   setDiscoverOverrideRows(undefined);
-                  setFilters({
-                    locationQuery: inferredCarrieLocationQuery,
-                    zipCode: carrieZipCode,
-                    searchQuery: "",
-                    maxMiles: "",
-                    budgetMin: 1000,
-                    budgetMax: 15000,
-                    selectedCareTypes: [],
-                    selectedAvailability: ["Within 30 Days"],
-                    selectedAmenities: [],
-                    sortBy: "bestMatch",
-                  });
+                  setFilters(initialFilters);
+                  setAppliedFilters(initialFilters);
                 }}
                 careTypeOptions={careTypeOptions}
                 amenityOptions={amenityOptions}
                 onAskCarrie={handleAskCarrie}
+                onApplyFilters={handleApplyFilters}
+                isApplying={discoverLoading}
               />
             </div>
           </div>
@@ -1776,7 +1905,40 @@ const CareExplorer = () => {
                   : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
                 }`}
             >
-              {listingItems.map((f) => (
+              {discoverLoading ? (
+                <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-8">
+                  <div className="mx-auto max-w-xl rounded-3xl border border-[#00CFF4]/20 bg-gradient-to-br from-white to-[#F0FBFF] px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] sm:px-6">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#00CFF4]/15 text-[#00A8C8] shadow-[0_10px_24px_rgba(0,207,244,0.16)]">
+                        <MessageCircle className="h-5 w-5" aria-hidden />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-[#132329]">Finding your best matches</p>
+                          <div className="flex items-center gap-1" aria-hidden>
+                            <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] animate-bounce" />
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] animate-bounce"
+                              style={{ animationDelay: "0.18s" }}
+                            />
+                            <span
+                              className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] animate-bounce"
+                              style={{ animationDelay: "0.36s" }}
+                            />
+                          </div>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {discoverThinkingMessages[discoverThinkingIndex]}
+                        </p>
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]">
+                          <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-[#00CFF4] via-[#60A5FA] to-[#818CF8] animate-pulse" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                listingItems.map((f) => (
                 <div
                   key={f.key ?? f.matchPercent}
                   className={
@@ -1810,9 +1972,10 @@ const CareExplorer = () => {
                     onToggleFavorite={handleToggleFavorite}
                   />
                 </div>
-              ))}
+                ))
+              )}
 
-              {listingItems.length === 0 && (
+              {!discoverLoading && listingItems.length === 0 && (
                 <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-6 text-center text-sm text-[#64748b]">
                   No facilities available yet for the selected filters.
                 </div>
