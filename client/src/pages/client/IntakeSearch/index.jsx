@@ -209,6 +209,7 @@ export default function IntakeSearch() {
           if (cancelled) return;
           const mappedFilters = {
             locationQuery: matcherPayload.searchLocation,
+            budgetMinMonthly: Number(formData.budgetMin) || null,
             budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
             maxDistanceMiles: matcherPayload.maxDistanceMiles,
             careLevels: matcherPayload.careLevels,
@@ -236,6 +237,7 @@ export default function IntakeSearch() {
               carrieMatches: [],
               carrieFilters: {
                 locationQuery: String(formData.location || "").trim(),
+                budgetMinMonthly: Number(formData.budgetMin) || null,
                 budgetMaxMonthly: Number(formData.budgetMax) || null,
                 maxDistanceMiles: Number(formData.maxTravelMiles) || null,
                 careLevels:

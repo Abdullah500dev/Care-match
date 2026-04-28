@@ -26,12 +26,12 @@ const Slider = React.forwardRef(({ className, ...props }, ref) => {
 })
 Slider.displayName = SliderPrimitive.Root.displayName
 
-/** Uncontrolled range slider with two thumbs for budget min/max. Uses defaultValue so both thumbs stay draggable. */
+/** Controlled range slider with two thumbs for budget min/max. */
 function BudgetRangeSlider({ budgetMin, budgetMax, min, max, step, onRangeChange, className }) {
   return (
     <SliderPrimitive.Root
       className={cn("relative flex w-full touch-none select-none items-center py-4", className)}
-      defaultValue={[budgetMin, budgetMax]}
+      value={[budgetMin, budgetMax]}
       min={min}
       max={max}
       step={step}

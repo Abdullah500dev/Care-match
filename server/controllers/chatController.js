@@ -483,7 +483,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.\n6. If the user gives a budget RANGE (e.g. "$10,000 to $12,000", "between 10k and 12k", "$10,000-$12,000"), set budgetMinMonthly to the lower number and budgetMaxMonthly to the higher number. If they only say "under X" or "up to X", set budgetMaxMonthly to X and leave budgetMinMonthly as null.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -512,6 +512,14 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       "I’ve collected enough from our chat, so I’m now showing best-fit facilities from your details.";
   }
 
+  if (rawPrefs && inferredBudgetRange?.min != null) {
+    rawPrefs.budgetMinMonthly = inferredBudgetRange.min;
+  }
+  if (rawPrefs && inferredBudgetRange?.max != null) {
+    rawPrefs.budgetMaxMonthly = inferredBudgetRange.max;
+  }
+  console.log("[sendChat] budget patch:", { inferredBudgetRange, rawMin: rawPrefs?.budgetMinMonthly, rawMax: rawPrefs?.budgetMaxMonthly });
+
   let matchedFacilities = null;
   let matchedPreferences = null;
   if (rawPrefs) {
@@ -536,18 +544,10 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     ) {
       prefs.budgetMaxMonthly = inferredBudget;
     }
-    if (
-      prefs &&
-      (prefs.budgetMinMonthly == null || prefs.budgetMinMonthly <= 0) &&
-      inferredBudgetRange?.min != null
-    ) {
+    if (prefs && inferredBudgetRange?.min != null) {
       prefs.budgetMinMonthly = inferredBudgetRange.min;
     }
-    if (
-      prefs &&
-      (prefs.budgetMaxMonthly == null || prefs.budgetMaxMonthly <= 0) &&
-      inferredBudgetRange?.max != null
-    ) {
+    if (prefs && inferredBudgetRange?.max != null) {
       prefs.budgetMaxMonthly = inferredBudgetRange.max;
     }
     if (
