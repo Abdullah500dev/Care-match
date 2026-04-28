@@ -285,7 +285,7 @@ const Layout = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const INACTIVITY_MS = 60 * 1000;
+    const INACTIVITY_MS = 30 * 1000;
     const activityEvents = [
       "mousemove",
       "mousedown",
@@ -301,22 +301,46 @@ const Layout = ({ children }) => {
       }
     };
 
+    const openChatFromReminder = () => {
+      navigate("/", { state: { scrollTo: "search-bar" } });
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+      }, 250);
+    };
+
     const showHelpReminder = () => {
       if (isChatOpen) return;
-      reminderToastIdRef.current = toast("Do you need any help?", {
-        id: "carematch-help-reminder",
-        duration: 10000,
-        position: "bottom-right",
-        action: {
-          label: "Ask Carrie",
-          onClick: () => {
-            navigate("/", { state: { scrollTo: "search-bar" } });
-            window.setTimeout(() => {
-              window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
-            }, 250);
-          },
+      reminderToastIdRef.current = toast.custom(
+        () => (
+          <div className="relative -mr-6 mb-24 w-[340px] pb-8 animate-[carrieReminderIn_420ms_ease-out]">
+            <button
+              type="button"
+              onClick={openChatFromReminder}
+              className="relative ml-auto w-[calc(100%-2rem)] rounded-2xl bg-white px-5 py-4 text-left text-[15px] font-medium text-slate-900 shadow-[0_18px_40px_rgba(0,0,0,0.22)] outline-none ring-1 ring-black/5 transition hover:shadow-[0_22px_46px_rgba(0,0,0,0.26)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
+            >
+              Hi, I’m Carrie. What can I help you with?
+            </button>
+
+            <button
+              type="button"
+              onClick={openChatFromReminder}
+              className="absolute -bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_14px_28px_rgba(0,0,0,0.22)] ring-1 ring-black/10 transition hover:scale-105 hover:shadow-[0_18px_34px_rgba(0,0,0,0.26)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_2.2s_ease-in-out_infinite]"
+              aria-label="Open Carrie chat"
+            >
+              <img
+                src="/assets/images/favicon/favicon.svg"
+                alt="CareMatch"
+                className="h-9 w-9 object-contain"
+              />
+            </button>
+          </div>
+        ),
+        {
+          id: "carematch-help-reminder",
+          duration: 10000,
+          position: "bottom-right",
         },
-      });
+      );
     };
 
     const scheduleReminder = () => {
@@ -389,6 +413,28 @@ const Layout = ({ children }) => {
             }
             50% {
               transform: translateY(-4px);
+            }
+          }
+
+          @keyframes carrieReminderIn {
+            from {
+              opacity: 0;
+              transform: translateY(14px) scale(0.98);
+              filter: blur(1px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0) scale(1);
+              filter: blur(0);
+            }
+          }
+
+          @keyframes carrieIconBounce {
+            0%, 100% {
+              transform: translateY(0);
+            }
+            50% {
+              transform: translateY(-6px);
             }
           }
         `}

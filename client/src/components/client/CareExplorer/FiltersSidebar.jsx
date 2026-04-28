@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useSelector } from "react-redux";
 import { MessageCircle, MapPin, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BudgetRangeSlider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
+import { getUser } from "@/store/auth/authSlice";
 import {
   getGoogleMapsApiKey,
   loadGoogleMapsScript,
@@ -361,15 +363,15 @@ const FiltersSidebar = ({
               </p>
             </div>
           </div>
-          <button
+          {/* <button
             type="button"
             onClick={() => onAskCarrie?.()}
             className="w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium flex items-center justify-center gap-2 transition-colors"
           style={{ boxShadow: "0 4px 14px rgba(0, 0, 0, 0.25)" }}
           >
             <MessageCircle className="w-4 h-4" />
-            Ask Carrie
-          </button>
+            Ask {userName || "CareMatch"}
+          </button> */}
         </div>
     </aside>
   );

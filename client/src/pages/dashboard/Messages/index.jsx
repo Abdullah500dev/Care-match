@@ -363,7 +363,7 @@ export default function AdminMessages() {
                 onKeyDown={handleKeyDown}
                 placeholder={
                   activeThread.isAi
-                    ? "Ask Carrie… (Enter to send)"
+                    ? `Ask ${userName || "CareMatch"}… (Enter to send)`
                     : "Type a message… (Enter to send)"
                 }
                 disabled={activeThread.isAi && aiSending}
