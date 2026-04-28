@@ -35,12 +35,6 @@ const STATUS_STYLES = {
 };
 
 const ALL_STATUSES = ["New", "Tour Scheduled", "Contacted", "Waitlist", "Closed"];
-const ALL_CARE_TYPES = [
-  "Assisted Living",
-  "Memory Care",
-  "Independent Living",
-  "Skilled Nursing",
-];
 
 const INITIAL_LEADS = [
   {
@@ -120,7 +114,6 @@ export default function Residents() {
   const [search, setSearch] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
-  const [careTypeFilter, setCareTypeFilter] = useState("");
 
   /* ── derived filtered list ───────────────────────────────── */
   const filtered = useMemo(() => {
@@ -132,16 +125,14 @@ export default function Residents() {
         lead.email.toLowerCase().includes(q) ||
         lead.facility.toLowerCase().includes(q);
       const matchStatus = !statusFilter || lead.status === statusFilter;
-      const matchCare = !careTypeFilter || lead.careType === careTypeFilter;
-      return matchSearch && matchStatus && matchCare;
+      return matchSearch && matchStatus;
     });
-  }, [leads, search, statusFilter, careTypeFilter]);
+  }, [leads, search, statusFilter]);
 
-  const hasActiveFilter = Boolean(statusFilter || careTypeFilter);
+  const hasActiveFilter = Boolean(statusFilter);
 
   const clearFilters = () => {
     setStatusFilter("");
-    setCareTypeFilter("");
   };
 
   /* ── action handlers ─────────────────────────────────────── */
@@ -254,48 +245,6 @@ export default function Residents() {
                     className={statusFilter === s ? "font-semibold text-[#00B8DB]" : ""}
                   >
                     {s}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Care type filter */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="default"
-                  className="flex shrink-0 items-center gap-2 bg-white"
-                  style={{
-                    height: "40px",
-                    borderRadius: "12px",
-                    border: careTypeFilter
-                      ? "1.5px solid #00B8DB"
-                      : "1px solid rgba(0,0,0,0.08)",
-                    color: careTypeFilter ? "#00B8DB" : "#000",
-                  }}
-                >
-                  <span className="text-sm font-bold">
-                    {careTypeFilter ? careTypeFilter : "Care Type"}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem
-                  onClick={() => setCareTypeFilter("")}
-                  className={!careTypeFilter ? "font-semibold text-[#00B8DB]" : ""}
-                >
-                  All care types
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {ALL_CARE_TYPES.map((ct) => (
-                  <DropdownMenuItem
-                    key={ct}
-                    onClick={() => setCareTypeFilter(ct)}
-                    className={careTypeFilter === ct ? "font-semibold text-[#00B8DB]" : ""}
-                  >
-                    {ct}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
