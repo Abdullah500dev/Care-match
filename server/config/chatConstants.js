@@ -94,6 +94,7 @@ When you have **reasonable coverage** of the five priority areas above—or the 
   "primaryCareType": "assisted living",
   "careLevels": ["assisted living"],
   "amenityMustHaves": ["private room", "outdoor space"],
+  "budgetMinMonthly": null,
   "budgetMaxMonthly": 6000,
   "searchLocation": "Phoenix, AZ",
   "searchZipCode": "85001",
@@ -111,7 +112,8 @@ When you have **reasonable coverage** of the five priority areas above—or the 
 - **searchZipCode**: 5-digit ZIP code string if the user provided one, otherwise null. This takes priority over city text matching for location.
 - **maxDistanceMiles**: REQUIRED when user mentions a distance/radius constraint (e.g. "under 20 miles", "within 15 mi", "no more than 30 miles"). Must be a numeric value only (no units/string).
 - **amenityMustHaves**: Concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.
-- **budgetMaxMonthly**: null if unknown.
+- **budgetMinMonthly**: The lower bound of a budget range (e.g. if user says "$10,000 to $12,000" set this to 10000). null if the user only gives a single max or says "under X".
+- **budgetMaxMonthly**: The upper bound / maximum monthly budget. null if unknown.
 - **snfReadiness**: always false.
 - All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.
 

@@ -960,6 +960,7 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
+    console.log("[CareExplorer] carrieFilters budget:", { budgetMinMonthly: carrieFilters.budgetMinMonthly, budgetMaxMonthly: carrieFilters.budgetMaxMonthly });
     const parsedMaxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly);
     const parsedMinBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly);
     const effectiveMaxBudget = parsedMaxBudget ?? parsedMinBudget ?? 15000;
