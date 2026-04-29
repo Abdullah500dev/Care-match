@@ -327,26 +327,21 @@ const Layout = ({ children }) => {
       if (isChatOpen) return;
       reminderToastIdRef.current = toast.custom(
         () => (
-          <div className="relative -mr-6 mb-24 w-[340px] pb-8 animate-[carrieReminderIn_420ms_ease-out]">
+          <div className="relative -mr-4 mb-24 w-[310px] animate-[carrieReminderIn_420ms_ease-out]">
             <button
               type="button"
               onClick={openChatFromReminder}
-              className="relative ml-auto w-[calc(100%-2rem)] rounded-2xl bg-white px-5 py-4 text-left text-[15px] font-medium text-slate-900 shadow-[0_18px_40px_rgba(0,0,0,0.22)] outline-none ring-1 ring-black/5 transition hover:shadow-[0_22px_46px_rgba(0,0,0,0.26)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
-            >
-              Hi, I’m Carrie. What can I help you with?
-            </button>
-
-            <button
-              type="button"
-              onClick={openChatFromReminder}
-              className="absolute -bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_14px_28px_rgba(0,0,0,0.22)] ring-1 ring-black/10 transition hover:scale-105 hover:shadow-[0_18px_34px_rgba(0,0,0,0.26)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_2.2s_ease-in-out_infinite]"
+              className="ml-auto flex w-full items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-left text-[14px] font-medium text-slate-900 shadow-[0_14px_32px_rgba(0,0,0,0.2)] outline-none ring-1 ring-black/5 transition hover:shadow-[0_18px_38px_rgba(0,0,0,0.24)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
               aria-label="Open Carrie chat"
             >
-              <img
-                src="/assets/images/favicon/favicon.svg"
-                alt="CareMatch"
-                className="h-9 w-9 object-contain"
-              />
+              <span className="leading-snug">Hi, I&apos;m Carrie. What can I help you with?</span>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_10px_22px_rgba(0,0,0,0.16)] ring-1 ring-black/10 animate-[carrieIconBounce_2.2s_ease-in-out_infinite]">
+                <img
+                  src="/assets/images/favicon/favicon.svg"
+                  alt="CareMatch"
+                  className="h-7 w-7 object-contain"
+                />
+              </span>
             </button>
           </div>
         ),
