@@ -81,7 +81,22 @@ const FacilityCard = ({
   };
   const handleFavoriteClick = () => {
     if (!requireLoginForFacilityAction()) return;
-    onToggleFavorite?.(facilityId || name);
+    onToggleFavorite?.(facilityId || name, {
+      name,
+      category,
+      address,
+      zipCode,
+      phone,
+      website,
+      priceRange,
+      rating,
+      reviewCount,
+      imageSrc,
+      distance,
+      sourcePlatform,
+      externalSourceUrl,
+      isExternal,
+    });
   };
   const openExploreDestination = () => {
     if (!requireLoginForFacilityAction()) return;

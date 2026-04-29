@@ -897,7 +897,7 @@ const CareExplorer = () => {
     scrollToCarrieHeroThenOpenChat({ source: "care-explorer" });
   };
 
-  const handleToggleFavorite = async (facilityId) => {
+  const handleToggleFavorite = async (facilityId, facilityData) => {
     const safeId = String(facilityId || "").trim();
     if (!safeId) return;
 
@@ -910,10 +910,9 @@ const CareExplorer = () => {
 
     if (isAuthenticated) {
       try {
-        await apiClient.post("/api/auth/toggle-favorite", { facilityId: safeId });
+        await apiClient.post("/api/auth/toggle-favorite", { facilityId: safeId, facilityData: facilityData || null });
       } catch (error) {
         console.error("Failed to sync favorite with database", error);
-        // Rollback on failure if you want to be strict, but for likes usually it's fine
       }
     }
   };
@@ -2126,10 +2125,10 @@ const CareExplorer = () => {
                   )}
                 </div>
                 <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-x-hidden">
-                  <p className="text-sm font-semibold text-[#132329] mb-4">
+                  <p className="text-sm font-semibold text-[#132329] mb-1">
                     Recommended Matches
                   </p>
-                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 snap-x scrollbar-hide">
+                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pt-3 pb-4 snap-x scrollbar-hide">
                     {(visibleMapFacilities || []).map((f) => {
                       const isSelected = selectedFacilityKey === f.key;
                       return (
