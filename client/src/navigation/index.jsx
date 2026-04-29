@@ -255,19 +255,28 @@ const Layout = ({ children }) => {
     const onScroll = () => {
       const top = Math.max(getCurrentScrollTop(), getDashboardScrollTop());
       const percent = getCurrentScrollPercent();
-      const homeThresholdPercent = 0.12; // show around 10-15% page scroll
-      setScrollPastThreshold(top > 24 && percent >= homeThresholdPercent);
+      const dashMain = document.querySelector("main");
+      const dashScrollTop = dashMain?.scrollTop || 0;
+      const homeThresholdPercent = 0.12;
+      setScrollPastThreshold(
+        top > 24 ||
+        dashScrollTop > 120 ||
+        percent >= homeThresholdPercent
+      );
     };
 
+    const dashMain = document.querySelector("main");
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll);
+    dashMain?.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
+      dashMain?.removeEventListener("scroll", onScroll);
     };
   }, [location.pathname]);
 
@@ -282,6 +291,12 @@ const Layout = ({ children }) => {
         onChatOpenChange,
       );
     };
+  }, []);
+
+  useEffect(() => {
+    const onScrollToTop = () => scrollToTop();
+    window.addEventListener("carematch:scroll-to-top", onScrollToTop);
+    return () => window.removeEventListener("carematch:scroll-to-top", onScrollToTop);
   }, []);
 
   useEffect(() => {
@@ -366,13 +381,11 @@ const Layout = ({ children }) => {
   }, [isChatOpen, navigate, location.pathname]);
 
   const scrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    document
-      .getElementById("page-top")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Scroll the dashboard <main> container first (covers portal/dashboard routes)
+    const dashMain = document.querySelector("main");
+    if (dashMain) dashMain.scrollTo({ top: 0, behavior: "smooth" });
+    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
     document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
     document.body.scrollTo?.({ top: 0, behavior: "smooth" });

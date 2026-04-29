@@ -43,30 +43,35 @@ const CareExplorerBar = ({
         </div>
 
         <div className="justify-center md:justify-start flex flex-wrap items-center gap-2 sm:gap-3 lg:gap-6 shrink-0 min-w-0 overflow-x-auto overflow-y-hidden py-0.5 sm:py-0">
-          <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#E2E8F0] p-0.5 sm:p-1">
+          {/* View toggle: Listing / Map View */}
+          <div className="flex items-center gap-1 border border-[#E2E8F0] rounded-2xl bg-[#F1F5F9] p-0.5 sm:p-1">
             <button
               type="button"
               onClick={() => onViewChange?.("listing")}
-              className={`px-3 py-2 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${isListing ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+              className={`px-3 py-2 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${isListing ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"}`}
+              style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
             >
               <List className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="whitespace-nowrap">Listing</span>
             </button>
             <button
               type="button"
               onClick={() => onViewChange?.("map")}
-              className={`px-3 py-2 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${isMapView ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+              className={`px-3 py-2 sm:px-4 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${isMapView ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"}`}
+              style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
             >
               <Map className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="whitespace-nowrap">Map View</span>
             </button>
           </div>
+          {/* Layout icons: single / two / grid */}
           {isListing && (
-            <div className="flex items-center border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#E2E8F0] p-0.5 sm:p-1">
+            <div className="flex items-center gap-1 border border-[#E2E8F0] rounded-2xl bg-[#F1F5F9] p-0.5 sm:p-1">
               <button
                 type="button"
                 onClick={() => onLayoutChange?.("single")}
                 title="Single column"
                 aria-label="Single column layout"
-                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "single" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "single" ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"}`}
+                style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
               >
                 <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               </button>
@@ -75,7 +80,8 @@ const CareExplorerBar = ({
                 onClick={() => onLayoutChange?.("two")}
                 title="Two columns"
                 aria-label="Two column layout"
-                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "two" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "two" ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"}`}
+                style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
               >
                 <Columns2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               </button>
@@ -84,33 +90,32 @@ const CareExplorerBar = ({
                 onClick={() => onLayoutChange?.("grid")}
                 title="Grid (4 columns)"
                 aria-label="Grid layout"
-                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "grid" ? "bg-white text-[#132329] shadow-sm" : "text-[#64748b] hover:text-[#132329]"}`}
+                className={`p-2 sm:px-3 sm:py-2 rounded-full min-h-[36px] sm:min-h-0 transition-colors ${layout === "grid" ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"}`}
+                style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
               >
                 <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
               </button>
             </div>
           )}
-          <div className="flex items-center gap-1 sm:gap-2 border border-[#E2E8F0] rounded-2xl overflow-hidden bg-[#F1F5F9] p-0.5 sm:p-1">
+          {/* Scope: All / Saved */}
+          <div className="flex items-center gap-1 border border-[#E2E8F0] rounded-2xl bg-[#F1F5F9] p-0.5 sm:p-1">
             <button
               type="button"
               onClick={() => onScopeChange?.("all")}
               className={`px-4 py-2 sm:px-6 text-xs sm:text-sm font-bold rounded-full transition-colors min-h-[36px] sm:min-h-0 ${
-                isAllScope
-                  ? "bg-[#00CFF4] text-white hover:bg-[#00b8d8]"
-                  : "text-[#64748b] hover:text-[#132329]"
+                isAllScope ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"
               }`}
-              style={{ boxShadow: "0 3px 6px rgba(0, 0, 0, 0.25)" }}
+              style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
             >
               All
             </button>
             <button
               type="button"
               onClick={() => onScopeChange?.("saved")}
-              className={`px-4 py-2 sm:px-6 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 transition-colors min-h-[36px] sm:min-h-0 ${
-                isSavedScope
-                  ? "bg-white text-[#132329] rounded-full shadow-sm"
-                  : "text-[#64748b] hover:text-[#132329]"
+              className={`px-4 py-2 sm:px-6 text-xs sm:text-sm font-bold flex items-center gap-1.5 sm:gap-2 rounded-full transition-colors min-h-[36px] sm:min-h-0 ${
+                isSavedScope ? "bg-[#00CFF4] text-white" : "bg-white text-[#64748b] hover:text-[#132329]"
               }`}
+              style={{ boxShadow: "0 3px 6px rgba(0,0,0,0.25)" }}
             >
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> <span className="whitespace-nowrap">Saved</span>
             </button>
