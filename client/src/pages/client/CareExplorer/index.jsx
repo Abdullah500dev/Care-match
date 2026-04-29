@@ -1,7 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { ChevronDown, ChevronUp, Info, MessageCircle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Compass,
+  Info,
+  MapPin,
+  MessageCircle,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { apiClient } from "../../../services/api";
@@ -1494,7 +1503,7 @@ const CareExplorer = () => {
     return mapFacilities.filter((f) => allowed.has(f.key));
   }, [mapFacilities, nearbyMapFacilityKeys]);
 
-  const pageSize = 5;
+  const pageSize = layout === "grid" ? 12 : 4;
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     buildEffectiveLocationQuery(
@@ -1804,28 +1813,28 @@ const CareExplorer = () => {
                   <MessageCircle className="h-9 w-9" />
                 </div>
                 <div
-                  className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4]/80 bg-white text-[#00CFF4] animate-icon-float-strong shadow-[0_0_0_0_rgba(0,207,244,0.45)] animate-icon-ripple"
                   style={{ animationDelay: "0ms" }}
                 >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                  <Search className="h-4 w-4" />
                 </div>
                 <div
-                  className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
+                  className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#38BDF8]/80 bg-white text-[#0EA5E9] animate-icon-bounce-strong shadow-[0_0_16px_rgba(56,189,248,0.35)]"
+                  style={{ animationDelay: "100ms" }}
+                >
+                  <MapPin className="h-4 w-4" />
+                </div>
+                <div
+                  className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#22D3EE]/80 bg-white text-[#0891B2] animate-icon-spin-strong shadow-[0_0_16px_rgba(34,211,238,0.35)]"
                   style={{ animationDelay: "180ms" }}
                 >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                  <Compass className="h-4 w-4" />
                 </div>
                 <div
-                  className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "360ms" }}
+                  className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2DD4BF]/80 bg-white text-[#0F766E] animate-icon-wobble shadow-[0_0_14px_rgba(45,212,191,0.35)]"
+                  style={{ animationDelay: "260ms" }}
                 >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
-                </div>
-                <div
-                  className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "540ms" }}
-                >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
+                  <SlidersHorizontal className="h-4 w-4" />
                 </div>
               </div>
               <h1 className="mb-3 text-2xl font-bold italic text-[#1D293D] sm:text-3xl">
@@ -1863,6 +1872,114 @@ const CareExplorer = () => {
             50% {
               transform: translateX(3px) translateY(-2px);
             }
+          }
+
+          @keyframes careExplorerIconFloatStrong {
+            0%, 100% {
+              transform: translateY(0px) translateX(0px) scale(1);
+            }
+            25% {
+              transform: translateY(-6px) translateX(2px) scale(1.05);
+            }
+            50% {
+              transform: translateY(-2px) translateX(5px) scale(1.1);
+            }
+            75% {
+              transform: translateY(4px) translateX(-1px) scale(1.03);
+            }
+          }
+
+          @keyframes careExplorerIconBounceStrong {
+            0%, 100% {
+              transform: translateY(0px) scale(1);
+            }
+            20% {
+              transform: translateY(-7px) scale(1.06);
+            }
+            40% {
+              transform: translateY(1px) scale(0.98);
+            }
+            60% {
+              transform: translateY(-4px) scale(1.04);
+            }
+            80% {
+              transform: translateY(0px) scale(1);
+            }
+          }
+
+          @keyframes careExplorerIconSpinStrong {
+            0% {
+              transform: rotate(0deg) scale(1);
+            }
+            40% {
+              transform: rotate(160deg) scale(1.08);
+            }
+            70% {
+              transform: rotate(280deg) scale(1.02);
+            }
+            100% {
+              transform: rotate(360deg) scale(1);
+            }
+          }
+
+          @keyframes careExplorerIconWobble {
+            0%, 100% {
+              transform: rotate(0deg) translateY(0px) scale(1);
+            }
+            15% {
+              transform: rotate(-12deg) translateY(-2px) scale(1.05);
+            }
+            30% {
+              transform: rotate(10deg) translateY(2px) scale(1.02);
+            }
+            45% {
+              transform: rotate(-8deg) translateY(-1px) scale(1.06);
+            }
+            60% {
+              transform: rotate(6deg) translateY(2px) scale(1.03);
+            }
+            75% {
+              transform: rotate(-4deg) translateY(-1px) scale(1.01);
+            }
+          }
+
+          @keyframes careExplorerIconRipple {
+            0% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0.45);
+            }
+            70% {
+              box-shadow: 0 0 0 14px rgba(0, 207, 244, 0);
+            }
+            100% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0);
+            }
+          }
+
+          .animate-icon-float-strong {
+            animation: careExplorerIconFloatStrong 1.45s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-bounce-strong {
+            animation: careExplorerIconBounceStrong 1.2s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-spin-strong {
+            animation: careExplorerIconSpinStrong 1.3s linear infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-wobble {
+            animation: careExplorerIconWobble 1.1s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-ripple {
+            animation:
+              careExplorerIconFloatStrong 1.45s ease-in-out infinite,
+              careExplorerIconRipple 1.7s ease-out infinite;
+            will-change: transform, box-shadow;
           }
 
           .animate-float-left-right {
@@ -2001,11 +2118,11 @@ const CareExplorer = () => {
           {view === "listing" ? (
             <div
               ref={listingTopRef}
-              className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${layout === "single"
+              className={`flex-1 min-w-0 w-full max-w-full ${layout === "grid" ? "lg:max-w-none" : "lg:max-w-5xl"} ${layout === "single"
                 ? "space-y-3 sm:space-y-4"
                 : layout === "two"
-                  ? "grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
-                  : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
+                  ? "grid content-start items-start grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
+                  : "grid content-start items-start grid-cols-1 min-[520px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
                 }`}
             >
               {discoverLoading ? (
@@ -2045,7 +2162,11 @@ const CareExplorer = () => {
                 <div
                   key={f.key ?? f.matchPercent}
                   className={
-                    layout !== "single" ? "min-w-0 overflow-hidden" : undefined
+                    layout === "grid"
+                      ? "min-w-0 w-full overflow-hidden"
+                      : layout !== "single"
+                        ? "min-w-0 overflow-hidden"
+                        : undefined
                   }
                 >
                   <FacilityCard

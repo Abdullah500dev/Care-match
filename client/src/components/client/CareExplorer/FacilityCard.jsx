@@ -38,6 +38,8 @@ const FacilityCard = ({
     String(priceRange || "").trim() && String(priceRange || "").trim().toUpperCase() !== "N/A"
       ? String(priceRange).trim()
       : "Price on call";
+  const displayPhone = String(phone || "").trim();
+  const dialablePhone = displayPhone.replace(/[^\d+]/g, "");
 
   React.useEffect(() => {
     setCardImageSrc(imageSrc || DEFAULT_IMAGE);
@@ -123,7 +125,7 @@ const FacilityCard = ({
   if (gridView) {
     return (
       <div
-        className="w-full max-w-full sm:max-w-[400px] mx-auto overflow-hidden rounded-2xl bg-white border border-[#E2E8F0] shadow-[0_4px_24px_rgba(15,23,42,0.08)]"
+        className="mx-auto flex h-[255px] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.08)] min-[400px]:h-[270px] sm:h-[285px]"
       >
         {/* Image Section */}
         <div className="relative">
@@ -154,23 +156,23 @@ const FacilityCard = ({
         </div>
 
         {/* Content Section */}
-        <div className="px-2.5 pt-2.5 pb-2 sm:px-3 sm:pt-3 sm:pb-2">
+        <div className="flex flex-1 flex-col px-2.5 pt-2.5 pb-2 sm:px-3 sm:pt-3 sm:pb-2">
           <p className="mb-0.5 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: "#155DFC" }}>
             {category}
           </p>
-          <h3 className="mb-1.5 sm:mb-2 text-[13px] min-[400px]:text-[14px] sm:text-[15px] font-semibold tracking-tight text-[#132329]">
+          <h3 className="mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px]" title={name}>
             {name}
           </h3>
 
           <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
             Monthly Investment
           </p>
-          <p className="text-[13px] sm:text-sm font-semibold text-[#132329] tabular-nums">
+          <p className="truncate text-[13px] font-semibold text-[#132329] tabular-nums sm:text-sm" title={displayPriceRange}>
             {displayPriceRange}
           </p>
 
           {/* Buttons */}
-          <div className="mt-2 sm:mt-2.5 flex gap-2 sm:gap-2.5">
+          <div className="mt-auto flex gap-2 pt-2 sm:gap-2.5 sm:pt-2.5">
             <button
               type="button"
               onClick={openExploreDestination}
@@ -322,7 +324,16 @@ const FacilityCard = ({
                   Phone
                 </p>
                 <p className="mt-1 break-words font-medium text-[#132329]">
-                  {String(phone || "").trim() || "N/A"}
+                  {displayPhone && dialablePhone ? (
+                    <a
+                      href={`tel:${dialablePhone}`}
+                      className="text-[#132329] hover:text-[#155DFC] hover:underline"
+                    >
+                      {displayPhone}
+                    </a>
+                  ) : (
+                    "N/A"
+                  )}
                 </p>
               </div>
             </div>
