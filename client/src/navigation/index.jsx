@@ -324,7 +324,10 @@ const Layout = ({ children }) => {
     };
 
     const showHelpReminder = () => {
-      if (isChatOpen) return;
+      if (isChatOpen) {
+        scheduleReminder();
+        return;
+      }
       reminderToastIdRef.current = toast.custom(
         () => (
           <div className="relative -mr-4 mb-24 w-[310px] animate-[carrieReminderIn_420ms_ease-out]">
@@ -351,6 +354,7 @@ const Layout = ({ children }) => {
           position: "bottom-right",
         },
       );
+      scheduleReminder();
     };
 
     const scheduleReminder = () => {
