@@ -810,6 +810,8 @@ const CareExplorer = () => {
   const mapInstanceRef = useRef(null);
   const mapMarkersRef = useRef([]);
   const geocoderRef = useRef(null);
+  const [selectedFacilityKey, setSelectedFacilityKey] = useState(null);
+  const cardRefsMap = useRef({});
   const [mapError, setMapError] = useState("");
   const [mapsReady, setMapsReady] = useState(false);
   const [currentCoords, setCurrentCoords] = useState(null);
@@ -1699,6 +1701,16 @@ const CareExplorer = () => {
               : undefined,
           });
 
+          marker.addListener("click", () => {
+            setSelectedFacilityKey(f.key);
+            mapInstanceRef.current?.panTo(latLng);
+            mapInstanceRef.current?.setZoom(15);
+            const cardEl = cardRefsMap.current[f.key];
+            if (cardEl) {
+              cardEl.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          });
+
           placed.push({ marker, loc, key: f.key, latLng });
         }
       }
@@ -1725,6 +1737,20 @@ const CareExplorer = () => {
       cancelled = true;
     };
   }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
+
+  useEffect(() => {
+    if (!mapMarkersRef.current.length) return;
+    mapMarkersRef.current.forEach(({ marker, key }) => {
+      if (!marker) return;
+      if (key === selectedFacilityKey) {
+        marker.setZIndex(999);
+        marker.setAnimation(window.google?.maps?.Animation?.BOUNCE);
+        setTimeout(() => marker.setAnimation(null), 1400);
+      } else {
+        marker.setZIndex(undefined);
+      }
+    });
+  }, [selectedFacilityKey]);
 
   return (
     <>
@@ -2097,20 +2123,20 @@ const CareExplorer = () => {
                     Recommended Matches
                   </p>
                   <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x scrollbar-hide">
-                    {(visibleMapFacilities || []).map((f) => (
+                    {(visibleMapFacilities || []).map((f) => {
+                      const isSelected = selectedFacilityKey === f.key;
+                      return (
                       <div
                         key={`map-${f.key ?? f.matchPercent}`}
-                        className="w-[320px] snap-start flex-shrink-0 cursor-pointer transition-transform hover:scale-[1.03]"
+                        ref={(el) => { if (el) cardRefsMap.current[f.key] = el; }}
+                        className={`w-[320px] snap-start flex-shrink-0 cursor-pointer transition-all hover:scale-[1.03] rounded-2xl ${isSelected ? "ring-2 ring-[#00CFF4] ring-offset-2 scale-[1.02] shadow-lg" : ""}`}
                         onClick={(e) => {
                           if (e.target.closest('button') || e.target.closest('a')) return;
+                          setSelectedFacilityKey(f.key);
                           const markerObj = mapMarkersRef.current.find(m => m.key === f.key);
                           if (markerObj && markerObj.marker && mapInstanceRef.current) {
                             mapInstanceRef.current.panTo(markerObj.marker.getPosition());
                             mapInstanceRef.current.setZoom(15);
-                            markerObj.marker.setAnimation(window.google.maps.Animation.BOUNCE);
-                            setTimeout(() => {
-                              markerObj.marker.setAnimation(null);
-                            }, 2100);
                           }
                         }}
                       >
@@ -2140,7 +2166,8 @@ const CareExplorer = () => {
                           onToggleFavorite={handleToggleFavorite}
                         />
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 </div>
               </div>
