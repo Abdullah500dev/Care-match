@@ -1157,9 +1157,16 @@ const CareExplorer = () => {
     hasUserTouchedFiltersRef.current = true;
     setAppliedFilters(filters);
     const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
-    if (!body.zip_code || !String(body.location || "").trim()) {
-      toast.error("Please provide a city/state and ZIP code to search.");
+    const hasLocation = String(body.location || "").trim().length > 0;
+    const hasZip = String(body.zip_code || "").trim().length > 0;
+    if (!hasLocation && !hasZip) {
+      setDiscoverOverrideRows(undefined);
+      setDiscoverLoading(false);
+      toast.error("Please enter a city, state, or ZIP code before searching.");
       return;
+    }
+    if (!body.zip_code && hasLocation) {
+      body.zip_code = body.location;
     }
 
     const runId = ++discoverRunIdRef.current;

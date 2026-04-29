@@ -61,9 +61,9 @@ const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spel
 function validatePayload(body) {
   if (!body || typeof body !== "object") return "Body must be a JSON object.";
   const { zip_code, location, care_levels } = body;
-  if (typeof zip_code !== "string" || !zip_code.trim()) return "zip_code is required (string).";
-  if (typeof location !== "string" || !location.trim())
-    return "location is required (string) — city, state, or county.";
+  const hasZip = typeof zip_code === "string" && zip_code.trim().length > 0;
+  const hasLocation = typeof location === "string" && location.trim().length > 0;
+  if (!hasZip && !hasLocation) return "Either zip_code or location is required.";
   if (!Array.isArray(care_levels) || care_levels.length === 0)
     return "care_levels is required (non-empty string array).";
   if (body.amenities != null && !Array.isArray(body.amenities)) return "amenities must be an array of strings if provided.";
