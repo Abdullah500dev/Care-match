@@ -21,57 +21,87 @@ function LocationAutocompleteInput({
 }) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
-  const [ready, setReady] = useState(false);
+  const onChangeRef = useRef(onChange);
+  const onPlaceSelectedRef = useRef(onPlaceSelected);
 
-  // Load Maps + Places library once
+  // Keep refs fresh without re-running effects
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onPlaceSelectedRef.current = onPlaceSelected; }, [onPlaceSelected]);
+
+  // Load Maps + attach autocomplete once
   useEffect(() => {
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) return;
-    loadGoogleMapsScript(apiKey)
-      .then(() => setReady(true))
-      .catch(() => {});
-  }, []);
 
-  // Attach autocomplete once the library is ready and the input is mounted
-  useEffect(() => {
-    if (!ready || !inputRef.current || autocompleteRef.current) return;
+    const attach = () => {
+      if (!inputRef.current || autocompleteRef.current) return;
 
-    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ["(regions)"],          // cities, states, countries
-      fields: ["formatted_address", "name", "address_components"],
-    });
-
-    ac.addListener("place_changed", () => {
-      const place = ac.getPlace();
-      // Build a clean "City, ST" or "State" string from components
-      let label = "";
-      const comps = place.address_components || [];
-      const locality      = comps.find((c) => c.types.includes("locality"))?.long_name;
-      const admin1Short   = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name;
-      const admin1Long    = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name;
-      const country       = comps.find((c) => c.types.includes("country"))?.short_name;
-      const postalCode    = comps.find((c) => c.types.includes("postal_code"))?.long_name;
-
-      if (locality && admin1Short && country === "US") {
-        label = `${locality}, ${admin1Short}`;
-      } else if (admin1Long && country === "US") {
-        label = admin1Long;
-      } else {
-        label = place.name || place.formatted_address || "";
-      }
-
-      onChange(label);
-
-      onPlaceSelected?.({
-        city: locality || "",
-        state: admin1Short || admin1Long || "",
-        zipCode: postalCode || "",
-        country: country || "",
+      const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
+        types: ["(regions)"],
+        fields: ["formatted_address", "name", "address_components", "geometry"],
       });
-    });
 
-    autocompleteRef.current = ac;
-  }, [ready, onChange, onPlaceSelected]);
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        const comps = place.address_components || [];
+        const locality    = comps.find((c) => c.types.includes("locality"))?.long_name || "";
+        const admin1Short = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
+        const admin1Long  = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name || "";
+        const country     = comps.find((c) => c.types.includes("country"))?.short_name || "";
+        let postalCode    = comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+
+        let label = "";
+        if (locality && admin1Short && country === "US") {
+          label = `${locality}, ${admin1Short}`;
+        } else if (admin1Long && country === "US") {
+          label = admin1Long;
+        } else {
+          label = place.name || place.formatted_address || "";
+        }
+
+        // Set label immediately
+        onChangeRef.current(label);
+
+        const finish = (zip) => {
+          onPlaceSelectedRef.current?.({
+            city: locality,
+            state: admin1Short || admin1Long,
+            zipCode: zip,
+            country,
+            label,
+          });
+        };
+
+        // Try to get ZIP via reverse geocode of place center
+        const latLng = place.geometry?.location;
+        if (!postalCode && latLng && country === "US") {
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode(
+            { location: { lat: latLng.lat(), lng: latLng.lng() } },
+            (results, status) => {
+              if (status === "OK" && results?.length) {
+                for (const r of results) {
+                  const z = r.address_components?.find((c) => c.types.includes("postal_code"))?.long_name || "";
+                  if (z.length === 5) { postalCode = z; break; }
+                }
+              }
+              finish(postalCode);
+            }
+          );
+        } else {
+          finish(postalCode);
+        }
+      });
+
+      autocompleteRef.current = ac;
+    };
+
+    if (window.google?.maps?.places?.Autocomplete) {
+      attach();
+    } else {
+      loadGoogleMapsScript(apiKey).then(attach).catch(() => {});
+    }
+  }, []);
 
   return (
     <div className="relative">
@@ -81,13 +111,13 @@ function LocationAutocompleteInput({
         type="text"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChangeRef.current(e.target.value)}
         className={`w-full pl-9 pr-8 h-10 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] transition-colors ${className ?? ""}`}
       />
       {value && (
         <button
           type="button"
-          onClick={() => onChange("")}
+          onClick={() => onChangeRef.current("")}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#364153] transition-colors"
           aria-label="Clear location"
         >
@@ -163,12 +193,16 @@ const FiltersSidebar = ({
   const lastAutofillZipRef = useRef("");
   const lastAutofillLocationRef = useRef("");
 
+  // ZIP → City/State (skip if locationQuery was just set by autocomplete selection)
   useEffect(() => {
     const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
     if (zip.length !== 5) return;
 
-    // Skip if this exact zip already produced the current location (avoid loop)
     if (lastAutofillZipRef.current === zip) return;
+
+    // If the city field already has a value from autocomplete selection, don't overwrite it
+    const currentLocation = String(locationQuery || "").trim();
+    if (currentLocation && lastAutofillLocationRef.current === currentLocation) return;
 
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) return;
@@ -202,6 +236,7 @@ const FiltersSidebar = ({
     }
   }, [zipCode]);
 
+
   const normalizedAmenityOptions = [...new Set(
     amenityOptions
       .map((item) => String(item || "").trim())
@@ -234,13 +269,16 @@ const FiltersSidebar = ({
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
             onPlaceSelected={(payload) => {
-              const incomingZip = String(payload?.zipCode || "")
-                .replace(/\D/g, "")
-                .slice(0, 5);
-              if (incomingZip.length === 5) {
-                lastAutofillZipRef.current = incomingZip;
-                setFilters({ zipCode: incomingZip });
-              }
+              const incomingZip = String(payload?.zipCode || "").replace(/\D/g, "").slice(0, 5);
+              const incomingLabel = String(payload?.label || "").trim();
+              // Mark refs FIRST so the ZIP→city useEffect skips overwriting
+              if (incomingZip.length === 5) lastAutofillZipRef.current = incomingZip;
+              if (incomingLabel) lastAutofillLocationRef.current = incomingLabel;
+              // Set both atomically in one filter update
+              setFilters({
+                ...(incomingZip.length === 5 ? { zipCode: incomingZip } : {}),
+                ...(incomingLabel ? { locationQuery: incomingLabel } : {}),
+              });
             }}
           />
         </div>
@@ -254,12 +292,15 @@ const FiltersSidebar = ({
             maxLength={5}
             placeholder="e.g. 32811"
             value={zipCode}
-            onChange={(e) =>
+            onChange={(e) => {
+              lastAutofillLocationRef.current = "";
+              lastAutofillZipRef.current = "";
               setFilters({
                 zipCode: String(e.target.value || "")
                   .replace(/\D/g, "")
                   .slice(0, 5),
-              })}
+              });
+            }}
             className="h-10 rounded-lg border-[#E2E8F0]"
           />
         </div>
