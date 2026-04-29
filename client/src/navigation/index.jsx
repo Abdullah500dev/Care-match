@@ -299,6 +299,17 @@ const Layout = ({ children }) => {
     return () => window.removeEventListener("carematch:scroll-to-top", onScrollToTop);
   }, []);
 
+  const openCarrieChat = () => {
+    navigate("/", { state: { scrollTo: "search-bar" } });
+    // Fire twice so the request is not missed during route transitions.
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+    }, 250);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+    }, 800);
+  };
+
   useEffect(() => {
     const REMINDER_MS = 30 * 1000;
 
@@ -307,13 +318,6 @@ const Layout = ({ children }) => {
         window.clearTimeout(inactivityTimerRef.current);
         inactivityTimerRef.current = null;
       }
-    };
-
-    const openChatFromReminder = () => {
-      navigate("/", { state: { scrollTo: "search-bar" } });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
-      }, 250);
     };
 
     const showHelpReminder = () => {
@@ -326,7 +330,7 @@ const Layout = ({ children }) => {
           <div className="relative mb-4 mr-[9.5rem] w-[300px] animate-[carrieReminderIn_420ms_ease-out]">
             <button
               type="button"
-              onClick={openChatFromReminder}
+              onClick={openCarrieChat}
               className="relative ml-auto w-full rounded-2xl bg-white/95 px-4 py-3 text-left text-[14px] font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm outline-none ring-1 ring-[#00CFF4]/18 transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
               aria-label="Open Carrie chat"
             >
@@ -385,12 +389,7 @@ const Layout = ({ children }) => {
         createPortal(
           <button
             type="button"
-            onClick={() => {
-              navigate("/", { state: { scrollTo: "search-bar" } });
-              window.setTimeout(() => {
-                window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
-              }, 250);
-            }}
+            onClick={openCarrieChat}
             className="group fixed bottom-8 right-28 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_2.2s_ease-in-out_infinite]"
             aria-label="Open Carrie chat"
           >
