@@ -167,36 +167,40 @@ const FiltersSidebar = ({
     const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
     if (zip.length !== 5) return;
 
+    // Skip if this exact zip already produced the current location (avoid loop)
+    if (lastAutofillZipRef.current === zip) return;
+
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) return;
-    if (!window.google?.maps?.Geocoder) return;
-
-    const shouldAutofillLocation =
-      !String(locationQuery || "").trim() ||
-      (lastAutofillZipRef.current === zip &&
-        lastAutofillLocationRef.current === String(locationQuery || ""));
-    if (!shouldAutofillLocation) return;
 
     lastAutofillZipRef.current = zip;
 
-    const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ address: zip }, (results, status) => {
-      if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
-      const comps = results[0]?.address_components || [];
-      const city =
-        comps.find((c) => c.types.includes("locality"))?.long_name ||
-        comps.find((c) => c.types.includes("postal_town"))?.long_name ||
-        comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
-        "";
-      const state = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
-      const country = comps.find((c) => c.types.includes("country"))?.short_name || "";
+    const doGeocode = () => {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: zip }, (results, status) => {
+        if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
+        const comps = results[0]?.address_components || [];
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
+        const country = comps.find((c) => c.types.includes("country"))?.short_name || "";
 
-      if (!city || !state || country !== "US") return;
-      const nextLocation = `${city}, ${state}`;
-      lastAutofillLocationRef.current = nextLocation;
-      setFilters({ locationQuery: nextLocation });
-    });
-  }, [zipCode, locationQuery]);
+        if (!city || !state || country !== "US") return;
+        const nextLocation = `${city}, ${state}`;
+        lastAutofillLocationRef.current = nextLocation;
+        setFilters({ locationQuery: nextLocation });
+      });
+    };
+
+    if (window.google?.maps?.Geocoder) {
+      doGeocode();
+    } else {
+      loadGoogleMapsScript(apiKey).then(doGeocode).catch(() => {});
+    }
+  }, [zipCode]);
 
   const normalizedAmenityOptions = [...new Set(
     amenityOptions

@@ -840,17 +840,17 @@ const CareExplorer = () => {
 
 
   const scrollToListingTop = () => {
-    if (listingTopRef.current) {
-      listingTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.dispatchEvent(new CustomEvent("carematch:scroll-to-top"));
   };
 
   const handlePageChange = (nextPage) => {
     setPage(nextPage);
-    scrollToListingTop();
   };
+
+  useEffect(() => {
+    const t = setTimeout(() => scrollToListingTop(), 0);
+    return () => clearTimeout(t);
+  }, [page]);
 
   // Preload Google Maps + Places so the location autocomplete works immediately
   useEffect(() => {
