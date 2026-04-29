@@ -485,7 +485,7 @@ export const getActivationStatus = catchAsyncError(async (req, res, next) => {
 // Toggle Favorite Facility
 export const toggleFavorite = catchAsyncError(async (req, res, next) => {
   try {
-    const { facilityId } = req.body;
+    const { facilityId, facilityData } = req.body;
     const userId = req.user?.id;
 
     if (!facilityId) {
@@ -497,20 +497,35 @@ export const toggleFavorite = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("User not found", 404));
     }
 
-    const index = user.saved_facilities.indexOf(String(facilityId));
+    const safeId = String(facilityId);
+    const index = user.saved_facilities.indexOf(safeId);
 
     if (index === -1) {
-      user.saved_facilities.push(String(facilityId));
+      user.saved_facilities.push(safeId);
+      if (facilityData && typeof facilityData === "object") {
+        const alreadyStored = (user.saved_facility_details || []).some(
+          (d) => String(d?.facilityId || d?.id || "") === safeId
+        );
+        if (!alreadyStored) {
+          if (!user.saved_facility_details) user.saved_facility_details = [];
+          user.saved_facility_details.push({ ...facilityData, facilityId: safeId, savedAt: new Date() });
+        }
+      }
     } else {
       user.saved_facilities.splice(index, 1);
+      user.saved_facility_details = (user.saved_facility_details || []).filter(
+        (d) => String(d?.facilityId || d?.id || "") !== safeId
+      );
     }
 
+    user.markModified("saved_facility_details");
     await user.save();
 
     res.status(200).json({
       success: true,
       message: index === -1 ? "Added to favorites" : "Removed from favorites",
       favorites: user.saved_facilities,
+      facilityDetails: user.saved_facility_details,
     });
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));
@@ -530,6 +545,7 @@ export const getFavorites = catchAsyncError(async (req, res, next) => {
     res.status(200).json({
       success: true,
       favorites: user.saved_facilities || [],
+      facilityDetails: user.saved_facility_details || [],
     });
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));

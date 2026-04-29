@@ -1489,8 +1489,9 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   }
 
   const body = req.body || {};
-  const zipCode = String(body.zip_code || "").trim();
-  const location = String(body.location || "").trim() || zipCode;
+  const locationRaw = String(body.location || "").trim();
+  const zipCode = String(body.zip_code || "").trim() || locationRaw;
+  const location = locationRaw || zipCode;
   const careLevelsRaw = Array.isArray(body.care_levels) ? body.care_levels : [];
   const careLevels = careLevelsRaw.length ? careLevelsRaw : ["assisted living"];
   const payload = {
