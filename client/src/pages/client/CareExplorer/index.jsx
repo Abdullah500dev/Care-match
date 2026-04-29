@@ -2125,11 +2125,11 @@ const CareExplorer = () => {
                     <div ref={mapContainerRef} className="flex-1 w-full min-h-[520px]" />
                   )}
                 </div>
-                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-hidden">
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-x-hidden">
                   <p className="text-sm font-semibold text-[#132329] mb-4">
                     Recommended Matches
                   </p>
-                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x scrollbar-hide">
+                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-4 snap-x scrollbar-hide">
                     {(visibleMapFacilities || []).map((f) => {
                       const isSelected = selectedFacilityKey === f.key;
                       return (
