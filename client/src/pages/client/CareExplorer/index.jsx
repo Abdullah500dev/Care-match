@@ -707,6 +707,12 @@ function sanitizeMonthlyBudgetValue(value) {
   return parsed;
 }
 
+/** Extract state abbreviation from "City, ST" or "City, ST XXXXX" pattern */
+function extractStateFromLocation(locStr) {
+  const m = String(locStr || "").match(/,\s*([A-Za-z]{2})\b/);
+  return m ? m[1].toUpperCase() : "";
+}
+
 /** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
 function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
   const locRaw = String(filters.locationQuery || carrieLocationQuery || "").trim();
@@ -724,7 +730,21 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
     (zipFromPrefs.length === 5 ? zipFromPrefs : "");
   const baseLocation =
     locRaw || String(carrieFilters?.searchLocation || "").trim();
-  const location = buildEffectiveLocationQuery(baseLocation, zip);
+
+  // If we have a ZIP and the location was autofilled as "City, ST",
+  // use the full "City, ST" so the AI searches that city/state area.
+  // Only narrow to ZIP-level when a max distance is also set.
+  const maxDistanceMilesRaw = Number.parseFloat(String(filters.maxMiles || "").trim());
+  const hasDistanceConstraint = Number.isFinite(maxDistanceMilesRaw) && maxDistanceMilesRaw > 0;
+
+  let location;
+  if (!hasDistanceConstraint && explicitZip && baseLocation) {
+    // Use "City, ST" without appending the ZIP so the AI searches state/city-wide
+    const stateAbbr = extractStateFromLocation(baseLocation);
+    location = stateAbbr ? baseLocation : buildEffectiveLocationQuery(baseLocation, zip);
+  } else {
+    location = buildEffectiveLocationQuery(baseLocation, zip);
+  }
 
   const care_levels = ["assisted living"];
 
