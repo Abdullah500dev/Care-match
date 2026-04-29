@@ -300,14 +300,7 @@ const Layout = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const INACTIVITY_MS = 30 * 1000;
-    const activityEvents = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "touchstart",
-      "scroll",
-    ];
+    const REMINDER_MS = 30 * 1000;
 
     const clearInactivityTimer = () => {
       if (inactivityTimerRef.current) {
@@ -330,21 +323,15 @@ const Layout = ({ children }) => {
       }
       reminderToastIdRef.current = toast.custom(
         () => (
-          <div className="relative -mr-4 mb-24 w-[310px] animate-[carrieReminderIn_420ms_ease-out]">
+          <div className="relative mb-4 mr-[9.5rem] w-[300px] animate-[carrieReminderIn_420ms_ease-out]">
             <button
               type="button"
               onClick={openChatFromReminder}
-              className="ml-auto flex w-full items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-left text-[14px] font-medium text-slate-900 shadow-[0_14px_32px_rgba(0,0,0,0.2)] outline-none ring-1 ring-black/5 transition hover:shadow-[0_18px_38px_rgba(0,0,0,0.24)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
+              className="relative ml-auto w-full rounded-2xl bg-white/95 px-4 py-3 text-left text-[14px] font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm outline-none ring-1 ring-[#00CFF4]/18 transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
               aria-label="Open Carrie chat"
             >
-              <span className="leading-snug">Hi, I&apos;m Carrie. What can I help you with?</span>
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white shadow-[0_10px_22px_rgba(0,0,0,0.16)] ring-1 ring-black/10 animate-[carrieIconBounce_2.2s_ease-in-out_infinite]">
-                <img
-                  src="/assets/images/favicon/favicon.svg"
-                  alt="CareMatch"
-                  className="h-7 w-7 object-contain"
-                />
-              </span>
+              <span className="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 translate-x-1/2 rotate-45 border-r border-b border-[#00CFF4]/18 bg-white/95" />
+              Hi, I&apos;m Carrie. What can I help you with?
             </button>
           </div>
         ),
@@ -359,22 +346,16 @@ const Layout = ({ children }) => {
 
     const scheduleReminder = () => {
       clearInactivityTimer();
-      inactivityTimerRef.current = window.setTimeout(showHelpReminder, INACTIVITY_MS);
+      inactivityTimerRef.current = window.setTimeout(showHelpReminder, REMINDER_MS);
     };
 
-    // Trigger reminder 1 minute after landing and also after fresh inactivity windows.
+    // Trigger reminder every 30 seconds while chat stays closed.
     scheduleReminder();
-    for (const eventName of activityEvents) {
-      window.addEventListener(eventName, scheduleReminder, { passive: true });
-    }
 
     return () => {
       clearInactivityTimer();
       if (reminderToastIdRef.current) {
         toast.dismiss(reminderToastIdRef.current);
-      }
-      for (const eventName of activityEvents) {
-        window.removeEventListener(eventName, scheduleReminder);
       }
     };
   }, [isChatOpen, navigate, location.pathname]);
@@ -400,6 +381,26 @@ const Layout = ({ children }) => {
       </div>
       {children}
       {!isDashboardRoute && <Footer />}
+      {createPortal(
+        <button
+          type="button"
+          onClick={() => {
+            navigate("/", { state: { scrollTo: "search-bar" } });
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+            }, 250);
+          }}
+          className="group fixed bottom-8 right-28 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_2.2s_ease-in-out_infinite]"
+          aria-label="Open Carrie chat"
+        >
+          <img
+            src="/assets/images/favicon/favicon.svg"
+            alt="CareMatch"
+            className="h-9 w-9 object-contain transition-transform duration-300 group-hover:scale-110"
+          />
+        </button>,
+        document.body,
+      )}
       {/* Scroll to top - visible across the entire site */}
       {createPortal(
         <button
