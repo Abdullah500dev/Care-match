@@ -316,16 +316,35 @@ export default function IntakeSearch() {
     else navigate(-1);
   };
 
-  const goNext = () => {
-    if (step < TOTAL_STEPS) {
-      const validationError = getStepValidationError(step, formData);
-      if (validationError) {
-        toast.error(validationError);
-        return;
-      }
+  const isStepValid = () => {
+    switch (step) {
+      case 1: return !!formData.who;
+      case 2: return !!formData.parentAge;
+      case 3: return !!formData.careTimeline;
+      case 4: return !!formData.livingNow;
+      case 5: return !!formData.mobility;
+      case 6: return formData.lovedOneCare && formData.lovedOneCare.length > 0;
+      case 7: return !!formData.location && formData.location.trim().length > 0;
+      case 8: return formData.specialNeedsPreferences && formData.specialNeedsPreferences.length > 0;
+      default: return true;
     }
-    if (step < TOTAL_STEPS) setStep((s) => s + 1);
-    else setIsFindingMatches(true);
+  };
+
+  const goNext = () => {
+    if (!isStepValid()) {
+      toast.error("Required Selection Missing", {
+        description: "Please select an option before moving to the next step.",
+      });
+      return;
+    }
+
+    if (step < TOTAL_STEPS) {
+      console.log(`Step ${step} selection:`, formData);
+      setStep((s) => s + 1);
+    } else {
+      console.log("Final Intake JSON:", JSON.stringify(formData, null, 2));
+      setIsFindingMatches(true);
+    }
   };
 
   const handleSaveAndFinishLater = () => {
@@ -389,7 +408,7 @@ export default function IntakeSearch() {
             <div className="relative flex justify-center items-center mb-8 h-28">
               <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] transform scale-100 animate-pulse">
                 <Sparkles className="h-10 w-10" />
-              </div>   
+              </div>
               <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <Users className="h-5 w-5" />
               </div>
@@ -916,6 +935,57 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
       </>
     );
   }
+
+  /*
+  if (step === 8) {
+    const assistedOption = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === "assisted");
+    if (!assistedOption) return null;
+    const { id, label, desc, Icon } = assistedOption;
+    const isSelected = formData.levelOfCare === id;
+    return (
+      <>
+        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
+          What&apos;s the{" "}
+          <span
+            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-0.5"
+            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
+          >
+            level of care
+          </span>{" "}
+          needed?
+        </h1>
+        <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
+        <div className="flex min-h-[220px] items-center justify-center">
+          <button
+            type="button"
+            onClick={() => update("levelOfCare", id)}
+            className={cn(
+              "w-full max-w-md rounded-2xl border-2 px-6 py-6 sm:px-8 sm:py-8 text-left transition-colors flex gap-4 sm:gap-5 items-start",
+              isSelected
+                ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]"
+                : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
+            )}
+          >
+            <span
+              className={cn(
+                "flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-xl items-center justify-center",
+                isSelected ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]"
+              )}
+            >
+              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className={cn("block font-bold text-lg sm:text-xl text-[#0f172a]")}>
+                {label}
+              </span>
+              <span className="text-sm sm:text-base text-[#64748b] mt-1 block">{desc}</span>
+            </div>
+          </button>
+        </div>
+      </>
+    );
+  }
+  */
 
   if (step === 8) {
     return (
