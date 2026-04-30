@@ -263,6 +263,13 @@ const inferAmenityMustHavesFromMessages = (msgs) => {
   return [...amenities];
 };
 
+const sanitizeCarrieChatText = (text) =>
+  String(text || "")
+    .replace(/\*\*/g, "")
+    .replace(/\*/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+
 const wantsRankedMatchesNow = (text) => {
   const t = String(text || "");
   if (!t.trim()) return false;
@@ -471,7 +478,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       success: true,
       message: {
         role: "assistant",
-        content: out,
+        content: sanitizeCarrieChatText(out),
       },
     });
   }
@@ -658,7 +665,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     success: true,
     message: {
       role: "assistant",
-      content: finalContent.trim(),
+      content: sanitizeCarrieChatText(finalContent),
     },
     ...(matchedFacilities != null && { matchedFacilities }),
     ...(matchedPreferences != null && { matchedPreferences }),

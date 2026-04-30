@@ -348,6 +348,7 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
       user.tokenExpire = undefined;
       user.tokenValidityInMinutes = undefined;
       await user.save({ validateBeforeSave: false });
+      console.error("[forgotPassword] reset email send failed:", error?.message || error);
       return next(new ErrorHandler("Failed to send reset email", 500));
     }
   } catch (error) {
