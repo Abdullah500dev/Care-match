@@ -174,6 +174,7 @@ const FiltersSidebar = ({
   onAskCarrie,
   onApplyFilters,
   isApplying = false,
+  canApplyFilters = true,
 }) => {
   const DEFAULT_AMENITIES_VISIBLE = 12;
 
@@ -400,7 +401,7 @@ const FiltersSidebar = ({
         <button
           type="button"
           onClick={() => onApplyFilters?.()}
-          disabled={isApplying}
+          disabled={isApplying || !canApplyFilters}
           className="mt-5 w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isApplying ? (

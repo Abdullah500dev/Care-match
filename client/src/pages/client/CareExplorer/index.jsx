@@ -901,6 +901,31 @@ function buildDiscoverRequestSignature(body) {
   });
 }
 
+function normalizeFilterStateForCompare(filters) {
+  const f = filters && typeof filters === "object" ? filters : {};
+  const toSortedLowerArray = (value) =>
+    (Array.isArray(value) ? value : [])
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+
+  const budgetMin = Number(f.budgetMin);
+  const budgetMax = Number(f.budgetMax);
+
+  return {
+    locationQuery: String(f.locationQuery || "").trim().toLowerCase(),
+    zipCode: String(f.zipCode || "").replace(/\D/g, "").slice(0, 5),
+    searchQuery: String(f.searchQuery || "").trim().toLowerCase(),
+    maxMiles: String(f.maxMiles || "").trim(),
+    budgetMin: Number.isFinite(budgetMin) ? Math.round(budgetMin) : 1000,
+    budgetMax: Number.isFinite(budgetMax) ? Math.round(budgetMax) : 15000,
+    selectedCareTypes: toSortedLowerArray(f.selectedCareTypes),
+    selectedAvailability: toSortedLowerArray(f.selectedAvailability),
+    selectedAmenities: toSortedLowerArray(f.selectedAmenities),
+    sortBy: String(f.sortBy || "bestMatch").trim().toLowerCase(),
+  };
+}
+
 const CareExplorer = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -945,6 +970,11 @@ const CareExplorer = () => {
   const [filters, setFilters] = useState(initialFilters);
   // `appliedFilters` are what the listing uses (updated only on Apply)
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const hasPendingFilterChanges = useMemo(() => {
+    const draft = normalizeFilterStateForCompare(filters);
+    const applied = normalizeFilterStateForCompare(appliedFilters);
+    return JSON.stringify(draft) !== JSON.stringify(applied);
+  }, [filters, appliedFilters]);
 
   const activeFilters = AUTO_APPLY_FILTERS ? filters : appliedFilters;
   const mapContainerRef = useRef(null);
@@ -1377,6 +1407,7 @@ const CareExplorer = () => {
   ]);
 
   const handleApplyFilters = async () => {
+    if (!hasPendingFilterChanges) return;
     hasUserTouchedFiltersRef.current = true;
     setAppliedFilters(filters);
     const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
@@ -2321,6 +2352,7 @@ const CareExplorer = () => {
                 onAskCarrie={handleAskCarrie}
                 onApplyFilters={handleApplyFilters}
                 isApplying={discoverLoading}
+                canApplyFilters={hasPendingFilterChanges}
               />
             </div>
           </div>
