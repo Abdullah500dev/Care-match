@@ -192,6 +192,11 @@ const FiltersSidebar = ({
   const [showAllAmenities, setShowAllAmenities] = useState(false);
   const lastAutofillZipRef = useRef("");
   const lastAutofillLocationRef = useRef("");
+  const latestFiltersRef = useRef(filters);
+
+  useEffect(() => {
+    latestFiltersRef.current = filters;
+  }, [filters]);
 
   // ZIP → City/State (skip if locationQuery was just set by autocomplete selection)
   useEffect(() => {
@@ -251,7 +256,7 @@ const FiltersSidebar = ({
     );
 
   const setFilters = (patch) => {
-    onFiltersChange?.({ ...filters, ...patch });
+    onFiltersChange?.({ ...(latestFiltersRef.current || {}), ...patch });
   };
 
   return (

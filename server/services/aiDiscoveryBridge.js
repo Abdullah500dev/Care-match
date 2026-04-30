@@ -69,10 +69,12 @@ export function intakePreferencesToAiSearchParams(prefs) {
 
   const services = deriveServicesFromAmenities(amenities);
 
-  if (!zip || !locationRaw) return null;
+  // Allow city/state-only discovery when ZIP is unknown.
+  // `results.js` accepts either zip_code or location.
+  if (!locationRaw) return null;
 
   return {
-    zip_code: zip,
+    zip_code: zip || locationRaw,
     location: locationRaw,
     care_levels,
     amenities,

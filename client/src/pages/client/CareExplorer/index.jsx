@@ -717,6 +717,94 @@ function sanitizeMonthlyBudgetValue(value) {
   return parsed;
 }
 
+function extractBudgetBoundsFromText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { min: null, max: null };
+  const nums = [...raw.matchAll(/(\d[\d,]*)/g)]
+    .map((m) => Number.parseInt(String(m[1] || "").replace(/,/g, ""), 10))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 100000);
+  if (nums.length === 0) return { min: null, max: null };
+  if (nums.length === 1) return { min: null, max: nums[0] };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
+function resolveCarrieBudgetRange(carrieFilters) {
+  const cf = carrieFilters && typeof carrieFilters === "object" ? carrieFilters : {};
+  const directMinCandidates = [
+    cf.budgetMinMonthly,
+    cf.budget_min_monthly,
+    cf.budgetMin,
+    cf.budget_min,
+    cf.minBudget,
+    cf.minimumBudget,
+  ];
+  const directMaxCandidates = [
+    cf.budgetMaxMonthly,
+    cf.budget_max_monthly,
+    cf.budgetMax,
+    cf.budget_max,
+    cf.maxBudget,
+    cf.maximumBudget,
+  ];
+
+  const parsedMin = directMinCandidates
+    .map((v) => sanitizeMonthlyBudgetValue(v))
+    .find((v) => v != null);
+  const parsedMax = directMaxCandidates
+    .map((v) => sanitizeMonthlyBudgetValue(v))
+    .find((v) => v != null);
+
+  const textCandidates = [
+    cf.budgetRange,
+    cf.budget_range,
+    cf.monthlyBudgetRange,
+    cf.monthly_budget_range,
+    cf.budget,
+  ];
+  const fromText = textCandidates
+    .map((v) => extractBudgetBoundsFromText(v))
+    .find((x) => x.min != null || x.max != null) || { min: null, max: null };
+
+  const min = parsedMin ?? fromText.min ?? null;
+  const max = parsedMax ?? fromText.max ?? null;
+  return { min, max };
+}
+
+function resolveBudgetRangeFromCarrieMatches(carrieMatches) {
+  const rows = Array.isArray(carrieMatches) ? carrieMatches : [];
+  if (rows.length === 0) return { min: null, max: null };
+
+  let min = null;
+  let max = null;
+  for (const row of rows) {
+    const candidates = [
+      row?.budget?.min_monthly,
+      row?.budget?.max_monthly,
+      row?.external_data?.budget?.min_monthly,
+      row?.external_data?.budget?.max_monthly,
+      row?.external_data?.pricing,
+      row?.pricing,
+    ];
+    for (const c of candidates) {
+      const parsed = sanitizeMonthlyBudgetValue(c);
+      if (parsed != null) {
+        if (min == null || parsed < min) min = parsed;
+        if (max == null || parsed > max) max = parsed;
+      } else if (typeof c === "string") {
+        const parsedRange = extractBudgetBoundsFromText(c);
+        if (parsedRange.min != null) {
+          if (min == null || parsedRange.min < min) min = parsedRange.min;
+        }
+        if (parsedRange.max != null) {
+          if (max == null || parsedRange.max > max) max = parsedRange.max;
+        }
+      }
+    }
+  }
+
+  return { min, max };
+}
+
 /** Extract state abbreviation from "City, ST" or "City, ST XXXXX" pattern */
 function extractStateFromLocation(locStr) {
   const m = String(locStr || "").match(/,\s*([A-Za-z]{2})\b/);
@@ -890,6 +978,7 @@ const CareExplorer = () => {
   const discoverInFlightSignatureRef = useRef("");
   const lastDiscoverSignatureRef = useRef("");
   const lastDiscoverStartedAtRef = useRef(0);
+  const carrieBootstrapDiscoverDoneRef = useRef(false);
   const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
@@ -1019,9 +1108,17 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
-    console.log("[CareExplorer] carrieFilters budget:", { budgetMinMonthly: carrieFilters.budgetMinMonthly, budgetMaxMonthly: carrieFilters.budgetMaxMonthly });
-    const parsedMaxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly);
-    const parsedMinBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly);
+    const fromFilters = resolveCarrieBudgetRange(carrieFilters);
+    const fromMatches = resolveBudgetRangeFromCarrieMatches(carrieMatches);
+    const parsedMinBudget = fromFilters.min ?? fromMatches.min;
+    const parsedMaxBudget = fromFilters.max ?? fromMatches.max;
+    console.log("[CareExplorer] carrieFilters budget:", {
+      budgetMinMonthly: carrieFilters.budgetMinMonthly,
+      budgetMaxMonthly: carrieFilters.budgetMaxMonthly,
+      budgetFromMatches: fromMatches,
+      resolvedMin: parsedMinBudget,
+      resolvedMax: parsedMaxBudget,
+    });
     const effectiveMaxBudget = parsedMaxBudget ?? parsedMinBudget ?? 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
     const effectiveMinBudget = parsedMinBudget ?? Math.min(1000, safeMax);
@@ -1149,6 +1246,10 @@ const CareExplorer = () => {
     console.log("[CareExplorer] Updated discover query:", query);
   }, [filters, carrieFilters, carrieLocationQuery]);
 
+  useEffect(() => {
+    carrieBootstrapDiscoverDoneRef.current = false;
+  }, [fromCarrie, carrieLocationQuery, carrieZipCode, carrieMatches?.length]);
+
   const runDiscoverRequest = useCallback(async (body) => {
     const signature = buildDiscoverRequestSignature(body);
     const now = Date.now();
@@ -1246,6 +1347,32 @@ const CareExplorer = () => {
     carrieFilters,
     carrieLocationQuery,
     fromCarrie,
+    runDiscoverRequest,
+  ]);
+
+  // One-time bootstrap when user comes from Carrie without precomputed matches.
+  // AUTO_APPLY_FILTERS is disabled by design, so this ensures the page doesn't look empty.
+  useEffect(() => {
+    if (!fromCarrie) return;
+    if (carrieBootstrapDiscoverDoneRef.current) return;
+    if (Array.isArray(carrieMatches) && carrieMatches.length > 0) return;
+
+    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
+    const hasLocation = String(body.location || "").trim().length > 0;
+    const hasZip = String(body.zip_code || "").trim().length > 0;
+    if (!hasLocation && !hasZip) return;
+    if (!body.zip_code && hasLocation) {
+      body.zip_code = body.location;
+    }
+
+    carrieBootstrapDiscoverDoneRef.current = true;
+    runDiscoverRequest(body);
+  }, [
+    fromCarrie,
+    carrieMatches,
+    filters,
+    carrieFilters,
+    carrieLocationQuery,
     runDiscoverRequest,
   ]);
 
@@ -1347,11 +1474,21 @@ const CareExplorer = () => {
           level.includes("retirement community") ||
           level.includes("assisted living facility"),
       );
-      if (!hasAssistedLiving) return false;
+      if (!hasAssistedLiving) {
+        const isCarrieResult =
+          fromCarrie ||
+          String(facility.sourcePlatform || "").toLowerCase().includes("ai discovery");
+        if (!isCarrieResult) return false;
+      }
 
       if (locationQuery && !isZipOnlyLocationQuery) {
-        // Use improved location matching that handles state names and abbreviations
-        if (!addressMatchesLocation(facility.address, locationQuery)) return false;
+        // For Carrie-originated live discovery rows, backend already geo-filters.
+        // Avoid over-strict city substring filtering that can hide nearby metro matches.
+        const shouldApplyStrictLocationFilter = !(fromCarrie && discoverOverrideRows !== undefined);
+        if (shouldApplyStrictLocationFilter) {
+          // Use improved location matching that handles state names and abbreviations
+          if (!addressMatchesLocation(facility.address, locationQuery)) return false;
+        }
       }
 
       if (q) {
@@ -1411,7 +1548,14 @@ const CareExplorer = () => {
       return scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "half" }));
     }
     return strict;
-  }, [activeFilters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
+  }, [
+    activeFilters,
+    scopedFacilities,
+    carrieLocationQuery,
+    locationCenterCoords,
+    fromCarrie,
+    discoverOverrideRows,
+  ]);
 
   const rankedFacilities = useMemo(() => {
     const locationQuery = String(activeFilters.locationQuery || carrieLocationQuery || "")
@@ -2164,6 +2308,7 @@ const CareExplorer = () => {
                   discoverInFlightSignatureRef.current = "";
                   lastDiscoverSignatureRef.current = "";
                   lastDiscoverStartedAtRef.current = 0;
+                  carrieBootstrapDiscoverDoneRef.current = false;
                   discoverRunIdRef.current += 1;
                   hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);

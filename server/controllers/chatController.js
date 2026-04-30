@@ -99,7 +99,7 @@ const inferBudgetRangeFromText = (text) => {
   if (!raw) return null;
 
   const range = raw.match(
-    /(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
+    /(?:between\s+)?(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
   );
   if (!range?.[1] || !range?.[2]) return null;
 
@@ -117,7 +117,7 @@ const inferBudgetFromText = (text) => {
   if (!raw) return null;
 
   const range = raw.match(
-    /(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
+    /(?:between\s+)?(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:-|to|and|through|up to)\s*(\$?\s*\d[\d,]*(?:\.\d+)?\s*k?)/
   );
   if (range?.[1] && range?.[2]) {
     const a = parseBoundedBudgetAmount(range[1]);
@@ -373,14 +373,13 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const missingEssentials = [
     ...((inferredLocation || inferredZipCode) ? [] : ["location (city/state or ZIP code)"]),
     ...(inferredBudget ? [] : ["approximate monthly budget"]),
+    ...(inferredAmenityMustHaves.length > 0 ? [] : ["must-have amenities or preferences"]),
   ];
-  // Assisted-living-only mode: collect location + budget as essentials.
-  const essentialTotalPoints = 2; // location + budget
+  // Assisted-living-only mode: collect location + budget + amenities.
+  const essentialTotalPoints = 3;
   const essentialPointCount = essentialTotalPoints - missingEssentials.length;
-  const hasCoreEssentials = Boolean(inferredLocation || inferredZipCode);
   const shouldReturnResults =
     explicitMatchNow ||
-    (hasMatchIntent && hasCoreEssentials) ||
     essentialPointCount >= essentialTotalPoints ||
     intakeAnswerCount >= QUESTION_COUNT;
 
@@ -645,6 +644,11 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
 
     finalContent = `Here's what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
     if (prefs) {
+      // Keep budget aliases for client compatibility across flows.
+      prefs.budgetMin = prefs.budgetMinMonthly;
+      prefs.budgetMax = prefs.budgetMaxMonthly;
+      prefs.budget_min = prefs.budgetMinMonthly;
+      prefs.budget_max = prefs.budgetMaxMonthly;
       matchedFacilities = finalMatchRows;
       matchedPreferences = prefs;
     }
