@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -43,6 +43,7 @@ const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
 const AUTO_APPLY_FILTERS = false;
+const DISCOVER_DUPLICATE_WINDOW_MS = 1200;
 const FIXED_AMENITY_OPTIONS = [
   "Private room preferred",
   "Pet-friendly",
@@ -788,6 +789,30 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
   };
 }
 
+function buildDiscoverRequestSignature(body) {
+  const toSortedLowerArray = (value) =>
+    (Array.isArray(value) ? value : [])
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+
+  const nBudgetMin = Number(body?.budget_min);
+  const nBudgetMax = Number(body?.budget_max);
+  const nMaxDistance = Number(body?.max_distance_miles);
+
+  return JSON.stringify({
+    zip_code: String(body?.zip_code || "").trim(),
+    location: String(body?.location || "").trim().toLowerCase(),
+    care_levels: toSortedLowerArray(body?.care_levels),
+    amenities: toSortedLowerArray(body?.amenities),
+    services: toSortedLowerArray(body?.services),
+    keywords: toSortedLowerArray(body?.keywords),
+    budget_min: Number.isFinite(nBudgetMin) ? Math.round(nBudgetMin) : null,
+    budget_max: Number.isFinite(nBudgetMax) ? Math.round(nBudgetMax) : null,
+    max_distance_miles: Number.isFinite(nMaxDistance) ? Math.round(nMaxDistance) : null,
+  });
+}
+
 const CareExplorer = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -861,6 +886,10 @@ const CareExplorer = () => {
   );
   const [discoverThinkingIndex, setDiscoverThinkingIndex] = useState(0);
   const discoverRunIdRef = useRef(0);
+  const discoverAbortControllerRef = useRef(null);
+  const discoverInFlightSignatureRef = useRef("");
+  const lastDiscoverSignatureRef = useRef("");
+  const lastDiscoverStartedAtRef = useRef(0);
   const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
@@ -1120,6 +1149,63 @@ const CareExplorer = () => {
     console.log("[CareExplorer] Updated discover query:", query);
   }, [filters, carrieFilters, carrieLocationQuery]);
 
+  const runDiscoverRequest = useCallback(async (body) => {
+    const signature = buildDiscoverRequestSignature(body);
+    const now = Date.now();
+
+    if (discoverInFlightSignatureRef.current === signature) {
+      return;
+    }
+
+    if (
+      lastDiscoverSignatureRef.current === signature &&
+      now - lastDiscoverStartedAtRef.current < DISCOVER_DUPLICATE_WINDOW_MS
+    ) {
+      return;
+    }
+
+    const runId = ++discoverRunIdRef.current;
+    lastDiscoverSignatureRef.current = signature;
+    lastDiscoverStartedAtRef.current = now;
+
+    if (discoverAbortControllerRef.current) {
+      discoverAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    discoverAbortControllerRef.current = controller;
+    discoverInFlightSignatureRef.current = signature;
+
+    setDiscoverLoading(true);
+    try {
+      const { data } = await apiClient.post("/api/facilities/discover", body, {
+        signal: controller.signal,
+      });
+      if (runId !== discoverRunIdRef.current) return;
+      const rows = Array.isArray(data?.facilities) ? data.facilities : [];
+      setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
+    } catch (err) {
+      const cancelled =
+        axios.isCancel?.(err) || err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
+      if (cancelled || runId !== discoverRunIdRef.current) return;
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Request failed";
+      toast.error("Could not refresh listings", { description: String(msg) });
+    } finally {
+      if (discoverAbortControllerRef.current === controller) {
+        discoverAbortControllerRef.current = null;
+      }
+      if (discoverInFlightSignatureRef.current === signature) {
+        discoverInFlightSignatureRef.current = "";
+      }
+      if (runId === discoverRunIdRef.current) {
+        setDiscoverLoading(false);
+      }
+    }
+  }, []);
+
   // Debounced live discover when filters change (same engine as Carrie / results.js).
   useEffect(() => {
     if (skipDiscoverMountRef.current) {
@@ -1141,27 +1227,8 @@ const CareExplorer = () => {
       return;
     }
 
-    const runId = ++discoverRunIdRef.current;
     const timer = window.setTimeout(async () => {
-      setDiscoverLoading(true);
-      try {
-        const { data } = await apiClient.post("/api/facilities/discover", body);
-        if (runId !== discoverRunIdRef.current) return;
-        const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-        setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
-      } catch (err) {
-        if (runId !== discoverRunIdRef.current) return;
-        const msg =
-          err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          err?.message ||
-          "Request failed";
-        toast.error("Could not refresh listings", { description: String(msg) });
-      } finally {
-        if (runId === discoverRunIdRef.current) {
-          setDiscoverLoading(false);
-        }
-      }
+      await runDiscoverRequest(body);
     }, 650);
 
     return () => window.clearTimeout(timer);
@@ -1179,6 +1246,7 @@ const CareExplorer = () => {
     carrieFilters,
     carrieLocationQuery,
     fromCarrie,
+    runDiscoverRequest,
   ]);
 
   const handleApplyFilters = async () => {
@@ -1197,27 +1265,17 @@ const CareExplorer = () => {
       body.zip_code = body.location;
     }
 
-    const runId = ++discoverRunIdRef.current;
-    setDiscoverLoading(true);
-    try {
-      const { data } = await apiClient.post("/api/facilities/discover", body);
-      if (runId !== discoverRunIdRef.current) return;
-      const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-      setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
-    } catch (err) {
-      if (runId !== discoverRunIdRef.current) return;
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        "Request failed";
-      toast.error("Could not refresh listings", { description: String(msg) });
-    } finally {
-      if (runId === discoverRunIdRef.current) {
-        setDiscoverLoading(false);
-      }
-    }
+    await runDiscoverRequest(body);
   };
+
+  useEffect(
+    () => () => {
+      if (discoverAbortControllerRef.current) {
+        discoverAbortControllerRef.current.abort();
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (discoverOverrideRows !== undefined) {
@@ -2099,6 +2157,13 @@ const CareExplorer = () => {
                   setFilters(nextFilters);
                 }}
                 onReset={() => {
+                  if (discoverAbortControllerRef.current) {
+                    discoverAbortControllerRef.current.abort();
+                    discoverAbortControllerRef.current = null;
+                  }
+                  discoverInFlightSignatureRef.current = "";
+                  lastDiscoverSignatureRef.current = "";
+                  lastDiscoverStartedAtRef.current = 0;
                   discoverRunIdRef.current += 1;
                   hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);

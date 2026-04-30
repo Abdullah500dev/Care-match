@@ -37,6 +37,10 @@ const GOOGLE_MAPS_PLACES_API_KEY = String(
     ""
 ).trim();
 const DISCOVERY_IMAGE_DEBUG = process.env.CAREMATCH_DISCOVERY_IMAGE_DEBUG === "1";
+const DISCOVERY_CALL_DEBUG = process.env.CAREMATCH_DISCOVERY_CALL_DEBUG === "1";
+const DISCOVERY_ENABLE_GEO_RETRY = process.env.CAREMATCH_DISCOVERY_ENABLE_GEO_RETRY === "1";
+
+const discoveryInFlight = new Map();
 
 const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spelling):
 - care_levels: string[]
@@ -213,7 +217,7 @@ function buildGooglePhotoUrlsFromRefs(refs) {
     );
 }
 
-async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
+async function enrichDiscoveryResultsWithRealPlacePhotos(results, stats = null) {
   if (!Array.isArray(results) || results.length === 0 || !GOOGLE_MAPS_PLACES_API_KEY) return;
 
   const needsPhoto = results.filter((f) => {
@@ -243,6 +247,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
           `[discovery:image] facility="${facilityName}" initial_place_id=${String(gp.place_id || "").trim() || "none"}`
         );
       }
+      if (stats && String(gp.place_id || "").trim()) stats.googlePlaceDetailsCalls += 1;
       let photoUrls = await fetchPlacePhotoUrls(gp.place_id, GOOGLE_MAPS_PLACES_API_KEY);
       if (photoUrls.length > 0) {
         f.images = photoUrls;
@@ -254,6 +259,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
         return;
       }
 
+      if (stats) stats.googleFindPlaceCalls += 1;
       const candidate = await findPlaceCandidateByText(f, GOOGLE_MAPS_PLACES_API_KEY);
       if (!candidate) {
         if (DISCOVERY_IMAGE_DEBUG) {
@@ -277,6 +283,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
       photoUrls = buildGooglePhotoUrlsFromRefs(candidateRefs);
 
       if (photoUrls.length === 0 && candidate.place_id) {
+        if (stats) stats.googlePlaceDetailsCalls += 1;
         photoUrls = await fetchPlacePhotoUrls(candidate.place_id, GOOGLE_MAPS_PLACES_API_KEY);
       }
 
@@ -484,6 +491,13 @@ function extractJsonObject(text) {
 
 async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
   const anchor = parseGeoAnchorFromPayload(payload);
+  const stats = {
+    openaiResponseCalls: 0,
+    googleFindPlaceCalls: 0,
+    googlePlaceDetailsCalls: 0,
+    geoRepairAttempted: false,
+    geoRepairUsed: false,
+  };
 
   const discoveryTools =
     process.env.CAREMATCH_DISCOVERY_WEB_SEARCH === "0"
@@ -491,6 +505,7 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
       : [{ type: "web_search" }];
 
   const runOnce = async (input) => {
+    stats.openaiResponseCalls += 1;
     const response = await client.responses.create({
       model,
       input,
@@ -536,17 +551,18 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
     sanitizeDiscoveryResults(parsed.results);
     return parsed;
   };
-
   let parsed = await runOnce(buildPrompt(payload));
   let filtered = filterDiscoveryResultsByAnchor(parsed.results, anchor);
 
-  if (filtered.length < MIN_GEO_FILTERED) {
+  if (DISCOVERY_ENABLE_GEO_RETRY && filtered.length < MIN_GEO_FILTERED) {
+    stats.geoRepairAttempted = true;
     try {
       const parsed2 = await runOnce(buildGeoRepairPrompt(payload));
       const filtered2 = filterDiscoveryResultsByAnchor(parsed2.results, anchor);
       if (filtered2.length > filtered.length) {
         parsed = parsed2;
         filtered = filtered2;
+        stats.geoRepairUsed = true;
       }
     } catch {
       /* keep first pass */
@@ -558,8 +574,15 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
     if (fallback.length > 0) {
       parsed.results = fallback.slice(0, MAX_RESULTS);
       sanitizeDiscoveryResults(parsed.results);
-      await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
+      await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results, stats);
       sanitizeDiscoveryResults(parsed.results);
+      if (DISCOVERY_CALL_DEBUG) {
+        const totalExternal =
+          stats.openaiResponseCalls + stats.googleFindPlaceCalls + stats.googlePlaceDetailsCalls;
+        console.log(
+          `[discovery:calls] cache=miss openai=${stats.openaiResponseCalls} geo_repair_attempted=${stats.geoRepairAttempted} geo_repair_used=${stats.geoRepairUsed} google_findplace=${stats.googleFindPlaceCalls} google_place_details=${stats.googlePlaceDetailsCalls} total_external=${totalExternal}`
+        );
+      }
       return parsed;
     }
 
@@ -573,9 +596,25 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
 
   parsed.results = filtered;
   sanitizeDiscoveryResults(parsed.results);
-  await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
+  await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results, stats);
   sanitizeDiscoveryResults(parsed.results);
+  if (DISCOVERY_CALL_DEBUG) {
+    const totalExternal =
+      stats.openaiResponseCalls + stats.googleFindPlaceCalls + stats.googlePlaceDetailsCalls;
+    console.log(
+      `[discovery:calls] cache=miss openai=${stats.openaiResponseCalls} geo_repair_attempted=${stats.geoRepairAttempted} geo_repair_used=${stats.geoRepairUsed} google_findplace=${stats.googleFindPlaceCalls} google_place_details=${stats.googlePlaceDetailsCalls} total_external=${totalExternal}`
+    );
+  }
   return parsed;
+}
+
+function cloneDiscoveryPayload(value) {
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function buildDiscoveryCacheKey(payload, model) {
+  return JSON.stringify({ model, payload });
 }
 
 function normalizeSearchParams(userSearch) {
@@ -627,7 +666,24 @@ export async function getCareMatchResults(userSearch, options = {}) {
   });
 
   const model = options.model || OPENAI_MODEL;
-  return openaiCareSearch(client, payload, model);
+  const cacheKey = buildDiscoveryCacheKey(payload, model);
+
+  const existing = discoveryInFlight.get(cacheKey);
+  if (existing) {
+    if (DISCOVERY_CALL_DEBUG) {
+      console.log("[discovery:calls] inflight_join");
+    }
+    const joined = await existing;
+    return cloneDiscoveryPayload(joined);
+  }
+
+  const requestPromise = openaiCareSearch(client, payload, model).finally(() => {
+      discoveryInFlight.delete(cacheKey);
+    });
+
+  discoveryInFlight.set(cacheKey, requestPromise);
+  const fresh = await requestPromise;
+  return cloneDiscoveryPayload(fresh);
 }
 
 /**
