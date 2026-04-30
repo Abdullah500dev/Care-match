@@ -10,6 +10,7 @@ import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
 import { postMatchRecommendations } from "@/services/matchService";
+import { toast } from "sonner";
 
 const BUDGET_SLIDER_MIN = 2000;
 const BUDGET_SLIDER_MAX = 15000;
@@ -19,7 +20,7 @@ const MILES_SLIDER_MIN = 5;
 const MILES_SLIDER_MAX = 100;
 const MILES_SLIDER_STEP = 5;
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 8;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -121,7 +122,7 @@ const defaultFormData = {
   location: "",
   budgetMin: 3000,
   budgetMax: 6000,
-  levelOfCare: "",
+  levelOfCare: "assisted",
   specialNeedsPreferences: ["privateRoom"],
   careTypes: [],
   budget: "",
@@ -264,9 +265,35 @@ export default function IntakeSearch() {
     else navigate(-1);
   };
 
+  const isStepValid = () => {
+    switch (step) {
+      case 1: return !!formData.who;
+      case 2: return !!formData.parentAge;
+      case 3: return !!formData.careTimeline;
+      case 4: return !!formData.livingNow;
+      case 5: return !!formData.mobility;
+      case 6: return formData.lovedOneCare && formData.lovedOneCare.length > 0;
+      case 7: return !!formData.location && formData.location.trim().length > 0;
+      case 8: return formData.specialNeedsPreferences && formData.specialNeedsPreferences.length > 0;
+      default: return true;
+    }
+  };
+
   const goNext = () => {
-    if (step < TOTAL_STEPS) setStep((s) => s + 1);
-    else setIsFindingMatches(true);
+    if (!isStepValid()) {
+      toast.error("Required Selection Missing", {
+        description: "Please select an option before moving to the next step.",
+      });
+      return;
+    }
+
+    if (step < TOTAL_STEPS) {
+      console.log(`Step ${step} selection:`, formData);
+      setStep((s) => s + 1);
+    } else {
+      console.log("Final Intake JSON:", JSON.stringify(formData, null, 2));
+      setIsFindingMatches(true);
+    }
   };
 
   const handleSaveAndFinishLater = () => {
@@ -306,7 +333,7 @@ export default function IntakeSearch() {
             <div className="relative flex justify-center items-center mb-8 h-28">
               <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] transform scale-100 animate-pulse">
                 <Sparkles className="h-10 w-10" />
-              </div>   
+              </div>
               <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
                 <Users className="h-5 w-5" />
               </div>
@@ -368,7 +395,7 @@ export default function IntakeSearch() {
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 overflow-hidden rounded-l-2xl">
             <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
               <img
-                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
+                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
                 alt=""
                 className="h-full w-full object-cover object-center"
                 aria-hidden
@@ -823,6 +850,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     );
   }
 
+  /*
   if (step === 8) {
     const assistedOption = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === "assisted");
     if (!assistedOption) return null;
@@ -841,23 +869,6 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           needed?
         </h1>
         <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
-        {/* Removed from step 8 UI (commented, not deleted) — Independent Living, Memory Care, Skilled Nursing. Original grid with all 4 cards:
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {LEVEL_OF_CARE_OPTIONS.map(({ id: optId, label: optLabel, desc: optDesc, Icon: OptIcon }) => (
-            <button key={optId} type="button" onClick={() => update("levelOfCare", optId)}
-              className={cn("rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
-                formData.levelOfCare === optId ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]" : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]")}>
-              <span className={cn("flex h-10 w-10 shrink-0 rounded-xl items-center justify-center", formData.levelOfCare === optId ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]")}>
-                <OptIcon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === optId && "text-[#0f172a]")}>{optLabel}</span>
-                <span className="text-sm text-[#64748b] mt-0.5 block">{optDesc}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-        */}
         <div className="flex min-h-[220px] items-center justify-center">
           <button
             type="button"
@@ -888,8 +899,9 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
       </>
     );
   }
+  */
 
-  if (step === 9) {
+  if (step === 8) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">

@@ -343,6 +343,7 @@ const Layout = ({ children }) => {
           id: "carematch-help-reminder",
           duration: 10000,
           position: "bottom-right",
+          className: "pointer-events-none",
         },
       );
       scheduleReminder();
