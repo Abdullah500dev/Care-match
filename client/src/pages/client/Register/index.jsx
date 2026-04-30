@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState({
     fullName: "",
@@ -28,6 +29,7 @@ export default function Register() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [errors, setErrors] = useState({});
   const showActivationCard = Boolean(pendingEmail);
+  const fromState = location.state?.from;
  
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -124,7 +126,7 @@ export default function Register() {
             "Account activated",
             "Your account was activated successfully. Please sign in to continue."
           );
-          navigate("/signin", { state: nextState });
+          navigate("/signin", { state: { ...nextState, from: fromState } });
           return;
         }
       } catch {
@@ -252,7 +254,7 @@ export default function Register() {
           // Ignore parsing errors and continue with email only.
         }
       }
-      navigate("/signin", { state: nextState });
+      navigate("/signin", { state: { ...nextState, from: fromState } });
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Verification failed",
@@ -414,7 +416,7 @@ export default function Register() {
 
                     <p className="text-center text-sm text-[#64748b]">
                       Already have an account?{" "}
-                      <Link to="/signin" className="underline text-[#00b8db]">
+                      <Link to="/signin" state={{ from: fromState }} className="underline text-[#00b8db]">
                         Sign In
                       </Link>
                     </p>

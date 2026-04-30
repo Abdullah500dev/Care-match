@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal, X, Check, Sparkles, Activity } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
 import { postMatchRecommendations } from "@/services/matchService";
+import { getUser } from "@/store/auth/authSlice";
+import { toast } from "sonner";
 
 const BUDGET_SLIDER_MIN = 2000;
 const BUDGET_SLIDER_MAX = 15000;
@@ -19,7 +22,8 @@ const MILES_SLIDER_MIN = 5;
 const MILES_SLIDER_MAX = 100;
 const MILES_SLIDER_STEP = 5;
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 8;
+const INTAKE_DRAFT_STORAGE_KEY = "carematch_intake_draft_v1";
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -121,7 +125,7 @@ const defaultFormData = {
   location: "",
   budgetMin: 3000,
   budgetMax: 6000,
-  levelOfCare: "",
+  levelOfCare: "assisted",
   specialNeedsPreferences: ["privateRoom"],
   careTypes: [],
   budget: "",
@@ -163,13 +167,61 @@ const SPECIAL_NEED_TO_AMENITY = {
   dialysis: "Dialysis Access",
 };
 
+function getStepValidationError(step, formData) {
+  if (step === 1 && !String(formData?.who || "").trim()) return "Please select who needs care.";
+  if (step === 2 && !String(formData?.parentAge || "").trim()) return "Please select an age range.";
+  if (step === 3 && !String(formData?.careTimeline || "").trim()) return "Please select a care timeline.";
+  if (step === 4 && !String(formData?.livingNow || "").trim()) return "Please select current living situation.";
+  if (step === 5 && !String(formData?.mobility || "").trim()) return "Please select mobility status.";
+  if (step === 6 && (!Array.isArray(formData?.lovedOneCare) || formData.lovedOneCare.length === 0)) {
+    return "Please choose at least one care need.";
+  }
+  if (step === 7 && !String(formData?.location || "").trim()) return "Please enter preferred location.";
+  if (
+    step === 8 &&
+    (!Array.isArray(formData?.specialNeedsPreferences) || formData.specialNeedsPreferences.length === 0)
+  ) {
+    return "Please select at least one preference.";
+  }
+  return null;
+}
+
 export default function IntakeSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useSelector(getUser);
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState(defaultFormData);
   const [isFindingMatches, setIsFindingMatches] = useState(false);
+  const currentStepValidationError = getStepValidationError(step, formData);
 
   const progressPercent = (step / TOTAL_STEPS) * 100;
+
+  useEffect(() => {
+    let draft = null;
+    try {
+      const raw = sessionStorage.getItem(INTAKE_DRAFT_STORAGE_KEY);
+      if (raw) draft = JSON.parse(raw);
+    } catch {
+      draft = null;
+    }
+
+    if (!draft || typeof draft !== "object") return;
+    const hasResumeSignal = Boolean(location.state?.resumeIntake);
+    if (!hasResumeSignal && !isAuthenticated) return;
+
+    const savedStep = Number(draft.step);
+    const safeStep =
+      Number.isFinite(savedStep) && savedStep >= 1 && savedStep <= TOTAL_STEPS
+        ? Math.round(savedStep)
+        : 1;
+    const savedFormData =
+      draft.formData && typeof draft.formData === "object"
+        ? { ...defaultFormData, ...draft.formData }
+        : defaultFormData;
+    setStep(safeStep);
+    setFormData(savedFormData);
+  }, [location.state, isAuthenticated]);
 
   useEffect(() => {
     if (!isFindingMatches) return;
@@ -265,13 +317,44 @@ export default function IntakeSearch() {
   };
 
   const goNext = () => {
+    if (step < TOTAL_STEPS) {
+      const validationError = getStepValidationError(step, formData);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+    }
     if (step < TOTAL_STEPS) setStep((s) => s + 1);
     else setIsFindingMatches(true);
   };
 
   const handleSaveAndFinishLater = () => {
-    console.log("Saved progress:", { step, formData });
-    navigate("/");
+    try {
+      sessionStorage.setItem(
+        INTAKE_DRAFT_STORAGE_KEY,
+        JSON.stringify({ step, formData, savedAt: Date.now() }),
+      );
+    } catch {
+      // Ignore storage write failures and continue auth redirect.
+    }
+    const hasPersistedSession =
+      isAuthenticated ||
+      (typeof window !== "undefined" && Boolean(localStorage.getItem("access_token")));
+
+    if (hasPersistedSession) {
+      toast.success("Progress saved. You can continue later.");
+      navigate("/", { state: { fromIntakeSave: true } });
+      return;
+    }
+
+    navigate("/register", {
+      state: {
+        from: {
+          pathname: "/find-care",
+          state: { resumeIntake: true },
+        },
+      },
+    });
   };
 
   const update = (key, value) => setFormData((prev) => ({ ...prev, [key]: value }));
@@ -368,7 +451,7 @@ export default function IntakeSearch() {
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 overflow-hidden rounded-l-2xl">
             <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
               <img
-                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
+                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
                 alt=""
                 className="h-full w-full object-cover object-center"
                 aria-hidden
@@ -387,6 +470,7 @@ export default function IntakeSearch() {
               onBack={goBack}
               onContinue={goNext}
               onSaveLater={handleSaveAndFinishLater}
+              canContinue={!currentStepValidationError}
             >
               <StepContent
                 step={step}
@@ -403,7 +487,16 @@ export default function IntakeSearch() {
   );
 }
 
-function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSaveLater, children }) {
+function CardShell({
+  step,
+  totalSteps,
+  progressPercent,
+  onBack,
+  onContinue,
+  onSaveLater,
+  canContinue = true,
+  children,
+}) {
   return (
     <div className="flex flex-col flex-1 w-full min-w-0 px-6 sm:px-8 lg:px-10 pt-6 sm:pt-8 lg:pt-10 pb-6 sm:pb-8 lg:pb-10">
       {/* Top section: Back + Step + track bar on top, then divider */}
@@ -436,7 +529,8 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
       <div className="mt-10 flex flex-col gap-4">
         <Button
           onClick={onContinue}
-          className="h-14 w-full rounded-2xl bg-[#00CFF4] text-xl text-white font-semibold"
+          disabled={!canContinue}
+          className="h-14 w-full rounded-2xl bg-[#00CFF4] text-xl text-white font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {step < totalSteps ? "Continue" : "See matching facilities"}
           <ArrowRight className="h-4 w-4 ml-1" />
@@ -824,72 +918,6 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
   }
 
   if (step === 8) {
-    const assistedOption = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === "assisted");
-    if (!assistedOption) return null;
-    const { id, label, desc, Icon } = assistedOption;
-    const isSelected = formData.levelOfCare === id;
-    return (
-      <>
-        <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
-          What&apos;s the{" "}
-          <span
-            className="underline decoration-2 underline-offset-2 bg-clip-text text-transparent pr-0.5"
-            style={{ background: "linear-gradient(138.09deg, #FAAD60 20.61%, #F2987D 76.35%)", WebkitBackgroundClip: "text" }}
-          >
-            level of care
-          </span>{" "}
-          needed?
-        </h1>
-        <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
-        {/* Removed from step 8 UI (commented, not deleted) — Independent Living, Memory Care, Skilled Nursing. Original grid with all 4 cards:
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {LEVEL_OF_CARE_OPTIONS.map(({ id: optId, label: optLabel, desc: optDesc, Icon: OptIcon }) => (
-            <button key={optId} type="button" onClick={() => update("levelOfCare", optId)}
-              className={cn("rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
-                formData.levelOfCare === optId ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]" : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]")}>
-              <span className={cn("flex h-10 w-10 shrink-0 rounded-xl items-center justify-center", formData.levelOfCare === optId ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]")}>
-                <OptIcon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === optId && "text-[#0f172a]")}>{optLabel}</span>
-                <span className="text-sm text-[#64748b] mt-0.5 block">{optDesc}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-        */}
-        <div className="flex min-h-[220px] items-center justify-center">
-          <button
-            type="button"
-            onClick={() => update("levelOfCare", id)}
-            className={cn(
-              "w-full max-w-md rounded-2xl border-2 px-6 py-6 sm:px-8 sm:py-8 text-left transition-colors flex gap-4 sm:gap-5 items-start",
-              isSelected
-                ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]"
-                : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]"
-            )}
-          >
-            <span
-              className={cn(
-                "flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 rounded-xl items-center justify-center",
-                isSelected ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]"
-              )}
-            >
-              <Icon className="h-6 w-6 sm:h-7 sm:w-7" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className={cn("block font-bold text-lg sm:text-xl text-[#0f172a]")}>
-                {label}
-              </span>
-              <span className="text-sm sm:text-base text-[#64748b] mt-1 block">{desc}</span>
-            </div>
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  if (step === 9) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
@@ -956,7 +984,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     );
   }
 
-  // Steps 10–16 commented out – flow ends at step 9
+  // Steps 10–16 commented out – flow ends at step 8
   // if (step === 10) {
   //   return (
   //     <>
