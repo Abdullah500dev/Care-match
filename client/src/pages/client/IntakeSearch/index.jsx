@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal, X, Check, Sparkles, Activity } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Compass,
+  Heart,
+  MapPin,
+  MessageCircle,
+  Search,
+  Signal,
+  SlidersHorizontal,
+  User,
+  Users,
+  UsersRound,
+  X,
+  Zap,
+} from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -625,6 +641,115 @@ export default function IntakeSearch() {
     return (
       <>
         <SEO title="Finding Matches - CareMatch" />
+        <style jsx global>{`
+          @keyframes intakeFinderIconFloatStrong {
+            0%, 100% {
+              transform: translateY(0px) translateX(0px) scale(1);
+            }
+            25% {
+              transform: translateY(-6px) translateX(2px) scale(1.05);
+            }
+            50% {
+              transform: translateY(-2px) translateX(5px) scale(1.1);
+            }
+            75% {
+              transform: translateY(4px) translateX(-1px) scale(1.03);
+            }
+          }
+
+          @keyframes intakeFinderIconBounceStrong {
+            0%, 100% {
+              transform: translateY(0px) scale(1);
+            }
+            20% {
+              transform: translateY(-7px) scale(1.06);
+            }
+            40% {
+              transform: translateY(1px) scale(0.98);
+            }
+            60% {
+              transform: translateY(-4px) scale(1.04);
+            }
+            80% {
+              transform: translateY(0px) scale(1);
+            }
+          }
+
+          @keyframes intakeFinderIconSpinStrong {
+            0% {
+              transform: rotate(0deg) scale(1);
+            }
+            40% {
+              transform: rotate(160deg) scale(1.08);
+            }
+            70% {
+              transform: rotate(280deg) scale(1.02);
+            }
+            100% {
+              transform: rotate(360deg) scale(1);
+            }
+          }
+
+          @keyframes intakeFinderIconWobble {
+            0%, 100% {
+              transform: rotate(0deg) translateY(0px) scale(1);
+            }
+            15% {
+              transform: rotate(-12deg) translateY(-2px) scale(1.05);
+            }
+            30% {
+              transform: rotate(10deg) translateY(2px) scale(1.02);
+            }
+            45% {
+              transform: rotate(-8deg) translateY(-1px) scale(1.06);
+            }
+            60% {
+              transform: rotate(6deg) translateY(2px) scale(1.03);
+            }
+            75% {
+              transform: rotate(-4deg) translateY(-1px) scale(1.01);
+            }
+          }
+
+          @keyframes intakeFinderIconRipple {
+            0% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0.45);
+            }
+            70% {
+              box-shadow: 0 0 0 14px rgba(0, 207, 244, 0);
+            }
+            100% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0);
+            }
+          }
+
+          .animate-intake-icon-float-strong {
+            animation: intakeFinderIconFloatStrong 1.45s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-bounce-strong {
+            animation: intakeFinderIconBounceStrong 1.2s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-spin-strong {
+            animation: intakeFinderIconSpinStrong 1.3s linear infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-wobble {
+            animation: intakeFinderIconWobble 1.1s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-ripple {
+            animation:
+              intakeFinderIconFloatStrong 1.45s ease-in-out infinite,
+              intakeFinderIconRipple 1.7s ease-out infinite;
+            will-change: transform, box-shadow;
+          }
+        `}</style>
         <div
           className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-12 bg-no-repeat"
           style={{
@@ -639,29 +764,40 @@ export default function IntakeSearch() {
               boxShadow: "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
             }}
           >
-            {/* Icon cluster: central star + 4 surrounding icons */}
-            <div className="relative flex justify-center items-center mb-8 h-28">
-              <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] transform scale-100 animate-pulse">
-                <Sparkles className="h-10 w-10" />
+            <div className="relative mb-8 flex h-24 items-center justify-center">
+              <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
+                <MessageCircle className="h-9 w-9" />
               </div>
-              <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Users className="h-5 w-5" />
+              <div
+                className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4]/80 bg-white text-[#00CFF4] animate-intake-icon-float-strong shadow-[0_0_0_0_rgba(0,207,244,0.45)] animate-intake-icon-ripple"
+                style={{ animationDelay: "0ms" }}
+              >
+                <Search className="h-4 w-4" />
               </div>
-              <div className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <User className="h-5 w-5" />
+              <div
+                className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#38BDF8]/80 bg-white text-[#0EA5E9] animate-intake-icon-bounce-strong shadow-[0_0_16px_rgba(56,189,248,0.35)]"
+                style={{ animationDelay: "100ms" }}
+              >
+                <MapPin className="h-4 w-4" />
               </div>
-              <div className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Activity className="h-5 w-5" />
+              <div
+                className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#22D3EE]/80 bg-white text-[#0891B2] animate-intake-icon-spin-strong shadow-[0_0_16px_rgba(34,211,238,0.35)]"
+                style={{ animationDelay: "180ms" }}
+              >
+                <Compass className="h-4 w-4" />
               </div>
-              <div className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Heart className="h-5 w-5" />
+              <div
+                className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2DD4BF]/80 bg-white text-[#0F766E] animate-intake-icon-wobble shadow-[0_0_14px_rgba(45,212,191,0.35)]"
+                style={{ animationDelay: "260ms" }}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
               </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold italic text-[#1D293D] mb-3">
               Finding Your Matches...
             </h1>
             <p className="text-[#64748b] text-base mb-6 max-w-sm mx-auto">
-              We&apos;re analyzing hundreds of facilities to find the best fits for your needs. This will just take a moment.
+              Reviewing care preferences
             </p>
             <ul className="text-left max-w-xs mx-auto space-y-2 text-[#334155]">
               <li className="flex items-center gap-2">
@@ -677,6 +813,10 @@ export default function IntakeSearch() {
                 Calculating match scores....
               </li>
             </ul>
+            <div className="mt-7 flex items-center justify-center gap-2 text-sm text-slate-600">
+              <span className="h-4 w-4 rounded-full border-2 border-[#94a3b8]/40 border-t-[#00CFF4] animate-spin" />
+              Please wait
+            </div>
           </div>
         </div>
       </>
@@ -1173,7 +1313,7 @@ function StepContent({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-[#334155] font-bold">What is your monthly budget?</Label>
-              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}+</span>
+              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}</span>
             </div>
             <BudgetRangeSlider
               budgetMin={budgetMin}
