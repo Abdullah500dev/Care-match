@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal, X, Check, Sparkles, Activity } from "lucide-react";
@@ -10,7 +10,11 @@ import { Progress } from "@/components/ui/progress";
 import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
-import { postMatchRecommendations } from "@/services/matchService";
+import {
+  postDiscoverFacilities,
+  postMatchRecommendations,
+} from "@/services/matchService";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
 import { getUser } from "@/store/auth/authSlice";
 import { toast } from "sonner";
 
@@ -24,6 +28,7 @@ const MILES_SLIDER_STEP = 5;
 
 const TOTAL_STEPS = 8;
 const INTAKE_DRAFT_STORAGE_KEY = "carematch_intake_draft_v1";
+const ZIP_CODE_REGEX = /\b(\d{5})(?:-\d{4})?\b/;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -193,7 +198,23 @@ export default function IntakeSearch() {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState(defaultFormData);
   const [isFindingMatches, setIsFindingMatches] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const locationInputRef = useRef(null);
+  const locationAutocompleteRef = useRef(null);
+  const locationGeocoderRef = useRef(null);
+  const geocodeRequestIdRef = useRef(0);
+  const mapsApiKey = getGoogleMapsApiKey();
+  const requiresZipForStepSeven = Boolean(mapsApiKey);
   const currentStepValidationError = getStepValidationError(step, formData);
+  const stepSevenZipError =
+    step === 7 &&
+    requiresZipForStepSeven &&
+    String(formData?.location || "").trim().length > 0 &&
+    !ZIP_CODE_REGEX.test(String(formData?.location || ""))
+      ? "Please select a city suggestion so ZIP can be auto-filled, or enter a valid ZIP code."
+      : null;
+  const effectiveValidationError =
+    currentStepValidationError || (step === 7 ? locationError || stepSevenZipError : null);
 
   const progressPercent = (step / TOTAL_STEPS) * 100;
 
@@ -249,26 +270,81 @@ export default function IntakeSearch() {
         personalityNotes: "",
         snfReadiness: formData.levelOfCare === "snf",
       };
+      const zipFromSearchLocation = String(matcherPayload.searchLocation || "").match(
+        /\b(\d{5})(?:-\d{4})?\b/,
+      )?.[1] || "";
+      const locationQueryForExplorer = zipFromSearchLocation
+        ? String(matcherPayload.searchLocation || "")
+            .replace(new RegExp(`\\b${zipFromSearchLocation}\\b`, "g"), "")
+            .replace(/\s+/g, " ")
+            .replace(/,\s*,/g, ", ")
+            .replace(/^,\s*|\s*,$/g, "")
+            .trim()
+        : String(matcherPayload.searchLocation || "").trim();
+      const mappedFilters = {
+        locationQuery: locationQueryForExplorer || matcherPayload.searchLocation,
+        searchZipCode: zipFromSearchLocation || undefined,
+        budgetMinMonthly: Number(formData.budgetMin) || null,
+        budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
+        maxDistanceMiles: matcherPayload.maxDistanceMiles,
+        careLevels: matcherPayload.careLevels,
+        amenityMustHaves: matcherPayload.amenityMustHaves,
+        availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+      };
+      const discoverPayload = {
+        zip_code: matcherPayload.searchLocation,
+        location: matcherPayload.searchLocation,
+        care_levels:
+          matcherPayload.careLevels.length > 0
+            ? matcherPayload.careLevels
+            : ["assisted living"],
+        amenities: matcherPayload.amenityMustHaves,
+        services: matcherPayload.amenityMustHaves,
+        keywords: [
+          mappedFilters.availability,
+          String(formData.who || "").trim(),
+          String(formData.parentAge || "").trim(),
+          String(formData.livingNow || "").trim(),
+          String(formData.mobility || "").trim(),
+        ].filter(Boolean),
+        budget_min: Number(formData.budgetMin) || null,
+        budget_max: Number(formData.budgetMax) || null,
+        max_distance_miles: Number(formData.maxTravelMiles) || null,
+      };
 
       const startedAt = Date.now();
       try {
-        const { data } = await postMatchRecommendations(matcherPayload);
+        let recs = [];
+        let liveDiscoveryError = null;
+        try {
+          const { data } = await postDiscoverFacilities(discoverPayload);
+          recs = Array.isArray(data?.facilities) ? data.facilities : [];
+        } catch (error) {
+          liveDiscoveryError = error;
+        }
+
+        // Fallback when live discovery errors OR returns zero rows.
+        if (recs.length === 0) {
+          // Fallback keeps the old non-scraping matcher flow alive.
+          const { data } = await postMatchRecommendations(matcherPayload);
+          recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
+        }
+
+        if (recs.length === 0 && liveDiscoveryError) {
+          const liveErrorMessage =
+            liveDiscoveryError?.response?.data?.message ||
+            liveDiscoveryError?.message ||
+            "Live discovery could not return any matches.";
+          toast.error("No matches found yet", {
+            description: String(liveErrorMessage),
+          });
+        }
         if (cancelled) return;
 
         const elapsed = Date.now() - startedAt;
         const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
         window.setTimeout(() => {
           if (cancelled) return;
-          const mappedFilters = {
-            locationQuery: matcherPayload.searchLocation,
-            budgetMinMonthly: Number(formData.budgetMin) || null,
-            budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
-            maxDistanceMiles: matcherPayload.maxDistanceMiles,
-            careLevels: matcherPayload.careLevels,
-            amenityMustHaves: matcherPayload.amenityMustHaves,
-            availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
-          };
-          const recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
           navigate("/care-explorer", {
             state: {
               fromCarrie: true,
@@ -288,17 +364,7 @@ export default function IntakeSearch() {
               fromCarrie: true,
               carrieMatches: [],
               carrieFilters: {
-                locationQuery: String(formData.location || "").trim(),
-                budgetMinMonthly: Number(formData.budgetMin) || null,
-                budgetMaxMonthly: Number(formData.budgetMax) || null,
-                maxDistanceMiles: Number(formData.maxTravelMiles) || null,
-                careLevels:
-                  formData.levelOfCare && LEVEL_TO_CARE_LEVEL[formData.levelOfCare]
-                    ? [LEVEL_TO_CARE_LEVEL[formData.levelOfCare]]
-                    : [],
-                amenityMustHaves: [],
-                availability:
-                  TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+                ...mappedFilters,
               },
             },
           });
@@ -310,6 +376,171 @@ export default function IntakeSearch() {
       cancelled = true;
     };
   }, [isFindingMatches, navigate, formData]);
+
+  useEffect(() => {
+    if (step !== 7 || !mapsApiKey) return;
+    let cancelled = false;
+    let attachTimer = null;
+
+    const readAddressPart = (components, type, shortName = false) => {
+      const list = Array.isArray(components) ? components : [];
+      const found = list.find((item) => Array.isArray(item?.types) && item.types.includes(type));
+      if (!found) return "";
+      return String(shortName ? found.short_name : found.long_name || "").trim();
+    };
+
+    const buildLocationLabel = (components, fallback = "") => {
+      const city =
+        readAddressPart(components, "locality") ||
+        readAddressPart(components, "postal_town") ||
+        readAddressPart(components, "administrative_area_level_2");
+      const state = readAddressPart(components, "administrative_area_level_1", true);
+      const zip = readAddressPart(components, "postal_code");
+      const cityState = [city, state].filter(Boolean).join(", ").trim();
+      if (cityState && zip) return `${cityState} ${zip}`;
+      if (cityState) return cityState;
+      return String(fallback || "").trim();
+    };
+
+    const geocodeByLocation = (geoLocation, fallbackText = "") => {
+      const geocoder = locationGeocoderRef.current;
+      if (!geocoder || !geoLocation) return;
+      geocoder.geocode({ location: geoLocation }, (results, status) => {
+        if (cancelled) return;
+        if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
+        const normalized = buildLocationLabel(results[0].address_components, fallbackText);
+        if (normalized) {
+          setFormData((prev) => ({ ...prev, location: normalized }));
+          setLocationError("");
+        }
+      });
+    };
+
+    const attachAutocomplete = () => {
+      const inputEl = locationInputRef.current;
+      if (!inputEl || !window.google?.maps?.places) return;
+
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+
+      locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(inputEl, {
+        types: ["(cities)"],
+        componentRestrictions: { country: "us" },
+        fields: ["address_components", "formatted_address", "geometry", "name"],
+      });
+      locationGeocoderRef.current = new window.google.maps.Geocoder();
+
+      locationAutocompleteRef.current.addListener("place_changed", () => {
+        if (cancelled) return;
+        const place = locationAutocompleteRef.current.getPlace();
+        const normalized = buildLocationLabel(
+          place?.address_components,
+          place?.formatted_address || place?.name || ""
+        );
+
+        if (normalized) {
+          setFormData((prev) => ({ ...prev, location: normalized }));
+          setLocationError("");
+        }
+
+        if (!ZIP_CODE_REGEX.test(normalized) && place?.geometry?.location) {
+          geocodeByLocation(place.geometry.location, normalized);
+        }
+      });
+    };
+
+    loadGoogleMapsScript(mapsApiKey)
+      .then(() => {
+        if (cancelled) return;
+        attachTimer = window.setTimeout(attachAutocomplete, 0);
+      })
+      .catch(() => {
+        // Keep plain input behavior when maps cannot load.
+      });
+
+    return () => {
+      cancelled = true;
+      if (attachTimer) window.clearTimeout(attachTimer);
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+    };
+  }, [step, mapsApiKey]);
+
+  const handleLocationBlur = () => {
+    if (!mapsApiKey) return;
+    const geocoder = locationGeocoderRef.current;
+    if (!geocoder) return;
+
+    const raw = String(formData.location || "").trim();
+    if (!raw) {
+      setLocationError("");
+      return;
+    }
+
+    const requestId = ++geocodeRequestIdRef.current;
+    const zipMatch = raw.match(ZIP_CODE_REGEX);
+    const readAddressPart = (components, type, shortName = false) => {
+      const list = Array.isArray(components) ? components : [];
+      const found = list.find((item) => Array.isArray(item?.types) && item.types.includes(type));
+      if (!found) return "";
+      return String(shortName ? found.short_name : found.long_name || "").trim();
+    };
+    const buildLocationLabel = (components, fallback = "", zipOverride = "") => {
+      const city =
+        readAddressPart(components, "locality") ||
+        readAddressPart(components, "postal_town") ||
+        readAddressPart(components, "administrative_area_level_2");
+      const state = readAddressPart(components, "administrative_area_level_1", true);
+      const zip = zipOverride || readAddressPart(components, "postal_code");
+      const cityState = [city, state].filter(Boolean).join(", ").trim();
+      if (cityState && zip) return `${cityState} ${zip}`;
+      if (cityState) return cityState;
+      return String(fallback || "").trim();
+    };
+
+    if (zipMatch?.[1]) {
+      const zip = zipMatch[1];
+      geocoder.geocode(
+        { address: zip, componentRestrictions: { country: "US" } },
+        (results, status) => {
+          if (requestId !== geocodeRequestIdRef.current) return;
+          if (status !== "OK" || !Array.isArray(results) || !results[0]) {
+            setLocationError("Please enter a valid US ZIP code.");
+            return;
+          }
+          const firstZip = readAddressPart(results[0].address_components, "postal_code");
+          if (firstZip && firstZip !== zip) {
+            setLocationError("Please enter a valid US ZIP code.");
+            return;
+          }
+          const normalized = buildLocationLabel(results[0].address_components, raw, zip);
+          if (normalized) setFormData((prev) => ({ ...prev, location: normalized }));
+          setLocationError("");
+        }
+      );
+      return;
+    }
+
+    geocoder.geocode(
+      { address: raw, componentRestrictions: { country: "US" } },
+      (results, status) => {
+        if (requestId !== geocodeRequestIdRef.current) return;
+        if (status !== "OK" || !Array.isArray(results) || !results[0]) {
+          setLocationError("Could not validate location. Select a city suggestion or add a ZIP code.");
+          return;
+        }
+        const normalized = buildLocationLabel(results[0].address_components, raw);
+        if (!ZIP_CODE_REGEX.test(normalized)) {
+          setLocationError("Please select a city suggestion so we can auto-fetch ZIP.");
+          return;
+        }
+        setFormData((prev) => ({ ...prev, location: normalized }));
+        setLocationError("");
+      }
+    );
+  };
 
   const goBack = () => {
     if (step > 1) setStep((s) => s - 1);
@@ -324,7 +555,10 @@ export default function IntakeSearch() {
       case 4: return !!formData.livingNow;
       case 5: return !!formData.mobility;
       case 6: return formData.lovedOneCare && formData.lovedOneCare.length > 0;
-      case 7: return !!formData.location && formData.location.trim().length > 0;
+      case 7:
+        if (!formData.location || formData.location.trim().length === 0) return false;
+        if (!requiresZipForStepSeven) return true;
+        return ZIP_CODE_REGEX.test(String(formData.location || ""));
       case 8: return formData.specialNeedsPreferences && formData.specialNeedsPreferences.length > 0;
       default: return true;
     }
@@ -333,7 +567,8 @@ export default function IntakeSearch() {
   const goNext = () => {
     if (!isStepValid()) {
       toast.error("Required Selection Missing", {
-        description: "Please select an option before moving to the next step.",
+        description:
+          effectiveValidationError || "Please select an option before moving to the next step.",
       });
       return;
     }
@@ -489,7 +724,7 @@ export default function IntakeSearch() {
               onBack={goBack}
               onContinue={goNext}
               onSaveLater={handleSaveAndFinishLater}
-              canContinue={!currentStepValidationError}
+              canContinue={!effectiveValidationError}
             >
               <StepContent
                 step={step}
@@ -497,6 +732,11 @@ export default function IntakeSearch() {
                 update={update}
                 setFormData={setFormData}
                 toggleArray={toggleArray}
+                locationInputRef={locationInputRef}
+                onLocationBlur={handleLocationBlur}
+                onLocationInputChange={() => setLocationError("")}
+                locationError={locationError}
+                requiresZipForStepSeven={requiresZipForStepSeven}
               />
             </CardShell>
           </div>
@@ -566,7 +806,18 @@ function CardShell({
   );
 }
 
-function StepContent({ step, formData, update, setFormData, toggleArray }) {
+function StepContent({
+  step,
+  formData,
+  update,
+  setFormData,
+  toggleArray,
+  locationInputRef,
+  onLocationBlur,
+  onLocationInputChange,
+  locationError,
+  requiresZipForStepSeven,
+}) {
   if (step === 1) {
     return (
       <>
@@ -883,10 +1134,21 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             <Input
               id="preferredLocation"
               placeholder="Enter city, zip code, or address"
+              ref={locationInputRef}
               value={formData.location}
-              onChange={(e) => update("location", e.target.value)}
+              onChange={(e) => {
+                update("location", e.target.value);
+                if (typeof onLocationInputChange === "function") onLocationInputChange();
+              }}
+              onBlur={onLocationBlur}
               className="rounded-xl border-[#e2e8f0] h-12 placeholder:italic"
             />
+            <p className="text-xs text-[#64748b]">
+              {requiresZipForStepSeven
+                ? "Start typing your city and choose from suggestions. ZIP will auto-fill."
+                : "Enter city, ZIP code, or address."}
+            </p>
+            {locationError && <p className="text-xs text-[#DC2626]">{locationError}</p>}
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">

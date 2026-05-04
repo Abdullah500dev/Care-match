@@ -7,3 +7,11 @@ import { apiClient } from "./api";
 export function postMatchRecommendations(preferences) {
   return apiClient.post("/api/match/recommendations", preferences);
 }
+
+/**
+ * Live discovery search backed by scraping + AI enrichment.
+ * @param {object} payload
+ */
+export function postDiscoverFacilities(payload) {
+  return apiClient.post("/api/facilities/discover", payload);
+}
