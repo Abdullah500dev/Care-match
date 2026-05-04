@@ -40,6 +40,40 @@ const DISCOVERY_IMAGE_DEBUG = process.env.CAREMATCH_DISCOVERY_IMAGE_DEBUG === "1
 const DISCOVERY_CALL_DEBUG = process.env.CAREMATCH_DISCOVERY_CALL_DEBUG === "1";
 const DISCOVERY_ENABLE_GEO_RETRY = process.env.CAREMATCH_DISCOVERY_ENABLE_GEO_RETRY === "1";
 
+const MANUAL_TIMELINE_TO_KEYWORDS = {
+  immediately: "Immediate move-in preferred",
+  within30: "Needs move-in within 30 days",
+  within60: "Planning within 60 days",
+  noRush: "Planning ahead for future care",
+};
+const MANUAL_LEVEL_TO_CARE_LEVEL = {
+  assisted: "assisted living",
+  independent: "independent living",
+  memory: "memory care",
+  snf: "skilled nursing",
+};
+const MANUAL_CARE_TO_AMENITY = {
+  dailyActivities: "24/7 Care",
+  memoryCare: "Memory Care",
+  medication: "Medication Management",
+  mobilityAssist: "Mobility Assistance",
+  medicalMonitoring: "Medical Monitoring",
+  socialEngagement: "Social Engagement",
+};
+const MANUAL_SPECIAL_NEED_TO_AMENITY = {
+  privateRoom: "Private Rooms",
+  petFriendly: "Pet Friendly",
+  couples: "Couples Accommodation",
+  cultural: "Cultural or Language-specific Care",
+  faithBased: "Faith-based Community",
+  lgbtq: "LGBTQ+ Welcoming",
+  diabetes: "Diabetes Management",
+  physicalTherapy: "Physical Therapy",
+  hospice: "Hospice Care",
+  respiratory: "Respiratory Support",
+  dialysis: "Dialysis Access Nearby",
+};
+
 const discoveryInFlight = new Map();
 
 const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spelling):
@@ -637,6 +671,65 @@ function normalizeSearchParams(userSearch) {
   };
 }
 
+function normalizeManualSearchParams(manualIntake) {
+  const intake = manualIntake && typeof manualIntake === "object" ? manualIntake : {};
+
+  const location = typeof intake.location === "string" ? intake.location.trim() : "";
+  const locationZip = String(location || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  const zipFromLocation = locationZip ? locationZip[1] : "";
+  const explicitZip = typeof intake.zip_code === "string" ? intake.zip_code.trim() : "";
+  const zip_code = explicitZip || zipFromLocation || location;
+
+  const derivedCareLevel = MANUAL_LEVEL_TO_CARE_LEVEL[String(intake.levelOfCare || "").trim()];
+  const care_levels = derivedCareLevel ? [derivedCareLevel] : ["assisted living"];
+
+  const lovedOneCare = Array.isArray(intake.lovedOneCare) ? intake.lovedOneCare : [];
+  const specialNeeds = Array.isArray(intake.specialNeedsPreferences)
+    ? intake.specialNeedsPreferences
+    : [];
+  const amenityMustHaves = [
+    ...lovedOneCare.map((id) => MANUAL_CARE_TO_AMENITY[id]).filter(Boolean),
+    ...specialNeeds.map((id) => MANUAL_SPECIAL_NEED_TO_AMENITY[id]).filter(Boolean),
+  ];
+
+  const services = [...new Set(amenityMustHaves)].filter(Boolean);
+  const amenities = [...new Set(amenityMustHaves)].filter(Boolean);
+
+  const keywords = [
+    MANUAL_TIMELINE_TO_KEYWORDS[String(intake.careTimeline || "").trim()] || "",
+    String(intake.who || "").trim() ? `Care recipient: ${String(intake.who).trim()}` : "",
+    String(intake.parentAge || "").trim() ? `Age range: ${String(intake.parentAge).trim()}` : "",
+    String(intake.livingNow || "").trim()
+      ? `Current living situation: ${String(intake.livingNow).trim()}`
+      : "",
+    String(intake.mobility || "").trim()
+      ? `Mobility status: ${String(intake.mobility).trim()}`
+      : "",
+  ].filter(Boolean);
+
+  const budget_min = Number(intake.budgetMin);
+  const budget_max = Number(intake.budgetMax);
+  const max_distance_miles = Number(intake.maxTravelMiles ?? intake.maxMiles);
+
+  return {
+    zip_code,
+    location,
+    care_levels,
+    amenities,
+    services,
+    keywords,
+    budget_min: Number.isFinite(budget_min) && budget_min > 0 ? Math.round(budget_min) : null,
+    budget_max:
+      Number.isFinite(budget_max) && budget_max > 0 && budget_max >= budget_min
+        ? Math.round(budget_max)
+        : null,
+    max_distance_miles:
+      Number.isFinite(max_distance_miles) && max_distance_miles > 0
+        ? Math.round(max_distance_miles)
+        : null,
+  };
+}
+
 /**
  * Main function you can call after you get params from user search.
  * @param {object} userSearch - Search input from user.
@@ -684,6 +777,18 @@ export async function getCareMatchResults(userSearch, options = {}) {
   discoveryInFlight.set(cacheKey, requestPromise);
   const fresh = await requestPromise;
   return cloneDiscoveryPayload(fresh);
+}
+
+/**
+ * Manual intake adapter for the 8-step flow.
+ * Accepts raw intake fields and routes through the same discovery engine.
+ * @param {object} manualIntake
+ * @param {object} [options]
+ * @returns {Promise<{results: Array}>}
+ */
+export async function getCareMatchResultsFromManualIntake(manualIntake, options = {}) {
+  const searchParams = normalizeManualSearchParams(manualIntake);
+  return getCareMatchResults(searchParams, options);
 }
 
 /**

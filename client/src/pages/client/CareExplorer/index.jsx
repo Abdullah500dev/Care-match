@@ -135,6 +135,11 @@ function titleCase(s) {
     .join(" ");
 }
 
+function extractFiveDigitZip(text) {
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
+}
+
 function normalizeToken(value) {
   return String(value || "")
     .toLowerCase()
@@ -203,10 +208,23 @@ function addressMatchesLocation(fullAddress, locationQuery) {
   // 3. Handle "City, State" queries e.g. "Newark, NJ" or "Newark, New Jersey"
   if (query.includes(",")) {
     const [city, stateRaw] = query.split(",").map((s) => s.trim());
-    const stateAbbr = US_STATE_ABBR[stateRaw] || stateRaw;
+    const zipInQuery = String(stateRaw || "").match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] || "";
+    const stateOnly = String(stateRaw || "")
+      .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+      .trim();
+    const stateAbbr = US_STATE_ABBR[stateOnly] || stateOnly;
+
+    // If ZIP is provided, accept exact ZIP match.
+    if (zipInQuery && addr.includes(zipInQuery)) return true;
+
+    // City + state match should still pass even if ZIP differs within same city/state.
     if (city && addr.includes(city)) {
-      if (addr.includes(stateAbbr)) return true;
-      if (stateRaw && addr.includes(stateRaw)) return true;
+      if (stateAbbr && new RegExp(`\\b${String(stateAbbr).toLowerCase()}\\b`).test(addr)) {
+        return true;
+      }
+      if (stateOnly && addr.includes(stateOnly.toLowerCase())) return true;
+      // When user gives only city and no parseable state, allow city-only match.
+      if (!stateOnly) return true;
     }
   }
 
@@ -412,15 +430,10 @@ function normalizeFacilityForCard(m) {
     careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
     amenities: Array.isArray(m.amenities) ? m.amenities : [],
     services: Array.isArray(m.services) ? m.services : [],
-    availability: m.availability || "Within 30 Days",
+    availability: m.availability || "",
     lat: googlePlaces.latitude ?? externalData.latitude ?? m.latitude ?? null,
     lng: googlePlaces.longitude ?? externalData.longitude ?? m.longitude ?? null,
   };
-}
-
-function extractFiveDigitZip(text) {
-  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
-  return m ? m[1] : "";
 }
 
 /** Normalize for fuzzy checkbox / listing match (hyphens, case). */
@@ -935,7 +948,8 @@ const CareExplorer = () => {
   const carrieLocationQuery = String(
     carrieFilters?.locationQuery || carrieFilters?.searchLocation || "",
   ).trim();
-  const carrieZipCode = String(carrieFilters?.searchZipCode || "")
+  const carrieZipFromLocation = extractFiveDigitZip(carrieLocationQuery);
+  const carrieZipCode = String(carrieFilters?.searchZipCode || carrieZipFromLocation || "")
     .replace(/\D/g, "")
     .slice(0, 5);
   const normalizedCarrieLocationQueryRaw = normalizeLocationFieldValue(
@@ -1513,9 +1527,11 @@ const CareExplorer = () => {
       }
 
       if (locationQuery && !isZipOnlyLocationQuery) {
-        // For Carrie-originated live discovery rows, backend already geo-filters.
-        // Avoid over-strict city substring filtering that can hide nearby metro matches.
-        const shouldApplyStrictLocationFilter = !(fromCarrie && discoverOverrideRows !== undefined);
+        // For Carrie-originated matches, the backend discovery already anchors to the metro/ZIP.
+        // Strict substring matching against a user-entered city label (e.g. "Miami, FL")
+        // incorrectly hides nearby valid matches (e.g. Coral Gables) that are still in the
+        // returned AI discovery set.
+        const shouldApplyStrictLocationFilter = !fromCarrie;
         if (shouldApplyStrictLocationFilter) {
           // Use improved location matching that handles state names and abbreviations
           if (!addressMatchesLocation(facility.address, locationQuery)) return false;
