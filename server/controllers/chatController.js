@@ -251,11 +251,28 @@ const inferAmenityMustHavesFromMessages = (msgs) => {
     amenities.add("physical therapy");
   }
   if (/\bhospice\b/i.test(text)) amenities.add("hospice care");
+  if (/\bmeals?|dining|nutrition\b/i.test(text)) amenities.add("meals and dining");
+  if (/\bactivities|activity|social engagement|social activities\b/i.test(text)) {
+    amenities.add("activities and social engagement");
+  }
   if (/\bwheelchair[-\s]?accessible\b|\baccessible entrance\b|\bada\b/i.test(text)) {
     amenities.add("wheelchair accessible entrance");
   }
-  if (/\bwheelchair[-\s]?accessible parking\b|\baccessible parking\b/i.test(text)) {
+  if (/\bwheelchair[-\s]?accessible parking\b|\baccessible parking\b|\bparking\b/i.test(text)) {
     amenities.add("wheelchair accessible parking");
+  }
+  if (/\broom types?|private room|private rooms?|suite|semi-private\b/i.test(text)) {
+    amenities.add("room types");
+  }
+  if (/\bstaff qualifications?|qualified staff|licensed staff|care staff\b/i.test(text)) {
+    amenities.add("qualified care staff");
+  }
+  if (/\breviews?|ratings?|highly rated\b/i.test(text)) amenities.add("strong reviews");
+  if (/\bsafety|safe|secure|security standards?\b/i.test(text)) {
+    amenities.add("strong safety standards");
+  }
+  if (/\bmodern amenities|modern|updated|renovated\b/i.test(text)) {
+    amenities.add("modern amenities");
   }
   if (/\brespiratory\b/i.test(text)) amenities.add("respiratory support");
   if (/\bdialysis\b/i.test(text)) amenities.add("dialysis access nearby");
@@ -489,7 +506,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.\n6. If the user gives a budget RANGE (e.g. "$10,000 to $12,000", "between 10k and 12k", "$10,000-$12,000"), set budgetMinMonthly to the lower number and budgetMaxMonthly to the higher number. If they only say "under X" or "up to X", set budgetMaxMonthly to X and leave budgetMinMonthly as null.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences. Include requested details like meals, activities, physical therapy, hospice care, wheelchair-accessible entrance/parking, room types, staff qualifications, reviews, safety standards, and modern amenities when mentioned.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.\n6. If the user gives a budget RANGE (e.g. "$10,000 to $12,000", "between 10k and 12k", "$10,000-$12,000"), set budgetMinMonthly to the lower number and budgetMaxMonthly to the higher number. If they only say "under X" or "up to X", set budgetMaxMonthly to X and leave budgetMinMonthly as null.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -575,6 +592,9 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
         ? prefs.amenityMustHaves.map((x) => String(x).trim()).filter(Boolean)
         : [];
       prefs.amenityMustHaves = [...new Set([...existing, ...inferredAmenityMustHaves])];
+    }
+    if (prefs && !prefs.personalityNotes && latestUserText.trim()) {
+      prefs.personalityNotes = latestUserText.trim().slice(0, 1000);
     }
     // Safety net: normalize searchLocation to Title Case regardless of how user typed it
     // e.g. "arizona" → "Arizona", "los angeles, ca" → "Los Angeles, Ca"
