@@ -147,7 +147,7 @@ const defaultFormData = {
   budgetMin: 3000,
   budgetMax: 6000,
   levelOfCare: "assisted",
-  specialNeedsPreferences: ["privateRoom"],
+  specialNeedsPreferences: [],
   careTypes: [],
   budget: "",
   urgency: "",
@@ -275,6 +275,9 @@ export default function IntakeSearch() {
           .map((id) => SPECIAL_NEED_TO_AMENITY[id])
           .filter(Boolean),
       ];
+      const finalScreenMustHaves = (formData.specialNeedsPreferences || [])
+        .map((id) => SPECIAL_NEEDS_PREFERENCES.find((option) => option.id === id)?.label)
+        .filter(Boolean);
 
       const matcherPayload = {
         careLevels: [...new Set(careLevels)],
@@ -298,6 +301,7 @@ export default function IntakeSearch() {
             .trim()
         : String(matcherPayload.searchLocation || "").trim();
       const mappedFilters = {
+        source: "manualIntake",
         locationQuery: locationQueryForExplorer || matcherPayload.searchLocation,
         searchZipCode: zipFromSearchLocation || undefined,
         budgetMinMonthly: Number(formData.budgetMin) || null,
@@ -306,6 +310,16 @@ export default function IntakeSearch() {
         careLevels: matcherPayload.careLevels,
         amenityMustHaves: matcherPayload.amenityMustHaves,
         availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+        displayCriteria: {
+          location: locationQueryForExplorer || matcherPayload.searchLocation,
+          budgetMinMonthly: Number(formData.budgetMin) || null,
+          budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
+          maxDistanceMiles: matcherPayload.maxDistanceMiles,
+          mustHaveNeeds: finalScreenMustHaves,
+          availability: formData.careTimeline
+            ? TIMELINE_TO_AVAILABILITY[formData.careTimeline] || ""
+            : "",
+        },
       };
       const discoverPayload = {
         zip_code: matcherPayload.searchLocation,
