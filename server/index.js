@@ -20,8 +20,9 @@ import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const envFile = process.env.NODE_ENV === "production" ? ".env.production" : ".env";
 
-dotenv.config({path: process.env.NODE_ENV === "production" ? ".env.production" : ".env"});
+dotenv.config({ path: path.resolve(__dirname, envFile) });
 
 const app = express();
 const port = process.env.PORT;
