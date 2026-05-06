@@ -2433,7 +2433,11 @@ const CareExplorer = () => {
                   <div className="mx-auto max-w-xl rounded-3xl border border-[#00CFF4]/20 bg-gradient-to-br from-white to-[#F0FBFF] px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] sm:px-6">
                     <div className="flex items-start gap-4">
                       <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#00CFF4]/15 text-[#00A8C8] shadow-[0_10px_24px_rgba(0,207,244,0.16)]">
-                        <MessageCircle className="h-5 w-5" aria-hidden />
+                        <img
+                          src="/assets/images/favicon/favicon.svg"
+                          alt="CareMatch"
+                          className="h-5 w-5 object-contain"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

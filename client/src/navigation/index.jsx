@@ -9,7 +9,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { ChevronUp } from "lucide-react";
+import { ChevronUp, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ScrollToTop from "../utils/scroll-top";
@@ -311,7 +311,7 @@ const Layout = ({ children }) => {
   };
 
   useEffect(() => {
-    const REMINDER_MS = 30 * 1000;
+    const REMINDER_MS = 5 * 60 * 1000;
 
     const clearInactivityTimer = () => {
       if (inactivityTimerRef.current) {
@@ -327,11 +327,19 @@ const Layout = ({ children }) => {
       }
       reminderToastIdRef.current = toast.custom(
         () => (
-          <div className="relative mb-4 mr-[4.8rem] w-[300px] mt-4 animate-[carrieReminderIn_420ms_ease-out]">
+          <div className="pointer-events-auto relative mb-4 mr-[4.8rem] w-[300px] mt-4 animate-[carrieReminderIn_420ms_ease-out]">
+            <button
+              type="button"
+              onClick={() => toast.dismiss("carematch-help-reminder")}
+              className="absolute right-2 top-2 z-10 rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Dismiss Carrie reminder"
+            >
+              <X className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={openCarrieChat}
-              className="relative ml-auto w-full rounded-2xl bg-white/95 px-4 py-3 text-left text-[14px] font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm outline-none ring-1 ring-[#00CFF4]/18 transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
+              className="relative ml-auto w-full rounded-2xl bg-white/95 px-4 py-3 pr-10 text-left text-[14px] font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm outline-none ring-1 ring-[#00CFF4]/18 transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
               aria-label="Open Carrie chat"
             >
               <span className="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 translate-x-1/2 rotate-45 border-r border-b border-[#00CFF4]/18 bg-white/95" />
@@ -354,7 +362,7 @@ const Layout = ({ children }) => {
       inactivityTimerRef.current = window.setTimeout(showHelpReminder, REMINDER_MS);
     };
 
-    // Trigger reminder every 30 seconds while chat stays closed.
+    // Trigger reminder every 5 minutes while chat stays closed.
     scheduleReminder();
 
     return () => {
