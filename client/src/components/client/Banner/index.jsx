@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { Link } from "react-router-dom";
 import SearchBar from "../SearchBar";
 
 const BANNER_VIDEO = "/assets/images/newHeroVidTesting.mp4";
@@ -74,6 +75,14 @@ export default function Banner() {
             <div className="mt-6" id="carrie-hero-tagline">
               <SearchBar />
             </div>
+            <div className="mt-5 flex items-center">
+              <Link
+                to="/find-care"
+                className="inline-flex items-center justify-center rounded-xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Find Facilities
+              </Link>
+            </div>
           </div>
 
           <div className="relative overflow-hidden rounded-[28px] border border-white/60 bg-white/85 p-6 shadow-lg backdrop-blur-sm sm:p-8">
@@ -133,6 +142,12 @@ export default function Banner() {
               >
                 Get personalized help
               </button>
+              <Link
+                to="/find-care"
+                className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-[#00CFF4] bg-white px-5 py-3 text-sm font-semibold text-[#00A8C8] hover:bg-[#E0F7FA]"
+              >
+                Find Facilities
+              </Link>
             </div>
           </div>
         </div>
