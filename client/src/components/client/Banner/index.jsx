@@ -75,14 +75,6 @@ export default function Banner() {
             <div className="mt-6" id="carrie-hero-tagline">
               <SearchBar />
             </div>
-            <div className="mt-5 flex items-center">
-              <Link
-                to="/find-care"
-                className="inline-flex items-center justify-center rounded-xl bg-[#00CFF4] px-6 py-3 text-sm font-semibold text-white hover:opacity-90"
-              >
-                Find Facilities
-              </Link>
-            </div>
           </div>
 
           <div className="relative overflow-hidden rounded-[28px] border border-white/60 bg-white/85 p-6 shadow-lg backdrop-blur-sm sm:p-8">
