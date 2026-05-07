@@ -721,6 +721,10 @@ export default function SearchBar() {
       </p>
 
       <style jsx global>{`
+        .pac-container {
+          z-index: 2000 !important;
+        }
+
         @keyframes gradientShift {
           0%, 100% {
             background-position: 0% 50%;
