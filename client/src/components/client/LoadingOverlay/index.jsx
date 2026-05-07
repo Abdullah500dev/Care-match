@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { Compass, MapPin, Search, SlidersHorizontal } from "lucide-react";
 
 const DEFAULT_STEPS = [
@@ -15,8 +16,8 @@ export default function LoadingOverlay({
 }) {
   if (!open) return null;
 
-  return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-white/70 px-4 py-10 backdrop-blur-sm">
+  const overlay = (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/35 px-4 py-10 backdrop-blur-[16px]">
       <div
         className="w-full max-w-lg rounded-3xl border border-[#E2E8F0] bg-white px-8 py-10 text-center shadow-xl sm:px-10 sm:py-12"
         style={{
@@ -187,4 +188,10 @@ export default function LoadingOverlay({
       `}</style>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return overlay;
+  }
+
+  return createPortal(overlay, document.body);
 }
