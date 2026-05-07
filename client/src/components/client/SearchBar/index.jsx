@@ -10,9 +10,15 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
+import { postDiscoverFacilities } from "@/services/matchService";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
+import LoadingOverlay from "@/components/client/LoadingOverlay";
 
 export default function SearchBar() {
   const navigate = useNavigate();
+  const DEFAULT_SEARCH_MAX_MILES = 25;
+  const DEFAULT_BUDGET_MIN = 3000;
+  const DEFAULT_BUDGET_MAX = 9000;
   const thinkingMessages = [
     "Reviewing care preferences",
     "Comparing nearby communities",
@@ -24,6 +30,7 @@ export default function SearchBar() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatComposer, setChatComposer] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [isQuickSearching, setIsQuickSearching] = useState(false);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -38,6 +45,8 @@ export default function SearchBar() {
   const transcribingToastIdRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const chatMessagesRef = useRef(chatMessages);
+  const locationAutocompleteRef = useRef(null);
+  const locationGeocoderRef = useRef(null);
 
   useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -64,6 +73,83 @@ export default function SearchBar() {
     }, 200);
     return () => window.clearTimeout(id);
   }, [isChatOpen]);
+
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey || !inputRef.current) return;
+    let cancelled = false;
+    const attachAutocomplete = () => {
+      if (cancelled || !inputRef.current || !window.google?.maps?.places) return;
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+      locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        inputRef.current,
+        {
+          types: ["(cities)"],
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "formatted_address", "geometry", "name"],
+        },
+      );
+      locationGeocoderRef.current = new window.google.maps.Geocoder();
+      locationAutocompleteRef.current.addListener("place_changed", () => {
+        const place = locationAutocompleteRef.current.getPlace();
+        if (!place || cancelled) return;
+        const comps = place.address_components || [];
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        let zip =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        let label = "";
+        if (city && state) {
+          label = `${city}, ${state}`;
+        } else {
+          label = place.formatted_address || place.name || "";
+        }
+        const geocodeByLocation = (geoLocation, fallbackText = "") => {
+          const geocoder = locationGeocoderRef.current;
+          if (!geocoder || !geoLocation) return;
+          geocoder.geocode({ location: geoLocation }, (results, status) => {
+            if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
+            const zipComp =
+              results[0].address_components?.find((c) => c.types.includes("postal_code"))?.long_name ||
+              "";
+            if (zipComp) {
+              zip = zipComp;
+              setQuery(`${fallbackText} ${zipComp}`.trim());
+            } else {
+              setQuery(fallbackText.trim());
+            }
+          });
+        };
+        if (!zip && place?.geometry?.location) {
+          geocodeByLocation(place.geometry.location, label);
+          return;
+        }
+        setQuery([label, zip].filter(Boolean).join(" ").trim());
+      });
+    };
+
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        if (cancelled) return;
+        attachAutocomplete();
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!chatSending) {
@@ -153,11 +239,81 @@ export default function SearchBar() {
     }
   };
 
-  const handleChatSubmit = () => {
-    const text = query.trim();
-    if (!text || chatSending) return;
+  const runQuickSearch = async (text) => {
+    const trimmed = String(text || "").trim();
+    if (!trimmed || chatSending) return;
+    const zipMatch = trimmed.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const zipCode = zipMatch?.[1] || "";
+    setIsQuickSearching(true);
+    setChatSending(true);
     setQuery("");
-    sendCarrieReply(text, { restoreToQuery: true });
+    try {
+      const payload = {
+        zip_code: zipCode || trimmed,
+        location: trimmed,
+        care_levels: ["assisted living"],
+        budget_min: DEFAULT_BUDGET_MIN,
+        budget_max: DEFAULT_BUDGET_MAX,
+        max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
+      };
+      const { data } = await postDiscoverFacilities(payload);
+      const matches = Array.isArray(data?.facilities) ? data.facilities : [];
+      navigate("/care-explorer", {
+        state: {
+          fromCarrie: true,
+          carrieMatches: matches,
+          carrieFilters: {
+            source: "quickSearch",
+            locationQuery: trimmed,
+            searchLocation: trimmed,
+            searchZipCode: zipCode || undefined,
+            budgetMinMonthly: DEFAULT_BUDGET_MIN,
+            budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+            maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            careLevels: ["assisted living"],
+            displayCriteria: {
+              location: trimmed,
+              budgetMinMonthly: DEFAULT_BUDGET_MIN,
+              budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+              maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            },
+          },
+        },
+      });
+    } catch (err) {
+      const desc =
+        err?.response?.data?.message || err?.message || "Search request failed.";
+      toast.error("Search failed", { description: desc });
+      navigate("/care-explorer", {
+        state: {
+          fromCarrie: true,
+          carrieMatches: [],
+          carrieFilters: {
+            source: "quickSearch",
+            locationQuery: trimmed,
+            searchLocation: trimmed,
+            searchZipCode: zipCode || undefined,
+            budgetMinMonthly: DEFAULT_BUDGET_MIN,
+            budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+            maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            careLevels: ["assisted living"],
+            displayCriteria: {
+              location: trimmed,
+              budgetMinMonthly: DEFAULT_BUDGET_MIN,
+              budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+              maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            },
+          },
+        },
+      });
+    } finally {
+      setChatSending(false);
+      setIsQuickSearching(false);
+    }
+  };
+
+  const handleChatSubmit = () => {
+    runQuickSearch(query);
   };
 
   const handlePanelSend = () => {
@@ -168,6 +324,10 @@ export default function SearchBar() {
   };
 
   const handleCarrieClick = () => {
+    if (query.trim()) {
+      runQuickSearch(query);
+      return;
+    }
     openChatPanel();
   };
 
@@ -713,6 +873,7 @@ export default function SearchBar() {
           animation: carrieThinkingProgress 1.8s ease-in-out infinite;
         }
       `}</style>
+      <LoadingOverlay open={isQuickSearching} />
     </div>
   );
 }
