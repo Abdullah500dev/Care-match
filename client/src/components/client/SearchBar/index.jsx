@@ -86,7 +86,7 @@ export default function SearchBar() {
       locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(
         inputRef.current,
         {
-          types: ["(cities)"],
+          types: ["geocode"],
           componentRestrictions: { country: "us" },
           fields: ["address_components", "formatted_address", "geometry", "name"],
         },

@@ -194,11 +194,74 @@ const FiltersSidebar = ({
   const lastAutofillZipRef = useRef("");
   const lastAutofillLocationRef = useRef("");
   const lastAutofillZipFromLocationRef = useRef("");
+  const zipInputRef = useRef(null);
+  const zipAutocompleteRef = useRef(null);
   const latestFiltersRef = useRef(filters);
 
   useEffect(() => {
     latestFiltersRef.current = filters;
   }, [filters]);
+
+  // ZIP input autocomplete (suggestions + autofill city/state)
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey || !zipInputRef.current) return;
+    let cancelled = false;
+
+    const attachAutocomplete = () => {
+      if (cancelled || !zipInputRef.current || !window.google?.maps?.places) return;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+      zipAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        zipInputRef.current,
+        {
+          types: ["geocode"],
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "formatted_address", "geometry", "name"],
+        },
+      );
+      zipAutocompleteRef.current.addListener("place_changed", () => {
+        if (cancelled) return;
+        const place = zipAutocompleteRef.current.getPlace();
+        const comps = place?.address_components || [];
+        const postalCode =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        const nextLocation = city && state ? `${city}, ${state}` : "";
+        if (postalCode.length === 5) {
+          lastAutofillZipRef.current = postalCode;
+        }
+        if (nextLocation) {
+          lastAutofillLocationRef.current = nextLocation;
+        }
+        setFilters({
+          ...(postalCode.length === 5 ? { zipCode: postalCode } : {}),
+          ...(nextLocation ? { locationQuery: nextLocation } : {}),
+        });
+      });
+    };
+
+    if (window.google?.maps?.places?.Autocomplete) {
+      attachAutocomplete();
+    } else {
+      loadGoogleMapsScript(apiKey).then(attachAutocomplete).catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+    };
+  }, []);
 
   // ZIP → City/State (skip if locationQuery was just set by autocomplete selection)
   useEffect(() => {
@@ -335,6 +398,7 @@ const FiltersSidebar = ({
             inputMode="numeric"
             maxLength={5}
             placeholder="e.g. 32811"
+            ref={zipInputRef}
             value={zipCode}
             onChange={(e) => {
               lastAutofillLocationRef.current = "";
