@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Loader2, Mic, MessageCircle } from "lucide-react";
+import { ArrowRight, Loader2, MessageCircle, Mic } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -239,9 +239,16 @@ export default function SearchBar() {
     }
   };
 
+  const resolvedCareLevels = useMemo(() => ["assisted living"], []);
+
   const runQuickSearch = async (text) => {
     const trimmed = String(text || "").trim();
-    if (!trimmed || chatSending) return;
+    if (!trimmed || chatSending) {
+      if (!trimmed) {
+        toast.error("Enter a city or ZIP code to search.");
+      }
+      return;
+    }
     const zipMatch = trimmed.match(/\b(\d{5})(?:-\d{4})?\b/);
     const zipCode = zipMatch?.[1] || "";
     setIsQuickSearching(true);
@@ -251,7 +258,7 @@ export default function SearchBar() {
       const payload = {
         zip_code: zipCode || trimmed,
         location: trimmed,
-        care_levels: ["assisted living"],
+        care_levels: resolvedCareLevels,
         budget_min: DEFAULT_BUDGET_MIN,
         budget_max: DEFAULT_BUDGET_MAX,
         max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
@@ -270,7 +277,7 @@ export default function SearchBar() {
             budgetMinMonthly: DEFAULT_BUDGET_MIN,
             budgetMaxMonthly: DEFAULT_BUDGET_MAX,
             maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
-            careLevels: ["assisted living"],
+            careLevels: resolvedCareLevels,
             displayCriteria: {
               location: trimmed,
               budgetMinMonthly: DEFAULT_BUDGET_MIN,
@@ -296,7 +303,7 @@ export default function SearchBar() {
             budgetMinMonthly: DEFAULT_BUDGET_MIN,
             budgetMaxMonthly: DEFAULT_BUDGET_MAX,
             maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
-            careLevels: ["assisted living"],
+            careLevels: resolvedCareLevels,
             displayCriteria: {
               location: trimmed,
               budgetMinMonthly: DEFAULT_BUDGET_MIN,
@@ -324,10 +331,6 @@ export default function SearchBar() {
   };
 
   const handleCarrieClick = () => {
-    if (query.trim()) {
-      runQuickSearch(query);
-      return;
-    }
     openChatPanel();
   };
 
@@ -534,89 +537,44 @@ export default function SearchBar() {
     startRecording();
   };
 
-  const showSendButton = query.trim().length > 0;
-
   return (
-    <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl" id="search-bar">
-      <div
-        className="rounded-2xl p-[2px] shadow-sm min-[1280px]:rounded-3xl"
-        style={{
-          background: "linear-gradient(90deg, #00CFF4, #FECACB, #FCFCFC, #00CFF4, #00CFF4)",
-          backgroundSize: "300% 100%",
-          animation: "gradientShift 6s ease-in-out infinite",
-        }}
-      >
-        <div className="flex min-h-44 flex-col justify-between rounded-[14px] bg-white p-4 sm:min-h-48 sm:p-5 md:min-h-52 md:p-6 min-[1280px]:min-h-48 min-[1280px]:rounded-[22px] min-[1280px]:p-5 min-[1536px]:min-h-52 min-[1536px]:p-6">
-          <div className="flex items-center gap-2 rounded-lg">
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={handleChange}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleChatSubmit();
-                }
-              }}
-              placeholder="Try: 'Looking for Assisted living facilities in Los Angeles under $6000/month'"
-              className="min-w-0 flex-1 rounded-lg bg-transparent text-[#132329] placeholder:italic placeholder:text-[#0000004D] focus:outline-none text-sm placeholder:text-base sm:text-base sm:placeholder:text-lg min-[1280px]:text-base min-[1280px]:placeholder:text-base min-[1536px]:text-lg min-[1536px]:placeholder:text-lg"
-            />
-            {/* <Mic className="h-4 w-4 shrink-0 text-[#132329] sm:h-5 sm:w-5 min-[1280px]:h-4 min-[1280px]:w-4 min-[1536px]:h-5 min-[1536px]:w-5" strokeWidth={2} aria-hidden /> */}
-          </div>
+    <div className="w-full" id="search-bar">
+      <div className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 shadow-sm">
+        <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Location</label>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleChatSubmit();
+            }
+          }}
+          placeholder="City or ZIP code"
+          className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-[#132329] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40"
+        />
+      </div>
 
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={handleCarrieClick}
-              className="flex items-center gap-2 rounded-lg bg-[#132329] px-3 py-3.5 text-white font-medium hover:opacity-90 text-sm sm:rounded-xl sm:px-4 sm:py-4 sm:text-base min-[1280px]:rounded-xl min-[1280px]:px-4 min-[1280px]:py-4 min-[1536px]:py-5"
-            >
-              <span className="whitespace-nowrap">Carrie – AI Advisor</span>
-            </button>
-
-            {showSendButton ? (
-              <button
-                type="button"
-                className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 disabled:opacity-40 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
-                aria-label="Send"
-                onClick={handleChatSubmit}
-                disabled={chatSending}
-              >
-                {chatSending ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
-                ) : (
-                  <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={`flex items-center justify-center rounded-lg px-3 py-3.5 text-[#132329] sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5 ${
-                  isRecording
-                    ? "bg-[#FEE2E2] text-[#B91C1C] shadow-[0_0_0_3px_rgba(239,68,68,0.35)] mic-recording-pulse"
-                    : isTranscribing
-                    ? "bg-[#DBEAFE] text-[#1D4ED8] mic-transcribing-pulse"
-                    : "bg-[#E2E8F0] hover:bg-[#CBD5F1]"
-                }`}
-                aria-label={
-                  isRecording
-                    ? "Stop recording"
-                    : isTranscribing
-                    ? "Transcribing voice"
-                    : "Start voice input"
-                }
-                onClick={handleMicClick}
-                disabled={isTranscribing}
-              >
-                {isTranscribing ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
-                ) : (
-                  <Mic className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-[#64748b]">
+          Within {DEFAULT_SEARCH_MAX_MILES} miles · ${DEFAULT_BUDGET_MIN.toLocaleString()}–$
+          {DEFAULT_BUDGET_MAX.toLocaleString()}/mo
+        </p>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          onClick={handleChatSubmit}
+          disabled={chatSending}
+        >
+          {chatSending ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+          ) : (
+            <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+          )}
+          Search
+        </button>
       </div>
 
       <Sheet open={isChatOpen} onOpenChange={setIsChatOpen}>
@@ -758,20 +716,9 @@ export default function SearchBar() {
       </Sheet>
 
       {/* Subtext */}
-      <p className="mt-3 text-center text-sm font-medium italic text-[#132329B2] sm:mt-4 sm:text-base min-[1280px]:mt-4 min-[1280px]:text-sm min-[1536px]:text-base">
-        Verified Communities, 100% Free Service, Expert Guidance
+      <p className="mt-4 text-center text-xs font-medium text-[#94a3b8] sm:text-sm">
+        Verified communities · 100% free service · Expert guidance
       </p>
-
-      <div className="mt-4 flex justify-center sm:mt-5">
-        <button
-          type="button"
-          onClick={handleSearch}
-          className="rounded-xl px-5 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 sm:px-6 sm:py-4 sm:text-base"
-          style={{ backgroundColor: "#00ccf4" }}
-        >
-          Find Facilities
-        </button>
-      </div>
 
       <style jsx global>{`
         @keyframes gradientShift {
