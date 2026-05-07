@@ -19,6 +19,7 @@ import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
+import LoadingOverlay from "../../../components/client/LoadingOverlay";
 import {
   getGoogleMapsApiKey,
   loadGoogleMapsScript,
@@ -2093,71 +2094,10 @@ const CareExplorer = () => {
           backgroundPosition: "145% 100%, center",
         }}
       >
-        {discoverLoading && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white/60 px-4 py-8 backdrop-blur-sm">
-            <div
-              className="w-full max-w-lg rounded-3xl border border-[#E2E8F0] bg-white px-8 py-10 text-center shadow-xl sm:px-10 sm:py-12"
-              style={{
-                boxShadow:
-                  "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
-              }}
-            >
-              <div className="relative mb-8 flex h-24 items-center justify-center">
-                <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
-                  <MessageCircle className="h-9 w-9" />
-                </div>
-                <div
-                  className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4]/80 bg-white text-[#00CFF4] animate-icon-float-strong shadow-[0_0_0_0_rgba(0,207,244,0.45)] animate-icon-ripple"
-                  style={{ animationDelay: "0ms" }}
-                >
-                  <Search className="h-4 w-4" />
-                </div>
-                <div
-                  className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#38BDF8]/80 bg-white text-[#0EA5E9] animate-icon-bounce-strong shadow-[0_0_16px_rgba(56,189,248,0.35)]"
-                  style={{ animationDelay: "100ms" }}
-                >
-                  <MapPin className="h-4 w-4" />
-                </div>
-                <div
-                  className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#22D3EE]/80 bg-white text-[#0891B2] animate-icon-spin-strong shadow-[0_0_16px_rgba(34,211,238,0.35)]"
-                  style={{ animationDelay: "180ms" }}
-                >
-                  <Compass className="h-4 w-4" />
-                </div>
-                <div
-                  className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2DD4BF]/80 bg-white text-[#0F766E] animate-icon-wobble shadow-[0_0_14px_rgba(45,212,191,0.35)]"
-                  style={{ animationDelay: "260ms" }}
-                >
-                  <SlidersHorizontal className="h-4 w-4" />
-                </div>
-              </div>
-              <h1 className="mb-3 text-2xl font-bold italic text-[#1D293D] sm:text-3xl">
-                Finding Your Matches...
-              </h1>
-              <p className="mx-auto mb-6 max-w-sm text-base text-[#64748b]">
-                {discoverThinkingMessages[discoverThinkingIndex]}
-              </p>
-              <ul className="mx-auto max-w-xs space-y-2 text-left text-[#334155]">
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Matching care needs...
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Checking availability...
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Calculating match scores....
-                </li>
-              </ul>
-              <div className="mt-7 flex items-center justify-center gap-2 text-sm text-slate-600">
-                <span className="h-4 w-4 rounded-full border-2 border-[#94a3b8]/40 border-t-[#00CFF4] animate-spin" />
-                Please wait
-              </div>
-            </div>
-          </div>
-        )}
+        <LoadingOverlay
+          open={discoverLoading}
+          subtitle={discoverThinkingMessages[discoverThinkingIndex]}
+        />
         <style jsx global>{`
           @keyframes careExplorerFloatLeftRight {
             0%, 100% {
@@ -2433,7 +2373,11 @@ const CareExplorer = () => {
                   <div className="mx-auto max-w-xl rounded-3xl border border-[#00CFF4]/20 bg-gradient-to-br from-white to-[#F0FBFF] px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] sm:px-6">
                     <div className="flex items-start gap-4">
                       <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#00CFF4]/15 text-[#00A8C8] shadow-[0_10px_24px_rgba(0,207,244,0.16)]">
-                        <MessageCircle className="h-5 w-5" aria-hidden />
+                        <img
+                          src="/assets/images/favicon/favicon.svg"
+                          alt="CareMatch"
+                          className="h-5 w-5 object-contain"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">

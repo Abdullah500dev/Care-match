@@ -198,12 +198,6 @@ function getStepValidationError(step, formData) {
     return "Please choose at least one care need.";
   }
   if (step === 7 && !String(formData?.location || "").trim()) return "Please enter preferred location.";
-  if (
-    step === 8 &&
-    (!Array.isArray(formData?.specialNeedsPreferences) || formData.specialNeedsPreferences.length === 0)
-  ) {
-    return "Please select at least one preference.";
-  }
   return null;
 }
 
@@ -589,7 +583,7 @@ export default function IntakeSearch() {
         if (!formData.location || formData.location.trim().length === 0) return false;
         if (!requiresZipForStepSeven) return true;
         return ZIP_CODE_REGEX.test(String(formData.location || ""));
-      case 8: return formData.specialNeedsPreferences && formData.specialNeedsPreferences.length > 0;
+      case 8: return true;
       default: return true;
     }
   };
@@ -780,7 +774,11 @@ export default function IntakeSearch() {
           >
             <div className="relative mb-8 flex h-24 items-center justify-center">
               <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
-                <MessageCircle className="h-9 w-9" />
+                <img
+                  src="/assets/images/favicon/favicon.svg"
+                  alt="CareMatch"
+                  className="h-9 w-9 object-contain"
+                />
               </div>
               <div
                 className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4]/80 bg-white text-[#00CFF4] animate-intake-icon-float-strong shadow-[0_0_0_0_rgba(0,207,244,0.45)] animate-intake-icon-ripple"
@@ -1416,7 +1414,7 @@ function StepContent({
           </span>
           ?
         </h1>
-        <p className="text-[#64748b] mb-4 text-center">Select one of the options below or add another need.</p>
+        <p className="text-[#64748b] mb-4 text-center">Optional: select any preferences to improve matching, or continue to see facilities.</p>
         <div className="space-y-2 mb-4">
           <Label className="text-[#334155]">Select Preferences &amp; Needs</Label>
           <div className="min-h-[3.5rem] rounded-xl border-2 border-[#e2e8f0] bg-white px-4 py-3 flex flex-wrap gap-2 items-center">

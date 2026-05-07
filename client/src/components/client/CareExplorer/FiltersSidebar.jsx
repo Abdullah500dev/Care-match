@@ -193,6 +193,7 @@ const FiltersSidebar = ({
   const [showAllAmenities, setShowAllAmenities] = useState(false);
   const lastAutofillZipRef = useRef("");
   const lastAutofillLocationRef = useRef("");
+  const lastAutofillZipFromLocationRef = useRef("");
   const latestFiltersRef = useRef(filters);
 
   useEffect(() => {
@@ -241,6 +242,43 @@ const FiltersSidebar = ({
       loadGoogleMapsScript(apiKey).then(doGeocode).catch(() => {});
     }
   }, [zipCode]);
+
+  // City/State → ZIP (fill ZIP when user only provides a city)
+  useEffect(() => {
+    const locationValue = String(locationQuery || "").trim();
+    const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+    if (!locationValue || zip.length === 5) return;
+
+    if (lastAutofillZipFromLocationRef.current === locationValue) return;
+
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) return;
+
+    lastAutofillZipFromLocationRef.current = locationValue;
+
+    const doGeocode = () => {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: locationValue }, (results, status) => {
+        if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
+        for (const result of results) {
+          const postalCode =
+            result?.address_components?.find((c) => c.types.includes("postal_code"))
+              ?.long_name || "";
+          if (postalCode.length === 5) {
+            lastAutofillZipRef.current = postalCode;
+            setFilters({ zipCode: postalCode });
+            return;
+          }
+        }
+      });
+    };
+
+    if (window.google?.maps?.Geocoder) {
+      doGeocode();
+    } else {
+      loadGoogleMapsScript(apiKey).then(doGeocode).catch(() => {});
+    }
+  }, [locationQuery, zipCode]);
 
 
   const normalizedAmenityOptions = [...new Set(
