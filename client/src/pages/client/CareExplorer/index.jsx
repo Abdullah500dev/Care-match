@@ -843,19 +843,11 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
   const baseLocation =
     locRaw || String(carrieFilters?.searchLocation || "").trim();
 
-  // If we have a ZIP and the location was autofilled as "City, ST",
-  // use the full "City, ST" so the AI searches that city/state area.
-  // Only narrow to ZIP-level when a max distance is also set.
-  const maxDistanceMilesRaw = Number.parseFloat(String(filters.maxMiles || "").trim());
-  const hasDistanceConstraint = Number.isFinite(maxDistanceMilesRaw) && maxDistanceMilesRaw > 0;
-
-  let location;
-  if (!hasDistanceConstraint && explicitZip && baseLocation) {
-    // Use "City, ST" without appending the ZIP so the AI searches state/city-wide
-    const stateAbbr = extractStateFromLocation(baseLocation);
-    location = stateAbbr ? baseLocation : buildEffectiveLocationQuery(baseLocation, zip);
-  } else {
-    location = buildEffectiveLocationQuery(baseLocation, zip);
+  // Keep the location scoped to the city/state even when max distance changes,
+  // so increasing radius never narrows the base discovery query.
+  let location = normalizeLocationFieldValue(baseLocation, zip) || baseLocation;
+  if (!location) {
+    location = zip;
   }
 
   const care_levels = ["assisted living"];
@@ -1218,8 +1210,8 @@ const CareExplorer = () => {
 
   useEffect(() => {
     const query = buildEffectiveLocationQuery(
-      String(filters.locationQuery || carrieLocationQuery || "").trim(),
-      filters.zipCode,
+      String(appliedFilters.locationQuery || carrieLocationQuery || "").trim(),
+      appliedFilters.zipCode,
     );
     if (!query) {
       setLocationCenterCoords(null);
@@ -1258,7 +1250,7 @@ const CareExplorer = () => {
     return () => {
       cancelled = true;
     };
-  }, [filters.locationQuery, filters.zipCode, carrieLocationQuery]);
+  }, [appliedFilters.locationQuery, appliedFilters.zipCode, carrieLocationQuery]);
 
   useEffect(() => {
     if (fromCarrie || !API_BASE) return;
@@ -1328,7 +1320,7 @@ const CareExplorer = () => {
       });
       if (runId !== discoverRunIdRef.current) return;
       const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-      setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
+      return rows.map(normalizeFacilityForCard);
     } catch (err) {
       const cancelled =
         axios.isCancel?.(err) || err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
@@ -1339,6 +1331,7 @@ const CareExplorer = () => {
         err?.message ||
         "Request failed";
       toast.error("Could not refresh listings", { description: String(msg) });
+      return null;
     } finally {
       if (discoverAbortControllerRef.current === controller) {
         discoverAbortControllerRef.current = null;
@@ -1350,6 +1343,7 @@ const CareExplorer = () => {
         setDiscoverLoading(false);
       }
     }
+    return null;
   }, []);
 
   // Debounced live discover when filters change (same engine as Carrie / results.js).
@@ -1374,7 +1368,10 @@ const CareExplorer = () => {
     }
 
     const timer = window.setTimeout(async () => {
-      await runDiscoverRequest(body);
+      const rows = await runDiscoverRequest(body);
+      if (rows) {
+        setDiscoverOverrideRows(rows);
+      }
     }, 650);
 
     return () => window.clearTimeout(timer);
@@ -1411,7 +1408,11 @@ const CareExplorer = () => {
     }
 
     carrieBootstrapDiscoverDoneRef.current = true;
-    runDiscoverRequest(body);
+    runDiscoverRequest(body).then((rows) => {
+      if (rows) {
+        setDiscoverOverrideRows(rows);
+      }
+    });
   }, [
     fromCarrie,
     carrieMatches,
@@ -1438,7 +1439,19 @@ const CareExplorer = () => {
       body.zip_code = body.location;
     }
 
-    await runDiscoverRequest(body);
+    const rows = await runDiscoverRequest(body);
+    if (!rows) return;
+    const nextMaxMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
+    const prevMaxMiles = Number.parseFloat(String(appliedFilters.maxMiles || "").trim());
+    const shouldExpand =
+      Number.isFinite(nextMaxMiles) &&
+      Number.isFinite(prevMaxMiles) &&
+      nextMaxMiles > prevMaxMiles;
+    if (shouldExpand && Array.isArray(discoverOverrideRows)) {
+      setDiscoverOverrideRows(dedupeFacilities([...discoverOverrideRows, ...rows]));
+      return;
+    }
+    setDiscoverOverrideRows(rows);
   };
 
   useEffect(
@@ -1908,7 +1921,7 @@ const CareExplorer = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [filters]);
+  }, [appliedFilters]);
 
   useEffect(() => {
     if (view !== "map") {
@@ -2066,7 +2079,7 @@ const CareExplorer = () => {
     return () => {
       cancelled = true;
     };
-  }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
+  }, [view, mapsReady, mapFacilities, currentCoords, appliedFilters.maxMiles]);
 
   useEffect(() => {
     if (!mapMarkersRef.current.length) return;
@@ -2286,11 +2299,11 @@ const CareExplorer = () => {
                     <span className="font-semibold text-[#132329]">
                       {summaryBudgetText}
                     </span>
-                    {String(filters.maxMiles || "").trim() && (
+                    {String(appliedFilters.maxMiles || "").trim() && (
                       <>
                         , within{" "}
                         <span className="font-semibold text-[#132329]">
-                          {String(filters.maxMiles).trim()} miles
+                          {String(appliedFilters.maxMiles).trim()} miles
                         </span>
                       </>
                     )}
