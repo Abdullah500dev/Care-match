@@ -399,7 +399,8 @@ const Layout = ({ children }) => {
           <button
             type="button"
             onClick={openCarrieChat}
-            className="group fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_3.6s_ease-in-out_infinite]"
+            className="group fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] carrie-icon-bounce"
+            style={{ "--carrie-bounce-duration": "3s" }}
             aria-label="Open Carrie chat"
           >
             <img
@@ -453,14 +454,6 @@ const Layout = ({ children }) => {
             }
           }
 
-          @keyframes carrieIconBounce {
-            0%, 100% {
-              transform: translateY(0);
-            }
-            50% {
-              transform: translateY(-6px);
-            }
-          }
         `}
       </style>
     </>
