@@ -1521,7 +1521,7 @@ const CareExplorer = () => {
       }).length;
     };
 
-    const matchesFacility = (facility, { amenityMode }) => {
+    const matchesFacility = (facility) => {
       const assistedOnlyLevels = [
         ...(facility.careLevels || []).map((x) => normMatchToken(x)),
         normMatchToken(facility.category),
@@ -1582,12 +1582,7 @@ const CareExplorer = () => {
 
       if (selectedAmenities.length > 0) {
         const hits = getAmenityHits(facility);
-        if (amenityMode === "all") {
-          if (hits !== selectedAmenities.length) return false;
-        } else if (amenityMode === "half") {
-          const threshold = Math.max(1, Math.ceil(selectedAmenities.length * 0.5));
-          if (hits < threshold) return false;
-        }
+        if (hits === 0) return false;
       }
 
       if (selectedAvailability.size > 0) {
@@ -1604,11 +1599,7 @@ const CareExplorer = () => {
       return true;
     };
 
-    const strict = scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "all" }));
-    if (selectedAmenities.length > 0 && strict.length === 0) {
-      return scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "half" }));
-    }
-    return strict;
+    return scopedFacilities.filter((f) => matchesFacility(f));
   }, [
     activeFilters,
     scopedFacilities,
