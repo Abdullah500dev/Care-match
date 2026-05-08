@@ -190,6 +190,22 @@
   }
 }
 
+@keyframes carrie-pulse-slow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.9;
+  }
+}
+
+.carrie-pulse-slow {
+  animation: carrie-pulse-slow 3.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
 @keyframes notfound-rotate-slow {
   from {
     transform: rotate(0deg);
