@@ -409,8 +409,8 @@ export function filterDiscoveryResultsByAnchor(results, anchor) {
 function buildPrompt(payload) {
   const anchor = parseGeoAnchorFromPayload(payload);
   const anchorNote = anchor.stateAbbr
-    ? `Anchor U.S. state: ${anchor.stateAbbr}. Anchor metro ZIP (must match all rows’ regions): ${anchor.zip}.`
-    : `Anchor metro ZIP: ${anchor.zip}.`;
+    ? `Anchor U.S. state: ${anchor.stateAbbr}. Anchor ZIP (reference only): ${anchor.zip}. Include nearby towns/suburbs within the requested radius, but keep everything in the same state/region.`
+    : `Anchor ZIP (reference only): ${anchor.zip}. Include nearby towns/suburbs within the requested radius.`;
 
   const acc =
     Array.isArray(payload.amenities) && payload.amenities.length
@@ -429,7 +429,7 @@ function buildPrompt(payload) {
   const maxDistanceMiles = Number(payload.max_distance_miles);
   const distanceLine =
     Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
-      ? `Distance constraint: prioritize communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Rank closer communities higher and avoid obviously farther results when possible.\n`
+      ? `Distance constraint: include communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Always keep the closest matches and then expand outward; do not swap out closer results when the radius increases.\n`
       : "";
   const keywords = Array.isArray(payload.keywords)
     ? payload.keywords.map((item) => String(item || "").trim()).filter(Boolean)
@@ -472,8 +472,9 @@ Rules:
 2. Names, addresses, coordinates, and ZIP codes must all be mutually consistent with the anchor location and zip_code.
 3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility, services, lifestyle fit, and overall quality in amenities or description.
 4. Vary facility names; do not copy one template 20 times.
-5. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
-6. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
+5. When the radius is larger, your result set should be a superset of the smaller radius (add more, do not replace closer matches).
+6. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
+7. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
 }
 
 function buildGeoRepairPrompt(payload) {

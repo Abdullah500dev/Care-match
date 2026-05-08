@@ -1443,13 +1443,18 @@ const CareExplorer = () => {
     if (!rows) return;
     const nextMaxMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
     const prevMaxMiles = Number.parseFloat(String(appliedFilters.maxMiles || "").trim());
+    const nextIsFinite = Number.isFinite(nextMaxMiles);
+    const prevIsFinite = Number.isFinite(prevMaxMiles);
     const shouldExpand =
-      Number.isFinite(nextMaxMiles) &&
-      Number.isFinite(prevMaxMiles) &&
-      nextMaxMiles > prevMaxMiles;
-    if (shouldExpand && Array.isArray(discoverOverrideRows)) {
-      setDiscoverOverrideRows(dedupeFacilities([...discoverOverrideRows, ...rows]));
-      return;
+      nextIsFinite && ((prevIsFinite && nextMaxMiles > prevMaxMiles) || (!prevIsFinite && nextMaxMiles > 0));
+    if (shouldExpand) {
+      const previousRows = Array.isArray(discoverOverrideRows)
+        ? discoverOverrideRows
+        : uniqueBaseFacilities;
+      if (Array.isArray(previousRows) && previousRows.length > 0) {
+        setDiscoverOverrideRows(dedupeFacilities([...previousRows, ...rows]));
+        return;
+      }
     }
     setDiscoverOverrideRows(rows);
   };

@@ -773,7 +773,7 @@ export default function IntakeSearch() {
             }}
           >
             <div className="relative mb-8 flex h-24 items-center justify-center">
-              <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
+              <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] carrie-pulse-slow">
                 <img
                   src="/assets/images/favicon/favicon.svg"
                   alt="CareMatch"
