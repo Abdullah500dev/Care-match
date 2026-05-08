@@ -206,6 +206,20 @@
   will-change: transform, opacity;
 }
 
+@keyframes carrieIconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.carrie-icon-bounce {
+  --carrie-bounce-duration: 6s;
+  animation: carrieIconBounce var(--carrie-bounce-duration) ease-in-out infinite;
+}
+
 @keyframes notfound-rotate-slow {
   from {
     transform: rotate(0deg);
