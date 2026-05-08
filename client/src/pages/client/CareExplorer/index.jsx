@@ -1791,7 +1791,10 @@ const CareExplorer = () => {
     carrieFilters?.displayCriteria && typeof carrieFilters.displayCriteria === "object"
       ? carrieFilters.displayCriteria
       : null;
-  if (displayCriteria) {
+  const hasUserOverrides =
+    discoverOverrideRows !== undefined || hasUserTouchedFiltersRef.current;
+  const shouldUseDisplayCriteria = displayCriteria && !hasUserOverrides;
+  if (shouldUseDisplayCriteria) {
     const displayLocation = String(displayCriteria.location || locationLabelForHeader || "").trim();
     const displayBudgetMin = sanitizeMonthlyBudgetValue(displayCriteria.budgetMinMonthly);
     const displayBudgetMax = sanitizeMonthlyBudgetValue(displayCriteria.budgetMaxMonthly);
