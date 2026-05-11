@@ -47,6 +47,7 @@ export default function SearchBar() {
   const chatMessagesRef = useRef(chatMessages);
   const locationAutocompleteRef = useRef(null);
   const locationGeocoderRef = useRef(null);
+  const activePacInputRef = useRef(null);
 
   useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -151,25 +152,92 @@ export default function SearchBar() {
     };
   }, []);
 
+  const pickPacContainer = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    if (pacContainers.length === 0) return null;
+    const visible = pacContainers.filter(
+      (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+    );
+    if (visible.length === 1) return visible[0];
+    if (visible.length > 1 && inputRef.current) {
+      const inputRect = inputRef.current.getBoundingClientRect();
+      return visible.reduce((best, pac) => {
+        const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+        const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+        return distance < bestDistance ? pac : best;
+      }, visible[0]);
+    }
+    return pacContainers[pacContainers.length - 1];
+  };
+
+  const hidePacContainers = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    pacContainers.forEach((node) => {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    });
+  };
+
   const syncPacContainer = () => {
     if (!inputRef.current) return;
-    const pac = document.querySelector(".pac-container");
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    const pac = pickPacContainer();
     if (!pac) return;
     const rect = inputRef.current.getBoundingClientRect();
-    pac.style.position = "fixed";
-    pac.style.top = `${Math.round(rect.bottom + 2)}px`;
-    pac.style.left = `${Math.round(rect.left)}px`;
+    const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+    if (!isInViewport) {
+      hidePacContainers();
+      return;
+    }
+    // Keep dropdown aligned with input while page scrolls.
+    pac.style.position = "absolute";
+    pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+    pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
     pac.style.width = `${Math.round(rect.width)}px`;
     pac.style.zIndex = "1001";
+    pac.style.display = "block";
+    pac.style.visibility = "visible";
+    pac.style.pointerEvents = "auto";
+    pacContainers.forEach((node) => {
+      if (node !== pac) {
+        node.style.display = "none";
+        node.style.visibility = "hidden";
+        node.style.pointerEvents = "none";
+      }
+    });
   };
 
   useEffect(() => {
-    const handleSync = () => syncPacContainer();
+    const handleSync = () => {
+      if (document.activeElement !== inputRef.current) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer();
+    };
     window.addEventListener("scroll", handleSync, true);
     window.addEventListener("resize", handleSync);
     return () => {
       window.removeEventListener("scroll", handleSync, true);
       window.removeEventListener("resize", handleSync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (document.activeElement !== activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        syncPacContainer();
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
     };
   }, []);
 
@@ -406,6 +474,18 @@ export default function SearchBar() {
     syncPacContainer();
   };
 
+  const handleKeyDown = (e) => {
+    if (
+      e.key === "Shift" ||
+      e.key === "Control" ||
+      e.key === "Alt" ||
+      e.key === "Meta" ||
+      e.key === "Fn"
+    ) {
+      syncPacContainer();
+    }
+  };
+
   const transcribeAudio = async (audioBlob) => {
     setIsTranscribing(true);
     transcribingToastIdRef.current = toast.loading("Transcribing your voice...");
@@ -569,8 +649,13 @@ export default function SearchBar() {
           type="text"
           value={query}
           onChange={handleChange}
-          onFocus={syncPacContainer}
+          onFocus={() => {
+            activePacInputRef.current = inputRef.current;
+            syncPacContainer();
+          }}
+          onBlur={hidePacContainers}
           onKeyDown={(e) => {
+            handleKeyDown(e);
             if (e.key === "Enter") {
               e.preventDefault();
               handleChatSubmit();

@@ -212,6 +212,7 @@ export default function IntakeSearch() {
   const locationInputRef = useRef(null);
   const locationAutocompleteRef = useRef(null);
   const locationGeocoderRef = useRef(null);
+  const activePacInputRef = useRef(null);
   const geocodeRequestIdRef = useRef(0);
   const mapsApiKey = getGoogleMapsApiKey();
   const requiresZipForStepSeven = Boolean(mapsApiKey);
@@ -492,7 +493,120 @@ export default function IntakeSearch() {
     };
   }, [step, mapsApiKey]);
 
+  const pickPacContainer = (inputEl) => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    if (pacContainers.length === 0) return null;
+    const visible = pacContainers.filter(
+      (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+    );
+    if (visible.length === 1) return visible[0];
+    if (visible.length > 1) {
+      const inputRect = inputEl.getBoundingClientRect();
+      return visible.reduce((best, pac) => {
+        const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+        const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+        return distance < bestDistance ? pac : best;
+      }, visible[0]);
+    }
+    return pacContainers[pacContainers.length - 1];
+  };
+
+  const hidePacContainers = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    pacContainers.forEach((node) => {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    });
+  };
+
+  const syncPacContainer = () => {
+    const inputEl = locationInputRef.current;
+    if (!inputEl) return;
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    const pac = pickPacContainer(inputEl);
+    if (!pac) return;
+    const rect = inputEl.getBoundingClientRect();
+  const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+  if (!isInViewport) {
+    hidePacContainers();
+    return;
+  }
+    // Keep dropdown aligned with input while page scrolls.
+    pac.style.position = "absolute";
+    pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+    pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    pac.style.width = `${Math.round(rect.width)}px`;
+    pac.style.zIndex = "1001";
+    pac.style.display = "block";
+    pac.style.visibility = "visible";
+    pac.style.pointerEvents = "auto";
+    pacContainers.forEach((node) => {
+      if (node !== pac) {
+        node.style.display = "none";
+        node.style.visibility = "hidden";
+        node.style.pointerEvents = "none";
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (step !== 7) return undefined;
+    const inputEl = locationInputRef.current;
+    if (!inputEl) return undefined;
+
+    const getScrollParent = (node) => {
+      let parent = node?.parentElement;
+      while (parent && parent !== document.body) {
+        const style = window.getComputedStyle(parent);
+        const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
+        if (/(auto|scroll|overlay)/.test(overflow)) return parent;
+        parent = parent.parentElement;
+      }
+      return window;
+    };
+
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer();
+    };
+
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
+
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
+    };
+  }, [step]);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (document.activeElement !== activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => syncPacContainer());
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
   const handleLocationBlur = () => {
+    hidePacContainers();
     if (!mapsApiKey) return;
     const geocoder = locationGeocoderRef.current;
     if (!geocoder) return;
@@ -889,6 +1003,7 @@ export default function IntakeSearch() {
                 onLocationInputChange={() => setLocationError("")}
                 locationError={locationError}
                 requiresZipForStepSeven={requiresZipForStepSeven}
+                syncPacContainer={syncPacContainer}
               />
             </CardShell>
           </div>
@@ -969,7 +1084,19 @@ function StepContent({
   onLocationInputChange,
   locationError,
   requiresZipForStepSeven,
+  syncPacContainer,
 }) {
+  const handleLocationKeyDown = (event) => {
+    if (
+      event.key === "Shift" ||
+      event.key === "Control" ||
+      event.key === "Alt" ||
+      event.key === "Meta" ||
+      event.key === "Fn"
+    ) {
+      syncPacContainer?.();
+    }
+  };
   if (step === 1) {
     return (
       <>
@@ -1291,7 +1418,13 @@ function StepContent({
               onChange={(e) => {
                 update("location", e.target.value);
                 if (typeof onLocationInputChange === "function") onLocationInputChange();
+                syncPacContainer?.();
               }}
+              onFocus={() => {
+                activePacInputRef.current = locationInputRef.current;
+                syncPacContainer?.();
+              }}
+              onKeyDown={handleLocationKeyDown}
               onBlur={onLocationBlur}
               className="rounded-xl border-[#e2e8f0] h-12 placeholder:italic"
             />
