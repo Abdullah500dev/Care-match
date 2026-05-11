@@ -1787,90 +1787,42 @@ const CareExplorer = () => {
       String(appliedFilters.selectedAvailability[0]).trim().toLowerCase() === "within 30 days"
     );
   const promptCriteria = [];
-  const displayCriteria =
-    carrieFilters?.displayCriteria && typeof carrieFilters.displayCriteria === "object"
-      ? carrieFilters.displayCriteria
-      : null;
-  const hasUserOverrides =
-    discoverOverrideRows !== undefined || hasUserTouchedFiltersRef.current;
-  const shouldUseDisplayCriteria = displayCriteria && !hasUserOverrides;
-  if (shouldUseDisplayCriteria) {
-    const displayLocation = String(displayCriteria.location || locationLabelForHeader || "").trim();
-    const displayBudgetMin = sanitizeMonthlyBudgetValue(displayCriteria.budgetMinMonthly);
-    const displayBudgetMax = sanitizeMonthlyBudgetValue(displayCriteria.budgetMaxMonthly);
-    const displayDistance = String(displayCriteria.maxDistanceMiles || "").trim();
-    const displayMustHaves = Array.isArray(displayCriteria.mustHaveNeeds)
-      ? displayCriteria.mustHaveNeeds.map((item) => String(item || "").trim()).filter(Boolean)
-      : [];
-    const displayAvailability = String(displayCriteria.availability || "").trim();
-
-    if (displayLocation) {
-      promptCriteria.push({ label: "Location", value: displayLocation });
-    }
-    if (displayBudgetMin != null || displayBudgetMax != null) {
-      const minText = displayBudgetMin != null ? `$${displayBudgetMin.toLocaleString()}` : "";
-      const maxText = displayBudgetMax != null ? `$${displayBudgetMax.toLocaleString()}` : "";
-      promptCriteria.push({
-        label: "Budget",
-        value: [minText, maxText].filter(Boolean).join("-") + "/mo",
-      });
-    }
-    if (displayDistance) {
-      promptCriteria.push({
-        label: "Distance",
-        value: `Within ${displayDistance} miles`,
-      });
-    }
-    if (displayMustHaves.length > 0) {
-      promptCriteria.push({
-        label: "Must-Have Needs",
-        value: displayMustHaves.join(", "),
-      });
-    }
-    if (displayAvailability) {
-      promptCriteria.push({
-        label: "Move-In Timeline",
-        value: displayAvailability,
-      });
-    }
-  } else {
-    if (locationLabelForHeader) {
-      promptCriteria.push({ label: "Location", value: locationLabelForHeader });
-    }
-    if (appliedFilters.selectedCareTypes.length > 0) {
-      promptCriteria.push({
-        label: "Care Type",
-        value: appliedFilters.selectedCareTypes.join(", "),
-      });
-    }
-    if (
-      sanitizeMonthlyBudgetValue(carrieFilters?.budgetMaxMonthly) != null ||
-      Number(appliedFilters.budgetMin) !== 1000 ||
-      Number(appliedFilters.budgetMax) !== 15000
-    ) {
-      promptCriteria.push({
-        label: "Budget",
-        value: summaryBudgetText,
-      });
-    }
-    if (String(appliedFilters.maxMiles || "").trim()) {
-      promptCriteria.push({
-        label: "Distance",
-        value: `Within ${String(appliedFilters.maxMiles).trim()} miles`,
-      });
-    }
-    if (appliedFilters.selectedAmenities.length > 0) {
-      promptCriteria.push({
-        label: "Must-Have Needs",
-        value: appliedFilters.selectedAmenities.join(", "),
-      });
-    }
-    if (hasNonDefaultAvailability) {
-      promptCriteria.push({
-        label: "Move-In Timeline",
-        value: appliedFilters.selectedAvailability.join(", "),
-      });
-    }
+  if (locationLabelForHeader) {
+    promptCriteria.push({ label: "Location", value: locationLabelForHeader });
+  }
+  if (appliedFilters.selectedCareTypes.length > 0) {
+    promptCriteria.push({
+      label: "Care Type",
+      value: appliedFilters.selectedCareTypes.join(", "),
+    });
+  }
+  if (
+    sanitizeMonthlyBudgetValue(carrieFilters?.budgetMaxMonthly) != null ||
+    Number(appliedFilters.budgetMin) !== 1000 ||
+    Number(appliedFilters.budgetMax) !== 15000
+  ) {
+    promptCriteria.push({
+      label: "Budget",
+      value: summaryBudgetText,
+    });
+  }
+  if (String(appliedFilters.maxMiles || "").trim()) {
+    promptCriteria.push({
+      label: "Distance",
+      value: `Within ${String(appliedFilters.maxMiles).trim()} miles`,
+    });
+  }
+  if (appliedFilters.selectedAmenities.length > 0) {
+    promptCriteria.push({
+      label: "Must-Have Needs",
+      value: appliedFilters.selectedAmenities.join(", "),
+    });
+  }
+  if (hasNonDefaultAvailability) {
+    promptCriteria.push({
+      label: "Move-In Timeline",
+      value: appliedFilters.selectedAvailability.join(", "),
+    });
   }
   const totalPages = Math.max(
     1,

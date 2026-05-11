@@ -151,6 +151,28 @@ export default function SearchBar() {
     };
   }, []);
 
+  const syncPacContainer = () => {
+    if (!inputRef.current) return;
+    const pac = document.querySelector(".pac-container");
+    if (!pac) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    pac.style.position = "fixed";
+    pac.style.top = `${Math.round(rect.bottom + 2)}px`;
+    pac.style.left = `${Math.round(rect.left)}px`;
+    pac.style.width = `${Math.round(rect.width)}px`;
+    pac.style.zIndex = "1001";
+  };
+
+  useEffect(() => {
+    const handleSync = () => syncPacContainer();
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+    };
+  }, []);
+
   useEffect(() => {
     if (!chatSending) {
       setThinkingMessageIndex(0);
@@ -381,6 +403,7 @@ export default function SearchBar() {
   const handleChange = (e) => {
     clearTypingAnimation();
     setQuery(e.target.value);
+    syncPacContainer();
   };
 
   const transcribeAudio = async (audioBlob) => {
@@ -546,6 +569,7 @@ export default function SearchBar() {
           type="text"
           value={query}
           onChange={handleChange}
+          onFocus={syncPacContainer}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
