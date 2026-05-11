@@ -219,6 +219,13 @@ const inferMaxDistanceFromMessages = (msgs) => {
   const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
   for (let i = users.length - 1; i >= 0; i -= 1) {
     const text = users[i].toLowerCase();
+    const kmPattern =
+      /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:-|\s)*(?:km|kilometer|kilometers)\b/;
+    const kmMatch = text.match(kmPattern);
+    if (kmMatch?.[1]) {
+      const value = Number.parseInt(kmMatch[1], 10);
+      if (!Number.isNaN(value) && value > 0) return value;
+    }
     const milesPattern =
       /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:-|\s)*(?:mile|miles|mi)\b/;
     const m = text.match(milesPattern);

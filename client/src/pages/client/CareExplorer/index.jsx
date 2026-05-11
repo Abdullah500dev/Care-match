@@ -167,6 +167,22 @@ function mapSelectionsToOptions(incomingValues, options, aliases = {}) {
   return [...new Set(selected)];
 }
 
+function parseDistanceMiles(value) {
+  if (value == null) return null;
+  const parsed = Number.parseFloat(String(value).replace(/[^0-9.]+/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveCarrieMaxMiles(filters) {
+  if (!filters) return null;
+  const candidate =
+    filters.maxDistanceMiles ??
+    filters.max_distance_miles ??
+    filters.maxMiles ??
+    filters.max_miles;
+  return parseDistanceMiles(candidate);
+}
+
 // US state name → abbreviation lookup for location filter
 const US_STATE_ABBR = {
   alabama: "al", alaska: "ak", arizona: "az", arkansas: "ar", california: "ca",
@@ -957,12 +973,21 @@ const CareExplorer = () => {
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
+  const initialMaxMiles = useMemo(() => {
+    const parsedCandidate = resolveCarrieMaxMiles(carrieFilters);
+    if (parsedCandidate != null) {
+      return String(parsedCandidate);
+    }
+    if (fromCarrie) return String(DEFAULT_NEARBY_RADIUS_MILES);
+    return "";
+  }, [carrieFilters, fromCarrie]);
+
   const initialFilters = useMemo(
     () => ({
     locationQuery: inferredCarrieLocationQuery,
     zipCode: carrieZipCode,
     searchQuery: "",
-    maxMiles: "",
+    maxMiles: initialMaxMiles,
     budgetMin: 1000,
     budgetMax: 15000,
     selectedCareTypes: [],
@@ -970,7 +995,7 @@ const CareExplorer = () => {
     selectedAmenities: [],
     sortBy: "bestMatch",
     }),
-    [inferredCarrieLocationQuery, carrieZipCode],
+    [inferredCarrieLocationQuery, carrieZipCode, initialMaxMiles],
   );
 
   // `filters` are the draft values (typing/selecting in the sidebar)
@@ -1189,11 +1214,10 @@ const CareExplorer = () => {
           carrieFilters.availability.trim()
           ? [carrieFilters.availability.trim()]
           : initialFilters.selectedAvailability,
-      maxMiles:
-        carrieFilters.maxDistanceMiles != null &&
-          !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
-          ? String(carrieFilters.maxDistanceMiles)
-          : initialFilters.maxMiles,
+      maxMiles: (() => {
+        const parsed = resolveCarrieMaxMiles(carrieFilters);
+        return parsed != null ? String(parsed) : initialFilters.maxMiles;
+      })(),
     };
 
     setFilters(nextFilters);
