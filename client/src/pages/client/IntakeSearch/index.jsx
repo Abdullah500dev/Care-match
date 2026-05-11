@@ -213,6 +213,7 @@ export default function IntakeSearch() {
   const locationAutocompleteRef = useRef(null);
   const locationGeocoderRef = useRef(null);
   const activePacInputRef = useRef(null);
+  const lastAutocompleteSelectionRef = useRef(0);
   const geocodeRequestIdRef = useRef(0);
   const mapsApiKey = getGoogleMapsApiKey();
   const requiresZipForStepSeven = Boolean(mapsApiKey);
@@ -228,6 +229,14 @@ export default function IntakeSearch() {
     currentStepValidationError || (step === 7 ? locationError || stepSevenZipError : null);
 
   const progressPercent = (step / TOTAL_STEPS) * 100;
+
+  useEffect(() => {
+    if (step !== 7) return;
+    if (!locationError) return;
+    if (ZIP_CODE_REGEX.test(String(formData?.location || ""))) {
+      setLocationError("");
+    }
+  }, [formData?.location, locationError, step]);
 
   useEffect(() => {
     let draft = null;
@@ -465,6 +474,7 @@ export default function IntakeSearch() {
         );
 
         if (normalized) {
+          lastAutocompleteSelectionRef.current = Date.now();
           setFormData((prev) => ({ ...prev, location: normalized }));
           setLocationError("");
         }
@@ -606,6 +616,10 @@ export default function IntakeSearch() {
   }, []);
 
   const handleLocationBlur = () => {
+    if (Date.now() - lastAutocompleteSelectionRef.current < 500) {
+      setLocationError("");
+      return;
+    }
     hidePacContainers();
     if (!mapsApiKey) return;
     const geocoder = locationGeocoderRef.current;
@@ -645,7 +659,7 @@ export default function IntakeSearch() {
         (results, status) => {
           if (requestId !== geocodeRequestIdRef.current) return;
           if (status !== "OK" || !Array.isArray(results) || !results[0]) {
-            setLocationError("Please enter a valid US ZIP code.");
+            setLocationError("");
             return;
           }
           const firstZip = readAddressPart(results[0].address_components, "postal_code");
