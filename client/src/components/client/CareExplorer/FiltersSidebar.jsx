@@ -12,6 +12,18 @@ import {
 
 // ─── Google Places Autocomplete Input ───────────────────────────────────────
 
+const syncPacContainer = (inputEl) => {
+  if (!inputEl) return;
+  const pac = document.querySelector(".pac-container");
+  if (!pac) return;
+  const rect = inputEl.getBoundingClientRect();
+  pac.style.position = "fixed";
+  pac.style.top = `${Math.round(rect.bottom + 2)}px`;
+  pac.style.left = `${Math.round(rect.left)}px`;
+  pac.style.width = `${Math.round(rect.width)}px`;
+  pac.style.zIndex = "1001";
+};
+
 function LocationAutocompleteInput({
   value,
   onChange,
@@ -103,6 +115,16 @@ function LocationAutocompleteInput({
     }
   }, []);
 
+  useEffect(() => {
+    const handleSync = () => syncPacContainer(inputRef.current);
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+    };
+  }, []);
+
   return (
     <div className="relative">
       <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#94a3b8] pointer-events-none" />
@@ -111,7 +133,11 @@ function LocationAutocompleteInput({
         type="text"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChangeRef.current(e.target.value)}
+        onChange={(e) => {
+          onChangeRef.current(e.target.value);
+          syncPacContainer(inputRef.current);
+        }}
+        onFocus={() => syncPacContainer(inputRef.current)}
         className={`w-full pl-9 pr-8 h-10 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] transition-colors ${className ?? ""}`}
       />
       {value && (
@@ -263,6 +289,16 @@ const FiltersSidebar = ({
     };
   }, []);
 
+  useEffect(() => {
+    const handleSync = () => syncPacContainer(zipInputRef.current);
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+    };
+  }, []);
+
   // ZIP → City/State (skip if locationQuery was just set by autocomplete selection)
   useEffect(() => {
     const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
@@ -400,6 +436,7 @@ const FiltersSidebar = ({
             placeholder="e.g. 32811"
             ref={zipInputRef}
             value={zipCode}
+            onFocus={() => syncPacContainer(zipInputRef.current)}
             onChange={(e) => {
               lastAutofillLocationRef.current = "";
               lastAutofillZipRef.current = "";
@@ -408,6 +445,7 @@ const FiltersSidebar = ({
                   .replace(/\D/g, "")
                   .slice(0, 5),
               });
+              syncPacContainer(zipInputRef.current);
             }}
             className="h-10 rounded-lg border-[#E2E8F0]"
           />

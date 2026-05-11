@@ -220,6 +220,7 @@
   animation: carrieIconBounce var(--carrie-bounce-duration) ease-in-out infinite;
 }
 
+
 @keyframes notfound-rotate-slow {
   from {
     transform: rotate(0deg);
