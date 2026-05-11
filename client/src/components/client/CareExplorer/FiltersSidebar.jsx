@@ -12,16 +12,72 @@ import {
 
 // ─── Google Places Autocomplete Input ───────────────────────────────────────
 
+const getScrollParent = (node) => {
+  let parent = node?.parentElement;
+  while (parent && parent !== document.body) {
+    const style = window.getComputedStyle(parent);
+    const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
+    if (/(auto|scroll|overlay)/.test(overflow)) return parent;
+    parent = parent.parentElement;
+  }
+  return window;
+};
+
+const pickPacContainer = (inputEl) => {
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  if (pacContainers.length === 0) return null;
+  const visible = pacContainers.filter(
+    (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+  );
+  if (visible.length === 1) return visible[0];
+  if (visible.length > 1) {
+    const inputRect = inputEl.getBoundingClientRect();
+    return visible.reduce((best, pac) => {
+      const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+      const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+      return distance < bestDistance ? pac : best;
+    }, visible[0]);
+  }
+  return pacContainers[pacContainers.length - 1];
+};
+
 const syncPacContainer = (inputEl) => {
   if (!inputEl) return;
-  const pac = document.querySelector(".pac-container");
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  const pac = pickPacContainer(inputEl);
   if (!pac) return;
   const rect = inputEl.getBoundingClientRect();
-  pac.style.position = "fixed";
-  pac.style.top = `${Math.round(rect.bottom + 2)}px`;
-  pac.style.left = `${Math.round(rect.left)}px`;
+  const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+  if (!isInViewport) {
+    hidePacContainers();
+    return;
+  }
+  // Keep dropdown aligned with input while page scrolls.
+  pac.style.position = "absolute";
+  pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+  pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
   pac.style.width = `${Math.round(rect.width)}px`;
   pac.style.zIndex = "1001";
+  pac.style.display = "block";
+  pac.style.visibility = "visible";
+  pac.style.pointerEvents = "auto";
+  pac.dataset.owner = inputEl.id || "pac-input";
+  pacContainers.forEach((node) => {
+    if (node !== pac) {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    }
+  });
+};
+
+const hidePacContainers = () => {
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  pacContainers.forEach((node) => {
+    node.style.display = "none";
+    node.style.visibility = "hidden";
+    node.style.pointerEvents = "none";
+  });
 };
 
 function LocationAutocompleteInput({
@@ -30,6 +86,7 @@ function LocationAutocompleteInput({
   onPlaceSelected,
   placeholder,
   className,
+  onFocus,
 }) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
@@ -98,10 +155,12 @@ function LocationAutocompleteInput({
                 }
               }
               finish(postalCode);
+              hidePacContainers();
             }
           );
         } else {
           finish(postalCode);
+          hidePacContainers();
         }
       });
 
@@ -116,12 +175,27 @@ function LocationAutocompleteInput({
   }, []);
 
   useEffect(() => {
-    const handleSync = () => syncPacContainer(inputRef.current);
+    const inputEl = inputRef.current;
+    if (!inputEl) return undefined;
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer(inputEl);
+    };
     window.addEventListener("scroll", handleSync, true);
     window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
     return () => {
       window.removeEventListener("scroll", handleSync, true);
       window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
     };
   }, []);
 
@@ -137,7 +211,11 @@ function LocationAutocompleteInput({
           onChangeRef.current(e.target.value);
           syncPacContainer(inputRef.current);
         }}
-        onFocus={() => syncPacContainer(inputRef.current)}
+        onFocus={() => {
+          onFocus?.(inputRef.current);
+          syncPacContainer(inputRef.current);
+        }}
+        onBlur={() => hidePacContainers()}
         className={`w-full pl-9 pr-8 h-10 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] transition-colors ${className ?? ""}`}
       />
       {value && (
@@ -222,11 +300,46 @@ const FiltersSidebar = ({
   const lastAutofillZipFromLocationRef = useRef("");
   const zipInputRef = useRef(null);
   const zipAutocompleteRef = useRef(null);
+  const activePacInputRef = useRef(null);
   const latestFiltersRef = useRef(filters);
 
   useEffect(() => {
     latestFiltersRef.current = filters;
   }, [filters]);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (!activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        syncPacContainer(activePacInputRef.current);
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".pac-container")) {
+        window.setTimeout(() => hidePacContainers(), 0);
+        return;
+      }
+      if (target.closest("#zipCode")) return;
+      hidePacContainers();
+    };
+    document.addEventListener("mousedown", handleDocumentMouseDown, true);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
+    };
+  }, []);
 
   // ZIP input autocomplete (suggestions + autofill city/state)
   useEffect(() => {
@@ -272,6 +385,7 @@ const FiltersSidebar = ({
           ...(postalCode.length === 5 ? { zipCode: postalCode } : {}),
           ...(nextLocation ? { locationQuery: nextLocation } : {}),
         });
+        hidePacContainers();
       });
     };
 
@@ -290,12 +404,27 @@ const FiltersSidebar = ({
   }, []);
 
   useEffect(() => {
-    const handleSync = () => syncPacContainer(zipInputRef.current);
+    const inputEl = zipInputRef.current;
+    if (!inputEl) return undefined;
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer(inputEl);
+    };
     window.addEventListener("scroll", handleSync, true);
     window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
     return () => {
       window.removeEventListener("scroll", handleSync, true);
       window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
     };
   }, []);
 
@@ -411,6 +540,9 @@ const FiltersSidebar = ({
             placeholder="City or state"
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
+            onFocus={(inputEl) => {
+              activePacInputRef.current = inputEl;
+            }}
             onPlaceSelected={(payload) => {
               const incomingZip = String(payload?.zipCode || "").replace(/\D/g, "").slice(0, 5);
               const incomingLabel = String(payload?.label || "").trim();
@@ -436,8 +568,13 @@ const FiltersSidebar = ({
             placeholder="e.g. 32811"
             ref={zipInputRef}
             value={zipCode}
-            onFocus={() => syncPacContainer(zipInputRef.current)}
+            onFocus={() => {
+              activePacInputRef.current = zipInputRef.current;
+              syncPacContainer(zipInputRef.current);
+            }}
+            onBlur={() => hidePacContainers()}
             onChange={(e) => {
+              activePacInputRef.current = zipInputRef.current;
               lastAutofillLocationRef.current = "";
               lastAutofillZipRef.current = "";
               setFilters({

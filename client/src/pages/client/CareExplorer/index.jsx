@@ -2295,6 +2295,9 @@ const CareExplorer = () => {
                 onFiltersChange={(nextFilters) => {
                   hasUserTouchedFiltersRef.current = true;
                   setFilters(nextFilters);
+                  if (nextFilters?.sortBy && nextFilters.sortBy !== appliedFilters.sortBy) {
+                    setAppliedFilters((prev) => ({ ...prev, sortBy: nextFilters.sortBy }));
+                  }
                 }}
                 onReset={() => {
                   if (discoverAbortControllerRef.current) {
