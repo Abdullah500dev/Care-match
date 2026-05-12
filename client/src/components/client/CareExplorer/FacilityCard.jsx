@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, ArrowRight, MapPin, Hash, PhoneCall } from "lucide-react";
+import { Heart, Star, ArrowRight, MapPin, Hash, PhoneCall, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -21,6 +21,7 @@ const FacilityCard = ({
   zipCode = "",
   phone = "",
   imageSrc = DEFAULT_IMAGE,
+  imageUrls = [],
   website = "",
   sourcePlatform = "",
   isExternal = false,
@@ -30,8 +31,18 @@ const FacilityCard = ({
   isFavorite = false,
   onToggleFavorite,
 }) => {
-  const [cardImageSrc, setCardImageSrc] = React.useState(imageSrc || DEFAULT_IMAGE);
-  const isUsingPlaceholderImage = cardImageSrc === CAREMATCH_PLACEHOLDER_IMAGE;
+  const normalizedImageUrls = React.useMemo(() => {
+    const list = Array.isArray(imageUrls) ? imageUrls : [];
+    const unique = [...new Set(list.map((x) => String(x || "").trim()).filter(Boolean))];
+    if (unique.length > 0) return unique;
+    return [String(imageSrc || DEFAULT_IMAGE)];
+  }, [imageUrls, imageSrc]);
+  const [activeImageIndex, setActiveImageIndex] = React.useState(0);
+  const [failedImageUrls, setFailedImageUrls] = React.useState(() => new Set());
+  const safeImageUrls = React.useMemo(() => {
+    const filtered = normalizedImageUrls.filter((url) => !failedImageUrls.has(url));
+    return filtered.length > 0 ? filtered : [DEFAULT_IMAGE];
+  }, [normalizedImageUrls, failedImageUrls]);
   const hasReviewCount = Number.isFinite(Number(reviewCount)) && Number(reviewCount) > 0;
   const ratingMetaText = hasReviewCount ? `${reviewCount} ${ratingLabel}` : ratingLabel;
   const displayPriceRange =
@@ -42,13 +53,33 @@ const FacilityCard = ({
   const dialablePhone = displayPhone.replace(/[^\d+]/g, "");
 
   React.useEffect(() => {
-    setCardImageSrc(imageSrc || DEFAULT_IMAGE);
-  }, [imageSrc]);
-
-  const handleImageError = () => {
-    if (cardImageSrc !== CAREMATCH_PLACEHOLDER_IMAGE) {
-      setCardImageSrc(CAREMATCH_PLACEHOLDER_IMAGE);
+    setFailedImageUrls(new Set());
+    setActiveImageIndex(0);
+  }, [normalizedImageUrls]);
+  React.useEffect(() => {
+    if (activeImageIndex >= safeImageUrls.length) {
+      setActiveImageIndex(0);
     }
+  }, [activeImageIndex, safeImageUrls.length]);
+
+  const handleImageError = (failedUrl) => {
+    const normalizedFailed = String(failedUrl || "").trim();
+    if (normalizedFailed && normalizedFailed !== DEFAULT_IMAGE) {
+      setFailedImageUrls((prev) => {
+        const next = new Set(prev);
+        next.add(normalizedFailed);
+        return next;
+      });
+    }
+  };
+  const showSliderControls = safeImageUrls.length > 1;
+  const goPrevImage = () => {
+    if (!showSliderControls) return;
+    setActiveImageIndex((idx) => (idx - 1 + safeImageUrls.length) % safeImageUrls.length);
+  };
+  const goNextImage = () => {
+    if (!showSliderControls) return;
+    setActiveImageIndex((idx) => (idx + 1) % safeImageUrls.length);
   };
 
   const hasWebsite = typeof website === "string" && /^https?:\/\//i.test(website);
@@ -94,6 +125,7 @@ const FacilityCard = ({
       rating,
       reviewCount,
       imageSrc,
+      imageUrls: safeImageUrls,
       distance,
       sourcePlatform,
       externalSourceUrl,
@@ -129,13 +161,47 @@ const FacilityCard = ({
       >
         {/* Image Section */}
         <div className="relative">
-          <img
-            src={cardImageSrc}
-            alt={name}
-            onError={handleImageError}
-            className={`w-full h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] ${isUsingPlaceholderImage ? "object-contain bg-white p-4" : "object-cover"
-              }`}
-          />
+          <div className="h-[110px] min-[400px]:h-[120px] sm:h-[125px] md:h-[135px] overflow-hidden">
+            <div
+              className="flex h-full transition-transform duration-500 ease-in-out"
+              style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
+            >
+              {safeImageUrls.map((url, idx) => {
+                const usingPlaceholder =
+                  url === CAREMATCH_PLACEHOLDER_IMAGE || url === DEFAULT_IMAGE;
+                return (
+                  <div key={`${url}-${idx}`} className="h-full w-full shrink-0">
+                    <img
+                      src={url}
+                      alt={`${name} image ${idx + 1}`}
+                      onError={() => handleImageError(url)}
+                      className={`h-full w-full ${usingPlaceholder ? "object-contain bg-white p-4" : "object-cover"}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {showSliderControls && (
+            <>
+              <button
+                type="button"
+                onClick={goPrevImage}
+                className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white"
+                aria-label="Previous image"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={goNextImage}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white"
+                aria-label="Next image"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
           {/* Match Badge */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/70 text-white backdrop-blur-sm px-2.5 py-1 text-[11px] font-semibold">
             <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4]" />
@@ -207,12 +273,47 @@ const FacilityCard = ({
     >
       {/* Image Section - compact: always on top ~45–50%; listing: side-by-side on sm+ */}
       <div className={`relative w-full flex-shrink-0 ${compact ? "aspect-[4/3] min-h-[180px]" : "sm:w-[33.333%] min-h-[180px] min-[400px]:min-h-[200px] sm:min-h-[220px]"}`}>
-        <img
-          src={cardImageSrc}
-          alt={name}
-          onError={handleImageError}
-          className={`h-full w-full ${isUsingPlaceholderImage ? "object-contain bg-white p-6" : "object-cover"}`}
-        />
+        <div className="h-full w-full overflow-hidden">
+          <div
+            className="flex h-full transition-transform duration-500 ease-in-out"
+            style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
+          >
+            {safeImageUrls.map((url, idx) => {
+              const usingPlaceholder =
+                url === CAREMATCH_PLACEHOLDER_IMAGE || url === DEFAULT_IMAGE;
+              return (
+                <div key={`${url}-${idx}`} className="h-full w-full shrink-0">
+                  <img
+                    src={url}
+                    alt={`${name} image ${idx + 1}`}
+                    onError={() => handleImageError(url)}
+                    className={`h-full w-full ${usingPlaceholder ? "object-contain bg-white p-6" : "object-cover"}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {showSliderControls && (
+          <>
+            <button
+              type="button"
+              onClick={goPrevImage}
+              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white"
+              aria-label="Previous image"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={goNextImage}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/55 p-1.5 text-white"
+              aria-label="Next image"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
         {/* Match Badge - dark semi-transparent oval */}
         <div className={`absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 text-white backdrop-blur-sm font-bold ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[11px] sm:text-xs"}`}>
           <span className="h-1.5 w-1.5 rounded-full bg-[#00CFF4] shrink-0" />

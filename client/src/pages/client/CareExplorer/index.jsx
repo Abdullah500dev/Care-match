@@ -305,18 +305,12 @@ function normalizeFacilityForCard(m) {
           ? Number(m.longitude)
           : null;
 
-  const firstImg =
-    Array.isArray(m.images) && m.images.length ? m.images[0] : null;
-  let imageSrc = resolveFacilityImageUrl(firstImg) || null;
-  if (!imageSrc && Array.isArray(m.images) && m.images.length > 1) {
-    for (let i = 1; i < m.images.length; i += 1) {
-      const u = resolveFacilityImageUrl(m.images[i]);
-      if (u) {
-        imageSrc = u;
-        break;
-      }
-    }
-  }
+  const normalizedImageUrls = Array.isArray(m.images)
+    ? m.images
+        .map((img) => resolveFacilityImageUrl(img))
+        .filter((img) => typeof img === "string" && img.trim().length > 0)
+    : [];
+  let imageSrc = normalizedImageUrls[0] || null;
   const placeId =
     typeof googlePlaces.place_id === "string" ? googlePlaces.place_id.trim() : "";
   if (!imageSrc && placeId) {
@@ -425,6 +419,7 @@ function normalizeFacilityForCard(m) {
     key: m.facilityId || m._id || m.name,
     matchPercent: typeof m.score === "number" ? m.score : 0,
     imageSrc,
+    imageUrls: normalizedImageUrls,
     category,
     name: m.name || "Community",
     priceRange,
@@ -1370,7 +1365,7 @@ const CareExplorer = () => {
     return null;
   }, []);
 
-  // Debounced live discover when filters change (same engine as Carrie / results.js).
+  // Debounced live discover when filters change (POST /api/facilities/discover — external APIs only).
   useEffect(() => {
     if (skipDiscoverMountRef.current) {
       skipDiscoverMountRef.current = false;
@@ -1786,7 +1781,7 @@ const CareExplorer = () => {
     return mapFacilities.filter((f) => allowed.has(f.key));
   }, [mapFacilities, nearbyMapFacilityKeys]);
 
-  const pageSize = layout === "grid" ? 12 : 4;
+  const pageSize = 12;
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     buildEffectiveLocationQuery(
@@ -2411,6 +2406,7 @@ const CareExplorer = () => {
                     facilityId={f.key ?? f.facilityId ?? f.name}
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
+                    imageUrls={f.imageUrls}
                     name={f.name}
                     category={f.category}
                     rating={f.rating}
@@ -2529,6 +2525,7 @@ const CareExplorer = () => {
                           facilityId={f.key ?? f.facilityId ?? f.name}
                           matchPercent={f.matchPercent}
                           imageSrc={f.imageSrc}
+                          imageUrls={f.imageUrls}
                           name={f.name}
                           category={f.category}
                           rating={f.rating}
