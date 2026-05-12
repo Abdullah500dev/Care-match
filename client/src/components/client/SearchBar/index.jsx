@@ -34,6 +34,7 @@ export default function SearchBar() {
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [queryCoords, setQueryCoords] = useState(null);
   const inputRef = useRef(null);
   const chatComposerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -130,8 +131,26 @@ export default function SearchBar() {
           });
         };
         if (!zip && place?.geometry?.location) {
+          try {
+            setQueryCoords({
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng(),
+            });
+          } catch {
+            setQueryCoords(null);
+          }
           geocodeByLocation(place.geometry.location, label);
           return;
+        }
+        if (place?.geometry?.location) {
+          try {
+            setQueryCoords({
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng(),
+            });
+          } catch {
+            setQueryCoords(null);
+          }
         }
         setQuery([label, zip].filter(Boolean).join(" ").trim());
       });
@@ -345,6 +364,28 @@ export default function SearchBar() {
     setChatSending(true);
     setQuery("");
     try {
+      const resolveCoordsForSearch = async () => {
+        if (
+          queryCoords &&
+          Number.isFinite(Number(queryCoords.lat)) &&
+          Number.isFinite(Number(queryCoords.lng))
+        ) {
+          return { latitude: Number(queryCoords.lat), longitude: Number(queryCoords.lng) };
+        }
+        if (!window.google?.maps?.Geocoder) return null;
+        const geocoder = locationGeocoderRef.current || new window.google.maps.Geocoder();
+        return new Promise((resolve) => {
+          geocoder.geocode({ address: trimmed }, (results, status) => {
+            if (status !== "OK" || !Array.isArray(results) || !results[0]?.geometry?.location) {
+              resolve(null);
+              return;
+            }
+            const loc = results[0].geometry.location;
+            resolve({ latitude: loc.lat(), longitude: loc.lng() });
+          });
+        });
+      };
+      const resolvedCoords = await resolveCoordsForSearch();
       const payload = {
         zip_code: zipCode || trimmed,
         location: trimmed,
@@ -352,6 +393,7 @@ export default function SearchBar() {
         budget_min: DEFAULT_BUDGET_MIN,
         budget_max: DEFAULT_BUDGET_MAX,
         max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
+        ...(resolvedCoords || {}),
       };
       const { data } = await postDiscoverFacilities(payload);
       const matches = Array.isArray(data?.facilities) ? data.facilities : [];
@@ -471,6 +513,7 @@ export default function SearchBar() {
   const handleChange = (e) => {
     clearTypingAnimation();
     setQuery(e.target.value);
+    setQueryCoords(null);
     syncPacContainer();
   };
 

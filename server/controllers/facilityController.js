@@ -28,7 +28,6 @@ import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
-import { getCareMatchResults } from "../scripts/results.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 
 const toArray = (value) => {
@@ -79,6 +78,27 @@ const GOOGLE_MAPS_PLACES_API_KEY = String(
     process.env.VITE_GOOGLE_MAPS_API_KEY ||
     ""
 ).trim();
+const SILVERASSIST_LOCATION_AUTOCOMPLETE_URL =
+  process.env.SILVERASSIST_LOCATION_AUTOCOMPLETE_URL ||
+  "https://api.silverassist.com/fam-communities/location-autocomplete";
+const CARING_FACETED_SEARCH_URL =
+  process.env.CARING_FACETED_SEARCH_URL || "https://api.caring.com/v1/faceted-search";
+const CARING_DEFAULT_DISTANCE_MILES = Number.parseInt(
+  String(process.env.CARING_DEFAULT_DISTANCE_MILES || "30"),
+  10
+);
+const CARING_HITS_PER_PAGE = Math.min(
+  60,
+  Math.max(10, Number.parseInt(String(process.env.CARING_HITS_PER_PAGE || "30"), 10) || 30)
+);
+const CARING_MAX_PAGES = Math.min(
+  120,
+  Math.max(5, Number.parseInt(String(process.env.CARING_MAX_PAGES || "24"), 10) || 24)
+);
+const CARING_MAX_FETCH_MS = Math.max(
+  5000,
+  Number.parseInt(String(process.env.CARING_MAX_FETCH_MS || "45000"), 10) || 45000
+);
 
 const pickFirstNonEmpty = (obj, keys) => {
   for (const key of keys) {
@@ -107,6 +127,543 @@ const toOptionalNumber = (value) => {
   if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+};
+
+const normalizeFiveDigitZip = (value) => String(value || "").replace(/\D/g, "").slice(0, 5);
+
+const toFiniteNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const buildFullAddress = (address, city, state, zipCode) =>
+  [address, city, state, zipCode].map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+
+const deepCollectObjects = (value, limit = 450) => {
+  const out = [];
+  const queue = [value];
+  const seen = new Set();
+
+  while (queue.length > 0 && out.length < limit) {
+    const current = queue.shift();
+    if (current == null) continue;
+
+    if (Array.isArray(current)) {
+      current.forEach((item) => {
+        if (item && typeof item === "object") queue.push(item);
+      });
+      continue;
+    }
+
+    if (typeof current !== "object") continue;
+    if (seen.has(current)) continue;
+    seen.add(current);
+    out.push(current);
+
+    Object.values(current).forEach((v) => {
+      if (v && typeof v === "object") queue.push(v);
+    });
+  }
+
+  return out;
+};
+
+const extractLatLngFromAnyRow = (row) => {
+  const lat =
+    toFiniteNumber(
+      pickFirstNonEmpty(row, ["latitude", "lat", "geo_lat", "locationLat", "location_lat"])
+    ) ??
+    toFiniteNumber(row?.coordinates?.lat) ??
+    toFiniteNumber(row?.location?.lat) ??
+    toFiniteNumber(row?.location?.latitude) ??
+    null;
+  const lng =
+    toFiniteNumber(
+      pickFirstNonEmpty(row, ["longitude", "lng", "lon", "geo_lng", "locationLng", "location_lng"])
+    ) ??
+    toFiniteNumber(row?.coordinates?.lng) ??
+    toFiniteNumber(row?.coordinates?.lon) ??
+    toFiniteNumber(row?.location?.lng) ??
+    toFiniteNumber(row?.location?.longitude) ??
+    null;
+  return { lat, lng };
+};
+
+const tryParseExternalRowToAiFacility = (row, source, fallbackContext = {}) => {
+  if (!row || typeof row !== "object") return null;
+
+  const name = toOptionalString(
+    pickFirstNonEmpty(row, [
+      "name",
+      "communityName",
+      "title",
+      "providerName",
+      "facilityName",
+      "community_name",
+    ])
+  );
+  if (!name) return null;
+
+  const streetAddress = toOptionalString(
+    pickFirstNonEmpty(row, [
+      "address",
+      "formattedAddress",
+      "fullAddress",
+      "streetAddress",
+      "street",
+      "displayAddress",
+      "location",
+    ])
+  );
+  const city = toOptionalString(
+    pickFirstNonEmpty(row, ["city", "locality", "town"])
+  );
+  const state = toOptionalString(
+    pickFirstNonEmpty(row, ["state", "stateCode", "region", "stateAbbreviation"])
+  ).toUpperCase();
+  const zipCode =
+    normalizeFiveDigitZip(
+      pickFirstNonEmpty(row, ["zip", "zipCode", "zip_code", "postalCode", "postal_code"])
+    ) || normalizeFiveDigitZip(fallbackContext.zipCode);
+
+  const fullAddress = buildFullAddress(streetAddress, city, state, zipCode);
+  const website = toOptionalString(
+    pickFirstNonEmpty(row, ["website", "url", "link", "profileUrl", "canonicalUrl"])
+  );
+  const phone = toOptionalString(
+    pickFirstNonEmpty(row, ["phone", "phoneNumber", "telephone", "formattedPhoneNumber"])
+  );
+  const description = toOptionalString(
+    pickFirstNonEmpty(row, ["description", "summary", "snippet", "teaser"])
+  );
+  const pricing = toOptionalString(
+    pickFirstNonEmpty(row, ["pricing", "price", "monthlyPrice", "priceRange", "cost"])
+  );
+  const reviewRating = toOptionalNumber(
+    pickFirstNonEmpty(row, ["rating", "overallRating", "reviewScore", "score"])
+  );
+  const reviewCount = toIntOrZero(
+    pickFirstNonEmpty(row, ["reviewCount", "reviewsCount", "numReviews", "reviews"])
+  );
+
+  const { lat, lng } = extractLatLngFromAnyRow(row);
+  const safeLat = lat ?? fallbackContext.latitude ?? null;
+  const safeLng = lng ?? fallbackContext.longitude ?? null;
+  const mapsUrl = toOptionalString(
+    pickFirstNonEmpty(row, ["mapsUrl", "googleMapsUrl", "mapUrl"])
+  );
+  const placeId = toOptionalString(
+    pickFirstNonEmpty(row, ["placeId", "place_id", "googlePlaceId"])
+  );
+
+  const images = toStringArray(
+    pickFirstNonEmpty(row, ["images", "imageUrls", "photos", "gallery", "image"])
+  )
+    .filter((url) => /^https?:\/\//i.test(String(url || "").trim()))
+    .slice(0, 6);
+
+  const amenities = toStringArray(
+    pickFirstNonEmpty(row, ["amenities", "highlights", "features"])
+  ).slice(0, 14);
+  const services = toStringArray(
+    pickFirstNonEmpty(row, ["services", "careServices", "serviceLines"])
+  ).slice(0, 14);
+
+  const careTypeRaw = toOptionalString(
+    pickFirstNonEmpty(row, ["careType", "care_type", "primaryCareType", "category"])
+  );
+  const inferredCareLevels = inferCareLevelsFromText(name, careTypeRaw);
+  const careLevels = inferredCareLevels.length > 0 ? inferredCareLevels : ["Assisted Living"];
+
+  return {
+    care_levels: careLevels,
+    name,
+    email: syntheticExternalEmail(source, `${name}|${fullAddress}`),
+    phone,
+    website,
+    description,
+    services,
+    amenities,
+    budget: {
+      min_monthly: null,
+      max_monthly: null,
+      currency: "USD",
+    },
+    pricing,
+    images,
+    location: {
+      full_address: fullAddress,
+      city,
+      county: "",
+      state,
+      zip_code: zipCode,
+      country: "US",
+    },
+    provider_url: website || mapsUrl,
+    google_places: {
+      place_id: placeId,
+      maps_url: mapsUrl,
+      latitude: safeLat,
+      longitude: safeLng,
+      review_count: reviewCount || null,
+      total_score: reviewRating ?? null,
+    },
+    maps_url: mapsUrl,
+    latitude: safeLat,
+    longitude: safeLng,
+    review: {
+      rating: reviewRating ?? null,
+      count: reviewCount || null,
+      summary: "",
+    },
+  };
+};
+
+const dedupeMatchRows = (rows) => {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (!row || typeof row !== "object") return;
+    const key = [
+      String(row.name || "").toLowerCase().trim(),
+      String(row.address || "").toLowerCase().trim(),
+      normalizeFiveDigitZip(row.zip_code || row?.external_data?.zip_code),
+    ].join("|");
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(row);
+  });
+  return out;
+};
+
+const fetchJsonFromUrl = async (url, signal, headers = { Accept: "application/json" }) => {
+  const response = await fetch(url, {
+    method: "GET",
+    headers,
+    signal,
+  });
+  if (!response.ok) {
+    const bodyText = await response.text().catch(() => "");
+    const error = new Error(`External API request failed (${response.status})`);
+    error.status = response.status;
+    error.bodySnippet = String(bodyText || "").slice(0, 220);
+    throw error;
+  }
+  return response.json().catch(() => ({}));
+};
+
+const fetchCaringJsonFromUrl = async (url, signal) =>
+  fetchJsonFromUrl(url, signal, {
+    Accept: "application/json, text/plain, */*",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 CareMatchBot/1.0",
+    "Accept-Language": "en-US,en;q=0.9",
+    Referer: "https://www.caring.com/",
+    Origin: "https://www.caring.com",
+  });
+
+const resolveLocationContextFromSilverAssist = (silverPayload, zipCodeFallback) => {
+  const rows = deepCollectObjects(silverPayload, 280);
+  for (const row of rows) {
+    const { lat, lng } = extractLatLngFromAnyRow(row);
+    if (lat == null || lng == null) continue;
+    const zipCode =
+      normalizeFiveDigitZip(
+        pickFirstNonEmpty(row, ["zip", "zipCode", "zip_code", "postalCode", "postal_code"])
+      ) || normalizeFiveDigitZip(zipCodeFallback);
+    return { latitude: lat, longitude: lng, zipCode };
+  }
+  return {
+    latitude: null,
+    longitude: null,
+    zipCode: normalizeFiveDigitZip(zipCodeFallback),
+  };
+};
+
+const mapExternalPayloadToMatchRows = (payload, source, fallbackContext = {}) => {
+  const rows = deepCollectObjects(payload, 420);
+  const aiFacilities = rows
+    .map((row) => tryParseExternalRowToAiFacility(row, source, fallbackContext))
+    .filter(Boolean);
+  return aiFacilities.map((row, idx) => mapAiDiscoveryFacilityToMatchRow(row, idx));
+};
+
+const mapCaringPayloadToMatchRows = (payload, fallbackContext = {}) => {
+  const rows = Array.isArray(payload?.data?.results) ? payload.data.results : [];
+  const aiFacilities = rows
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const address = row.address && typeof row.address === "object" ? row.address : {};
+      const city = toOptionalString(address.city);
+      const state = toOptionalString(address.state).slice(0, 2).toUpperCase();
+      const zipCode =
+        normalizeFiveDigitZip(address.zipCode) || normalizeFiveDigitZip(fallbackContext.zipCode);
+      const formattedAddress =
+        toOptionalString(address.formattedAddress) ||
+        buildFullAddress(address.street, city, state, zipCode);
+      const lat = toFiniteNumber(address.latitude) ?? fallbackContext.latitude ?? null;
+      const lng = toFiniteNumber(address.longitude) ?? fallbackContext.longitude ?? null;
+      const careTypes = Array.isArray(row.careTypes) ? row.careTypes : [];
+      const careLevels = careTypes.length
+        ? [...new Set(careTypes.map((t) => String(t || "").trim()).filter(Boolean))]
+        : ["Assisted Living"];
+      return {
+        care_levels: careLevels,
+        name: toOptionalString(row.name),
+        email: syntheticExternalEmail("Caring", row.id || row.slug || row.name),
+        phone: toOptionalString(row.phoneNumber),
+        website: row.url ? `https://www.caring.com${String(row.url).trim()}` : "",
+        description: toOptionalString(row.description),
+        services: careLevels,
+        amenities: [],
+        budget: {
+          min_monthly: null,
+          max_monthly: null,
+          currency: "USD",
+        },
+        pricing:
+          Number.isFinite(Number(row.startPriceInCents)) && Number(row.startPriceInCents) > 0
+            ? `$${Math.round(Number(row.startPriceInCents) / 100).toLocaleString("en-US")}/mo`
+            : "",
+        images: toStringArray(row.images).slice(0, 8),
+        location: {
+          full_address: formattedAddress,
+          city,
+          county: toOptionalString(address.county),
+          state,
+          zip_code: zipCode,
+          country: "US",
+        },
+        provider_url: row.url ? `https://www.caring.com${String(row.url).trim()}` : "",
+        google_places: {
+          place_id: "",
+          maps_url: "",
+          latitude: lat,
+          longitude: lng,
+          review_count: toIntOrZero(row.reviewCount) || null,
+          total_score: toOptionalNumber(row.averageRating) ?? null,
+        },
+        maps_url: "",
+        latitude: lat,
+        longitude: lng,
+        review: {
+          rating: toOptionalNumber(row.averageRating),
+          count: toIntOrZero(row.reviewCount) || null,
+          summary: toOptionalString(row.lastReviewSnippet),
+        },
+      };
+    })
+    .filter((row) => row && row.name);
+  return aiFacilities.map((row, idx) => mapAiDiscoveryFacilityToMatchRow(row, idx));
+};
+
+const distanceMilesBetweenPoints = (aLat, aLng, bLat, bLng) => {
+  const toRad = (n) => (n * Math.PI) / 180;
+  const earthRadiusMiles = 3958.8;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
+};
+
+const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!Number.isFinite(anchorLat) || !Number.isFinite(anchorLng)) return list;
+  const maxMiles =
+    Number.isFinite(Number(maxDistanceMiles)) && Number(maxDistanceMiles) > 0
+      ? Number(maxDistanceMiles)
+      : CARING_DEFAULT_DISTANCE_MILES;
+  return list.filter((row) => {
+    const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
+    const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    const miles = distanceMilesBetweenPoints(anchorLat, anchorLng, lat, lng);
+    return Number.isFinite(miles) && miles <= maxMiles;
+  });
+};
+
+const geocodeQueryToLatLng = async (query, signal) => {
+  const q = String(query || "").trim();
+  if (!q || !GOOGLE_MAPS_PLACES_API_KEY) return { latitude: null, longitude: null };
+  const geocodeUrl =
+    `https://maps.googleapis.com/maps/api/geocode/json?` +
+    `address=${encodeURIComponent(q)}&key=${encodeURIComponent(GOOGLE_MAPS_PLACES_API_KEY)}`;
+  let payload = {};
+  try {
+    payload = await fetchJsonFromUrl(geocodeUrl, signal);
+  } catch {
+    payload = {};
+  }
+  const first = Array.isArray(payload?.results) ? payload.results[0] : null;
+  const latitude = toFiniteNumber(first?.geometry?.location?.lat);
+  const longitude = toFiniteNumber(first?.geometry?.location?.lng);
+  return {
+    latitude: latitude ?? null,
+    longitude: longitude ?? null,
+  };
+};
+
+const fetchExternalZipSearchMatches = async (
+  { zipCode, location, maxDistanceMiles, latitude: seedLatitude, longitude: seedLongitude },
+  signal
+) => {
+  const searchQuery = normalizeFiveDigitZip(zipCode) || String(location || "").trim();
+  if (!searchQuery) return [];
+
+  let silverPayload = {};
+  try {
+    const silverUrl =
+      `${SILVERASSIST_LOCATION_AUTOCOMPLETE_URL}?` +
+      `search_query=${encodeURIComponent(searchQuery)}`;
+    silverPayload = await fetchJsonFromUrl(silverUrl, signal);
+  } catch {
+    silverPayload = {};
+  }
+  const silverContextRaw = resolveLocationContextFromSilverAssist(silverPayload, searchQuery);
+  const providedLat = toFiniteNumber(seedLatitude);
+  const providedLng = toFiniteNumber(seedLongitude);
+  let silverContext = {
+    ...silverContextRaw,
+    latitude: providedLat ?? silverContextRaw.latitude ?? null,
+    longitude: providedLng ?? silverContextRaw.longitude ?? null,
+  };
+  if (silverContext.latitude == null || silverContext.longitude == null) {
+    const geocoded = await geocodeQueryToLatLng(searchQuery, signal);
+    silverContext = {
+      ...silverContext,
+      latitude: silverContext.latitude ?? geocoded.latitude,
+      longitude: silverContext.longitude ?? geocoded.longitude,
+    };
+  }
+  const silverRows = mapExternalPayloadToMatchRows(silverPayload, "SilverAssist", silverContext);
+  const silverLabel = Array.isArray(silverPayload?.autocomplete_results)
+    ? silverPayload.autocomplete_results
+        .map((item) => `${item?.city || ""}, ${item?.state || ""}`.replace(/^,\s*|,\s*$/g, ""))
+        .find(Boolean) || ""
+    : "";
+
+  const requestedDistanceMiles =
+    Number.isFinite(Number(maxDistanceMiles)) && Number(maxDistanceMiles) > 0
+      ? Number(maxDistanceMiles)
+      : CARING_DEFAULT_DISTANCE_MILES;
+  const fetchStartedAt = Date.now();
+  const distanceTargetPageCount =
+    requestedDistanceMiles >= 50
+      ? 6
+      : requestedDistanceMiles >= 35
+        ? 4
+        : requestedDistanceMiles >= 25
+          ? 3
+          : 2;
+  const targetPageCount = distanceTargetPageCount;
+
+  const buildCaringParams = (keyword, includeLatLng, page) =>
+    new URLSearchParams({
+      hitsPerPage: String(CARING_HITS_PER_PAGE),
+      matchAllFilters: "true",
+      page: String(page),
+      sortBy: "recommended",
+      "criteria[careType]": "assisted-living",
+      "criteria[distanceInMiles]": String(Math.max(1, Math.ceil(requestedDistanceMiles))),
+      "criteria[domain]": "caring.com",
+      "criteria[keyword]": keyword,
+      ...(includeLatLng &&
+      silverContext.latitude != null &&
+      silverContext.longitude != null
+        ? {
+            "criteria[latitude]": String(silverContext.latitude),
+            "criteria[longitude]": String(silverContext.longitude),
+          }
+        : {}),
+      domain: "caring.com",
+    });
+
+  const caringParamCandidates = [
+    { keyword: searchQuery, includeLatLng: true },
+    { keyword: searchQuery, includeLatLng: false },
+    ...(silverLabel
+      ? [
+          { keyword: silverLabel, includeLatLng: true },
+          { keyword: silverLabel, includeLatLng: false },
+        ]
+      : []),
+  ];
+
+  let caringRows = [];
+  let caringRowsAcrossCandidates = [];
+  let caringFallbackAcrossCandidates = [];
+  for (const candidate of caringParamCandidates) {
+    let aggregated = [];
+    let fallbackAggregated = [];
+    let knownTotalPages = null;
+    let page = 1;
+    let effectiveTargetPages = targetPageCount;
+    let stalePageCount = 0;
+    while (page <= effectiveTargetPages) {
+      if (Date.now() - fetchStartedAt > CARING_MAX_FETCH_MS) break;
+      let caringPayload = {};
+      try {
+        const params = buildCaringParams(candidate.keyword, candidate.includeLatLng, page);
+        const caringUrl = `${CARING_FACETED_SEARCH_URL}?${params.toString()}`;
+        caringPayload = await fetchCaringJsonFromUrl(caringUrl, signal);
+      } catch {
+        caringPayload = {};
+      }
+
+      const mappedRows = mapCaringPayloadToMatchRows(caringPayload, silverContext);
+      const nearbyRows = filterRowsByAnchorDistance(
+        mappedRows,
+        toFiniteNumber(silverContext.latitude),
+        toFiniteNumber(silverContext.longitude),
+        maxDistanceMiles
+      );
+
+      const beforeAgg = aggregated.length;
+      if (mappedRows.length > 0) {
+        fallbackAggregated = dedupeMatchRows([...fallbackAggregated, ...mappedRows]);
+      }
+      if (nearbyRows.length > 0) {
+        aggregated = dedupeMatchRows([...aggregated, ...nearbyRows]);
+      }
+      const gained = aggregated.length - beforeAgg;
+      stalePageCount = gained === 0 ? stalePageCount + 1 : 0;
+
+      const apiTotalPages = Number.parseInt(String(caringPayload?.data?.totalPages || ""), 10);
+      if (Number.isFinite(apiTotalPages) && apiTotalPages > 0) {
+        knownTotalPages = apiTotalPages;
+        effectiveTargetPages = Math.min(
+          CARING_MAX_PAGES,
+          Math.max(effectiveTargetPages, knownTotalPages)
+        );
+      }
+      if (mappedRows.length === 0) break;
+      if (stalePageCount >= 2) break;
+      page += 1;
+    }
+
+    if (aggregated.length > 0) {
+      caringRowsAcrossCandidates = dedupeMatchRows([
+        ...caringRowsAcrossCandidates,
+        ...aggregated,
+      ]);
+    }
+    if (fallbackAggregated.length > 0) {
+      caringFallbackAcrossCandidates = dedupeMatchRows([
+        ...caringFallbackAcrossCandidates,
+        ...fallbackAggregated,
+      ]);
+    }
+  }
+  if (caringRowsAcrossCandidates.length > 0) {
+    caringRows = caringRowsAcrossCandidates;
+  } else if (caringFallbackAcrossCandidates.length > 0) {
+    caringRows = caringFallbackAcrossCandidates;
+  }
+
+  return dedupeMatchRows([...silverRows, ...caringRows]);
 };
 
 const splitAddressCityStateZip = (addressText) => {
@@ -1480,14 +2037,10 @@ export const importExternalFacilities = catchAsyncError(async (req, res, next) =
 
 /**
  * POST /api/facilities/discover
- * Live AI discovery (same engine as Carrie) from explicit search params.
- * Used by Care Explorer when filters change so the client can refresh results.
+ * External listings (SilverAssist location context + Caring.com faceted search).
+ * Used by Care Explorer when filters change; does not call OpenAI or results.js.
  */
 export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => {
-  if (!process.env.OPENAI_API_KEY?.trim()) {
-    return next(new ErrorHandler("Discovery is not configured (missing OPENAI_API_KEY).", 503));
-  }
-
   const body = req.body || {};
   const locationRaw = String(body.location || "").trim();
   const zipCode = String(body.zip_code || "").trim() || locationRaw;
@@ -1510,23 +2063,36 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     payload.budget_max = Math.round(bmax);
   }
 
-  const maxDistanceMiles = Number(body.max_distance_miles);
+  const maxDistanceMiles = Number.parseFloat(String(body.max_distance_miles));
   if (Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0) {
-    payload.max_distance_miles = Math.round(maxDistanceMiles);
+    payload.max_distance_miles = maxDistanceMiles;
   }
-
-  let out;
-  try {
-    out = await getCareMatchResults(payload);
-  } catch (e) {
-    const status = typeof e?.status === "number" ? e.status : 502;
-    const safe = status >= 400 && status < 600 ? status : 502;
-    return next(new ErrorHandler(e?.message || "Discovery failed", safe));
-  }
-
-  const facilities = (out.results || []).map((row, idx) =>
-    mapAiDiscoveryFacilityToMatchRow(row, idx)
+  const latitude = toFiniteNumber(
+    body.latitude ?? body.lat ?? body?.coords?.lat ?? body?.coordinates?.lat
   );
+  const longitude = toFiniteNumber(
+    body.longitude ?? body.lng ?? body.lon ?? body?.coords?.lng ?? body?.coordinates?.lng
+  );
+
+  const controller = new AbortController();
+  const signal = controller.signal;
+  let externalRows = [];
+  try {
+    externalRows = await fetchExternalZipSearchMatches(
+      {
+        zipCode,
+        location,
+        maxDistanceMiles: payload.max_distance_miles,
+        latitude,
+        longitude,
+      },
+      signal
+    );
+  } finally {
+    controller.abort();
+  }
+
+  const facilities = dedupeMatchRows(externalRows);
 
   res.status(200).json({
     success: true,
