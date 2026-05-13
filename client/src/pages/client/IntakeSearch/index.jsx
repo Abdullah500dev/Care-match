@@ -339,8 +339,8 @@ export default function IntakeSearch() {
         amenities: [],
         services: [],
         keywords: [],
-        budget_min: Number(formData.budgetMin) || null,
-        budget_max: Number(formData.budgetMax) || null,
+        // Budget is enforced in Care Explorer (client-side) so strict server filtering
+        // does not zero out high-cost metros (e.g. SF) when every listing starts above max.
         max_distance_miles: Number(formData.maxTravelMiles) || null,
         latitude: Number.isFinite(Number(formData.locationLat))
           ? Number(formData.locationLat)
