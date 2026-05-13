@@ -144,6 +144,8 @@ const defaultFormData = {
   mobility: "",
   lovedOneCare: [],
   location: "",
+  locationLat: null,
+  locationLng: null,
   budgetMin: 3000,
   budgetMax: 6000,
   levelOfCare: "assisted",
@@ -326,24 +328,26 @@ export default function IntakeSearch() {
         },
       };
       const discoverPayload = {
-        zip_code: matcherPayload.searchLocation,
-        location: matcherPayload.searchLocation,
+        zip_code: zipFromSearchLocation,
+        location: String(
+          locationQueryForExplorer || matcherPayload.searchLocation || "",
+        ).trim(),
         care_levels:
           matcherPayload.careLevels.length > 0
             ? matcherPayload.careLevels
             : ["assisted living"],
-        amenities: matcherPayload.amenityMustHaves,
-        services: matcherPayload.amenityMustHaves,
-        keywords: [
-          mappedFilters.availability,
-          String(formData.who || "").trim(),
-          String(formData.parentAge || "").trim(),
-          String(formData.livingNow || "").trim(),
-          String(formData.mobility || "").trim(),
-        ].filter(Boolean),
+        amenities: [],
+        services: [],
+        keywords: [],
         budget_min: Number(formData.budgetMin) || null,
         budget_max: Number(formData.budgetMax) || null,
         max_distance_miles: Number(formData.maxTravelMiles) || null,
+        latitude: Number.isFinite(Number(formData.locationLat))
+          ? Number(formData.locationLat)
+          : null,
+        longitude: Number.isFinite(Number(formData.locationLng))
+          ? Number(formData.locationLng)
+          : null,
       };
 
       const startedAt = Date.now();
@@ -443,8 +447,16 @@ export default function IntakeSearch() {
         if (cancelled) return;
         if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
         const normalized = buildLocationLabel(results[0].address_components, fallbackText);
+        const geo = results[0]?.geometry?.location;
+        const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+        const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
         if (normalized) {
-          setFormData((prev) => ({ ...prev, location: normalized }));
+          setFormData((prev) => ({
+            ...prev,
+            location: normalized,
+            locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+            locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+          }));
           setLocationError("");
         }
       });
@@ -475,7 +487,17 @@ export default function IntakeSearch() {
 
         if (normalized) {
           lastAutocompleteSelectionRef.current = Date.now();
-          setFormData((prev) => ({ ...prev, location: normalized }));
+          const placeGeo = place?.geometry?.location;
+          const lat =
+            placeGeo && typeof placeGeo.lat === "function" ? Number(placeGeo.lat()) : null;
+          const lng =
+            placeGeo && typeof placeGeo.lng === "function" ? Number(placeGeo.lng()) : null;
+          setFormData((prev) => ({
+            ...prev,
+            location: normalized,
+            locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+            locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+          }));
           setLocationError("");
         }
 
@@ -668,7 +690,17 @@ export default function IntakeSearch() {
             return;
           }
           const normalized = buildLocationLabel(results[0].address_components, raw, zip);
-          if (normalized) setFormData((prev) => ({ ...prev, location: normalized }));
+          const geo = results[0]?.geometry?.location;
+          const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+          const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
+          if (normalized) {
+            setFormData((prev) => ({
+              ...prev,
+              location: normalized,
+              locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+              locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+            }));
+          }
           setLocationError("");
         }
       );
@@ -688,7 +720,15 @@ export default function IntakeSearch() {
           setLocationError("Please select a city suggestion so we can auto-fetch ZIP.");
           return;
         }
-        setFormData((prev) => ({ ...prev, location: normalized }));
+        const geo = results[0]?.geometry?.location;
+        const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+        const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
+        setFormData((prev) => ({
+          ...prev,
+          location: normalized,
+          locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+          locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+        }));
         setLocationError("");
       }
     );
@@ -1430,7 +1470,12 @@ function StepContent({
               ref={locationInputRef}
               value={formData.location}
               onChange={(e) => {
-                update("location", e.target.value);
+                setFormData((prev) => ({
+                  ...prev,
+                  location: e.target.value,
+                  locationLat: null,
+                  locationLng: null,
+                }));
                 if (typeof onLocationInputChange === "function") onLocationInputChange();
                 syncPacContainer?.();
               }}

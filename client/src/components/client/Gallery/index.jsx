@@ -12,8 +12,9 @@ const statCards = [
     title: "Partner Communities",
     description:
       "Access verified assisted living, memory care, and skilled nursing communities across the nation for your loved one.",
-    imageSrc: "/assets/images/search_img.svg",
-    imageAlt: "Search for care",
+    imageSrc:
+      "/assets/images/happiness-cheerful-elderly-woman-men-talking-with-female-caregiver-nurse-doctor-having-health-checking-consult-living-areacaretakers-with-senior-couple-sitting-living-room-nursing-home (1).webp",
+    imageAlt: "Caregiver with elderly couple",
   },
   {
     bg: "bg-[#1D2837]",
@@ -21,8 +22,10 @@ const statCards = [
     title: "Client Satisfaction",
     description:
       "Families trust CareMatch to find the right fit. Our personalized matching leads to better outcomes and peace of mind.",
-    imageSrc: "/assets/images/oldMan.svg",
-    imageAlt: "Young people",
+    imageSrc:
+      "/assets/images/male-nurse-helping-senior-retired-disabled-woman-wheelchair-rehabilitate-using-dumbbels (1).webp",
+    imageAlt: "Male nurse assisting senior woman",
+    imagePosition: "75% 18%",
   },
   {
     bg: "bg-[#1D2837]",
@@ -30,8 +33,8 @@ const statCards = [
     title: "Combined Experience",
     description:
       "Our advisors bring decades of senior care expertise to guide you through options, costs, and community fit.",
-    imageSrc: "/assets/images/greetingPeople.svg",
-    imageAlt: "Greeting people",
+    imageSrc: "/assets/images/social-worker-taking-care-old-woman (1).webp",
+    imageAlt: "Social worker taking care of elderly woman",
   },
   {
     bg: "",
@@ -40,8 +43,9 @@ const statCards = [
     title: "24/7 Service Availability",
     description:
       "Get answers and support anytime. We're here around the clock when you're researching care or need to talk.",
-    imageSrc: "/assets/images/wheelChair.svg",
-    imageAlt: "Search for care",
+    imageSrc: "/assets/images/young-black-people-taking-care-afro-hair (1).webp",
+    imageAlt: "Caregiver support with senior",
+    imagePosition: "50% 0%",
   },
 ];
 
@@ -65,7 +69,16 @@ function getRandomInitialDelayMs() {
 }
 
 /** Flip card: image on front, text on back; 180deg Y flip on hover or after random delay then every 5s */
-function FlipStatCard({ bg, backgroundStyle, value, title, description, imageSrc, imageAlt }) {
+function FlipStatCard({
+  bg,
+  backgroundStyle,
+  value,
+  title,
+  description,
+  imageSrc,
+  imageAlt,
+  imagePosition,
+}) {
   const [initialDelayMs] = useState(getRandomInitialDelayMs);
   const [timerFlipped, setTimerFlipped] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -108,6 +121,7 @@ function FlipStatCard({ bg, backgroundStyle, value, title, description, imageSrc
             src={imageSrc}
             alt={imageAlt}
             className="h-full w-full object-cover"
+            style={imagePosition ? { objectPosition: imagePosition } : undefined}
           />
         </div>
         {/* Back: text content */}

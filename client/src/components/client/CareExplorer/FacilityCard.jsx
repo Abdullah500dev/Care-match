@@ -157,7 +157,7 @@ const FacilityCard = ({
   if (gridView) {
     return (
       <div
-        className="mx-auto flex h-[255px] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.08)] min-[400px]:h-[270px] sm:h-[285px]"
+        className="mx-auto flex h-auto min-h-[305px] w-full max-w-full flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-[0_4px_24px_rgba(15,23,42,0.08)] min-[400px]:min-h-[320px] sm:min-h-[340px]"
       >
         {/* Image Section */}
         <div className="relative">
@@ -223,7 +223,7 @@ const FacilityCard = ({
 
         {/* Content Section */}
         <div className="flex flex-1 flex-col px-2.5 pt-2.5 pb-2 sm:px-3 sm:pt-3 sm:pb-2">
-          <p className="mb-0.5 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: "#155DFC" }}>
+          <p className="mb-0.5 line-clamp-3 text-[9px] min-[400px]:text-[10px] sm:text-[11px] font-semibold tracking-[0.18em] uppercase" style={{ color: "#155DFC" }}>
             {category}
           </p>
           <h3 className="mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px]" title={name}>

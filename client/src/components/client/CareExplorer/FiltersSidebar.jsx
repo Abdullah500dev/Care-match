@@ -279,6 +279,7 @@ const FiltersSidebar = ({
   onApplyFilters,
   isApplying = false,
   canApplyFilters = true,
+  hideApplyFiltersButton = false,
 }) => {
   const DEFAULT_AMENITIES_VISIBLE = 12;
 
@@ -531,7 +532,9 @@ const FiltersSidebar = ({
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
         <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-1">Filters</h3>
         <p className="hidden lg:block text-xs text-[#64748b] mb-3 leading-relaxed">
-          Add a city plus ZIP for the strongest match, set a travel radius, and include custom needs like accessibility or lifestyle preferences to refresh ranked results automatically.
+          {hideApplyFiltersButton
+            ? "Location, ZIP, budget, and distance refresh results as you change them (brief pause while we search). Sort order and must-have amenities refine the list you already have."
+            : "Enter location, ZIP, budget, and distance, then use Apply Filters to load communities. Rank results and must-have amenities refine the list you already have—no new search."}
         </p>
 
         {/* Location autocomplete */}
@@ -644,6 +647,9 @@ const FiltersSidebar = ({
             </span>
           )}
         </div>
+        <p className="text-[11px] text-[#64748b] mb-2 leading-snug">
+          Narrows the communities already on screen; does not fetch a new list.
+        </p>
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
           {visibleAmenities.map((item) => (
             <label
@@ -675,6 +681,7 @@ const FiltersSidebar = ({
           </button>
         )}
 
+        {!hideApplyFiltersButton && (
         <button
           type="button"
           onClick={() => onApplyFilters?.()}
@@ -690,11 +697,12 @@ const FiltersSidebar = ({
             "Apply Filters"
           )}
         </button>
+        )}
 
         <button
           type="button"
           onClick={onReset}
-          className="mt-3 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
+          className={`${hideApplyFiltersButton ? "mt-5" : "mt-3"} w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium`}
         >
           Reset All Filters
         </button>
