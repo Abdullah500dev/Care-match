@@ -19,6 +19,7 @@ import {
   intakePreferencesToAiSearchParams,
   mapAiDiscoveryFacilityToMatchRow,
 } from "../services/aiDiscoveryBridge.js";
+import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 
 const PRELUDE_MAX_USER_MESSAGES = 2;
 const QUESTION_COUNT = 5;
@@ -641,6 +642,28 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
         aiMatchRows = (aiOut.results || []).map((row, idx) =>
           mapAiDiscoveryFacilityToMatchRow(row, idx)
         );
+        if (aiMatchRows.length > 0 && prefs) {
+          const searchZip =
+            String(prefs.searchZipCode || "")
+              .replace(/\D/g, "")
+              .slice(0, 5) ||
+            String(prefs.searchLocation || "").match(/\b(\d{5})\b/)?.[1] ||
+            "";
+          aiMatchRows = await enrichDiscoveryFacilitiesWithPersonalizedScores(
+            aiMatchRows,
+            {
+              searchZip,
+              locationText: String(prefs.searchLocation || "").trim(),
+              maxDistanceMiles: prefs.maxDistanceMiles ?? null,
+              careLevels: prefs.careLevels || [],
+              seedLat: null,
+              seedLng: null,
+              budgetMinMonthly: prefs.budgetMinMonthly ?? null,
+              budgetMaxMonthly: prefs.budgetMaxMonthly ?? null,
+            },
+            undefined
+          );
+        }
       } catch (err) {
         aiMatchError = err;
         console.error("[sendChat] AI discovery search failed:", err?.message || err);

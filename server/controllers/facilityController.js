@@ -29,6 +29,7 @@ import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
+import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -485,6 +486,52 @@ const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles
   });
 };
 
+const parseMonthlyPriceRangeFromRow = (row) => {
+  const budgetMin = toFiniteNumber(row?.budget?.min_monthly ?? row?.external_data?.budget?.min_monthly);
+  const budgetMax = toFiniteNumber(row?.budget?.max_monthly ?? row?.external_data?.budget?.max_monthly);
+  if (budgetMin != null || budgetMax != null) {
+    const min = budgetMin ?? budgetMax;
+    const max = budgetMax ?? budgetMin;
+    if (Number.isFinite(min) || Number.isFinite(max)) {
+      return { min: min ?? null, max: max ?? null };
+    }
+  }
+
+  const pricing = String(row?.pricing || row?.external_data?.pricing || "").trim();
+  if (!pricing) return { min: null, max: null };
+  const nums = [...pricing.matchAll(/\$?\s*([\d,]+)/g)]
+    .map((m) => Number.parseInt(String(m[1] || "").replace(/,/g, ""), 10))
+    .filter((n) => Number.isFinite(n) && n > 0 && n < 500000);
+  if (nums.length === 0) return { min: null, max: null };
+  if (nums.length === 1) return { min: nums[0], max: nums[0] };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+};
+
+const filterRowsByBudgetRange = (rows, budgetMin, budgetMax) => {
+  const min = toFiniteNumber(budgetMin);
+  const max = toFiniteNumber(budgetMax);
+  if ((min == null || min <= 0) && (max == null || max <= 0)) {
+    return Array.isArray(rows) ? rows : [];
+  }
+  const hasMin = Number.isFinite(min) && min > 0;
+  const hasMax = Number.isFinite(max) && max > 0;
+  const effectiveMin = hasMin ? min : null;
+  const effectiveMax = hasMax ? max : null;
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const range = parseMonthlyPriceRangeFromRow(row);
+    if (range.min == null && range.max == null) {
+      // No public monthly $ (e.g. "call for pricing") — always keep; budget applies only when we can compare numbers.
+      return true;
+    }
+    const low = range.min ?? range.max;
+    const high = range.max ?? range.min;
+    if (low == null || high == null) return true;
+    if (effectiveMin != null && high < effectiveMin) return false;
+    if (effectiveMax != null && low > effectiveMax) return false;
+    return true;
+  });
+};
+
 const geocodeQueryToLatLng = async (query, signal) => {
   const q = String(query || "").trim();
   if (!q || !GOOGLE_MAPS_PLACES_API_KEY) return { latitude: null, longitude: null };
@@ -511,7 +558,22 @@ const fetchExternalZipSearchMatches = async (
   signal
 ) => {
   const searchQuery = normalizeFiveDigitZip(zipCode) || String(location || "").trim();
+  const locationKeyword = String(location || "")
+    .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/,\s*,/g, ", ")
+    .replace(/^,\s*|\s*,$/g, "")
+    .trim();
   if (!searchQuery) return [];
+  console.log("[discover] search seed:", {
+    zipCode: normalizeFiveDigitZip(zipCode),
+    location: String(location || "").trim(),
+    searchQuery,
+    locationKeyword,
+    maxDistanceMiles,
+    seedLatitude: toFiniteNumber(seedLatitude),
+    seedLongitude: toFiniteNumber(seedLongitude),
+  });
 
   let silverPayload = {};
   try {
@@ -584,6 +646,13 @@ const fetchExternalZipSearchMatches = async (
   const caringParamCandidates = [
     { keyword: searchQuery, includeLatLng: true },
     { keyword: searchQuery, includeLatLng: false },
+    ...(locationKeyword &&
+    locationKeyword.toLowerCase() !== String(searchQuery || "").toLowerCase()
+      ? [
+          { keyword: locationKeyword, includeLatLng: true },
+          { keyword: locationKeyword, includeLatLng: false },
+        ]
+      : []),
     ...(silverLabel
       ? [
           { keyword: silverLabel, includeLatLng: true },
@@ -591,6 +660,13 @@ const fetchExternalZipSearchMatches = async (
         ]
       : []),
   ];
+  console.log(
+    "[discover] caring candidates:",
+    caringParamCandidates.map((c) => ({
+      keyword: c.keyword,
+      includeLatLng: c.includeLatLng,
+    }))
+  );
 
   let caringRows = [];
   let caringRowsAcrossCandidates = [];
@@ -620,6 +696,14 @@ const fetchExternalZipSearchMatches = async (
         toFiniteNumber(silverContext.longitude),
         maxDistanceMiles
       );
+      console.log("[discover] caring page stats:", {
+        keyword: candidate.keyword,
+        includeLatLng: candidate.includeLatLng,
+        page,
+        mappedRows: mappedRows.length,
+        nearbyRows: nearbyRows.length,
+        apiTotalPages: caringPayload?.data?.totalPages ?? null,
+      });
 
       const beforeAgg = aggregated.length;
       if (mappedRows.length > 0) {
@@ -656,14 +740,27 @@ const fetchExternalZipSearchMatches = async (
         ...fallbackAggregated,
       ]);
     }
+    console.log("[discover] caring candidate done:", {
+      keyword: candidate.keyword,
+      includeLatLng: candidate.includeLatLng,
+      aggregatedNearby: aggregated.length,
+      aggregatedFallback: fallbackAggregated.length,
+    });
   }
   if (caringRowsAcrossCandidates.length > 0) {
     caringRows = caringRowsAcrossCandidates;
   } else if (caringFallbackAcrossCandidates.length > 0) {
     caringRows = caringFallbackAcrossCandidates;
   }
-
-  return dedupeMatchRows([...silverRows, ...caringRows]);
+  const merged = dedupeMatchRows([...silverRows, ...caringRows]);
+  console.log("[discover] merge stats:", {
+    silverRows: silverRows.length,
+    caringRows: caringRows.length,
+    merged: merged.length,
+    usedFallbackOnly:
+      caringRowsAcrossCandidates.length === 0 && caringFallbackAcrossCandidates.length > 0,
+  });
+  return merged;
 };
 
 const splitAddressCityStateZip = (addressText) => {
@@ -2038,7 +2135,7 @@ export const importExternalFacilities = catchAsyncError(async (req, res, next) =
 /**
  * POST /api/facilities/discover
  * External listings (SilverAssist location context + Caring.com faceted search).
- * Used by Care Explorer when filters change; does not call OpenAI or results.js.
+ * Used by Care Explorer when filters change. Personalizes match % from ZIP/distance (+ optional GPT).
  */
 export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => {
   const body = req.body || {};
@@ -2055,6 +2152,19 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     services: Array.isArray(body.services) ? body.services : [],
     keywords: Array.isArray(body.keywords) ? body.keywords : [],
   };
+  console.log("[discover] request body summary:", {
+    zip_code: zipCode,
+    location,
+    care_levels: careLevels,
+    amenitiesCount: payload.amenities.length,
+    servicesCount: payload.services.length,
+    keywordsCount: payload.keywords.length,
+    budget_min: body.budget_min ?? null,
+    budget_max: body.budget_max ?? null,
+    max_distance_miles: body.max_distance_miles ?? null,
+    latitude: body.latitude ?? body.lat ?? body?.coords?.lat ?? body?.coordinates?.lat ?? null,
+    longitude: body.longitude ?? body.lng ?? body.lon ?? body?.coords?.lng ?? body?.coordinates?.lng ?? null,
+  });
 
   const bmin = Number(body.budget_min);
   const bmax = Number(body.budget_max);
@@ -2074,8 +2184,8 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     body.longitude ?? body.lng ?? body.lon ?? body?.coords?.lng ?? body?.coordinates?.lng
   );
 
-  const controller = new AbortController();
-  const signal = controller.signal;
+  const fetchController = new AbortController();
+  const fetchSignal = fetchController.signal;
   let externalRows = [];
   try {
     externalRows = await fetchExternalZipSearchMatches(
@@ -2086,13 +2196,53 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
         latitude,
         longitude,
       },
-      signal
+      fetchSignal
     );
   } finally {
-    controller.abort();
+    fetchController.abort();
   }
 
-  const facilities = dedupeMatchRows(externalRows);
+  const deduped = dedupeMatchRows(externalRows);
+  const constrainedRows = filterRowsByAnchorDistance(
+    deduped,
+    latitude,
+    longitude,
+    payload.max_distance_miles
+  );
+  const budgetConstrainedRows = filterRowsByBudgetRange(
+    constrainedRows,
+    payload.budget_min,
+    payload.budget_max
+  );
+  const effectiveRows = budgetConstrainedRows;
+  const budgetFallbackApplied = false;
+  const facilities = await enrichDiscoveryFacilitiesWithPersonalizedScores(
+    effectiveRows,
+    {
+      searchZip: normalizeFiveDigitZip(zipCode),
+      locationText: location,
+      maxDistanceMiles: payload.max_distance_miles ?? null,
+      careLevels,
+      seedLat: latitude,
+      seedLng: longitude,
+      budgetMinMonthly: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
+      budgetMaxMonthly: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
+    },
+    undefined
+  );
+  console.log("[discover] pipeline counts:", {
+    externalRows: Array.isArray(externalRows) ? externalRows.length : 0,
+    deduped: deduped.length,
+    constrainedByDistance: constrainedRows.length,
+    constrainedByBudget: budgetConstrainedRows.length,
+    effectiveAfterBudgetFallback: effectiveRows.length,
+    budgetFallbackApplied,
+    finalScored: facilities.length,
+    appliedBudget: {
+      min: payload.budget_min ?? null,
+      max: payload.budget_max ?? null,
+    },
+  });
 
   res.status(200).json({
     success: true,
