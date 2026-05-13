@@ -1452,6 +1452,7 @@ const CareExplorer = () => {
         nextIsFinite &&
         ((prevIsFinite && nextMaxMiles > prevMaxMiles) ||
           (!prevIsFinite && nextMaxMiles > 0));
+      const mergeOutcomeRef = { kind: "replace" };
       setDiscoverOverrideRows((prev) => {
         if (shouldExpand) {
           const previousRows =
@@ -1459,11 +1460,15 @@ const CareExplorer = () => {
               ? prev
               : uniqueBaseFacilitiesForMergeRef.current;
           if (Array.isArray(previousRows) && previousRows.length > 0) {
+            mergeOutcomeRef.kind = "merge";
             return dedupeFacilities([...previousRows, ...rows]);
           }
         }
         return rows;
       });
+      if (mergeOutcomeRef.kind !== "merge") {
+        setPage(1);
+      }
       lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
     }, 650);
 
@@ -1503,6 +1508,7 @@ const CareExplorer = () => {
       if (Array.isArray(rows) && rows.length > 0) {
         setDiscoverOverrideRows(rows);
         lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+        setPage(1);
       }
     });
   }, [
@@ -1551,6 +1557,7 @@ const CareExplorer = () => {
     }
     setDiscoverOverrideRows(rows);
     lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+    setPage(1);
   };
 
   useEffect(
@@ -1561,12 +1568,6 @@ const CareExplorer = () => {
     },
     [],
   );
-
-  useEffect(() => {
-    if (discoverOverrideRows !== undefined) {
-      setPage(1);
-    }
-  }, [discoverOverrideRows]);
 
   const scopedFacilities = useMemo(() => {
     if (scope !== "saved") return uniqueBaseFacilities;
@@ -1874,6 +1875,38 @@ const CareExplorer = () => {
     locationCenterCoords,
   ]);
 
+  /** When these change, reset listing pagination; omit budget while auto-apply so sliders do not jump to page 1. */
+  const listingPagingResetKey = useMemo(() => {
+    const a = appliedFilters;
+    const care = JSON.stringify([...(a.selectedCareTypes || [])].map(String).sort());
+    const avail = JSON.stringify([...(a.selectedAvailability || [])].map(String).sort());
+    const parts = [
+      String(a.locationQuery || "").trim().toLowerCase(),
+      String(a.zipCode || "").trim(),
+      String(a.maxMiles || "").trim(),
+      String(a.searchQuery || "").trim().toLowerCase(),
+      care,
+      avail,
+    ];
+    if (!AUTO_APPLY_FILTERS) {
+      parts.push(String(Number(a.budgetMin) || 1000), String(Number(a.budgetMax) || 15000));
+    }
+    return parts.join("|");
+  }, [
+    appliedFilters.locationQuery,
+    appliedFilters.zipCode,
+    appliedFilters.maxMiles,
+    appliedFilters.searchQuery,
+    JSON.stringify([...(appliedFilters.selectedCareTypes || [])].map(String).sort()),
+    JSON.stringify([...(appliedFilters.selectedAvailability || [])].map(String).sort()),
+    ...(AUTO_APPLY_FILTERS ? [] : [appliedFilters.budgetMin, appliedFilters.budgetMax]),
+  ]);
+
+  const mustHaveAmenitiesPagingKey = useMemo(
+    () => JSON.stringify([...(filters.selectedAmenities || [])].map(String).sort()),
+    [filters.selectedAmenities],
+  );
+
   const mapFacilities = useMemo(
     () =>
       view === "map"
@@ -2041,7 +2074,7 @@ const CareExplorer = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [appliedFilters, filters.sortBy, filters.selectedAmenities]);
+  }, [listingPagingResetKey, filters.sortBy, mustHaveAmenitiesPagingKey]);
 
   useEffect(() => {
     if (view !== "map") {
