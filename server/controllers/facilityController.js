@@ -486,52 +486,6 @@ const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles
   });
 };
 
-const parseMonthlyPriceRangeFromRow = (row) => {
-  const budgetMin = toFiniteNumber(row?.budget?.min_monthly ?? row?.external_data?.budget?.min_monthly);
-  const budgetMax = toFiniteNumber(row?.budget?.max_monthly ?? row?.external_data?.budget?.max_monthly);
-  if (budgetMin != null || budgetMax != null) {
-    const min = budgetMin ?? budgetMax;
-    const max = budgetMax ?? budgetMin;
-    if (Number.isFinite(min) || Number.isFinite(max)) {
-      return { min: min ?? null, max: max ?? null };
-    }
-  }
-
-  const pricing = String(row?.pricing || row?.external_data?.pricing || "").trim();
-  if (!pricing) return { min: null, max: null };
-  const nums = [...pricing.matchAll(/\$?\s*([\d,]+)/g)]
-    .map((m) => Number.parseInt(String(m[1] || "").replace(/,/g, ""), 10))
-    .filter((n) => Number.isFinite(n) && n > 0 && n < 500000);
-  if (nums.length === 0) return { min: null, max: null };
-  if (nums.length === 1) return { min: nums[0], max: nums[0] };
-  return { min: Math.min(...nums), max: Math.max(...nums) };
-};
-
-const filterRowsByBudgetRange = (rows, budgetMin, budgetMax) => {
-  const min = toFiniteNumber(budgetMin);
-  const max = toFiniteNumber(budgetMax);
-  if ((min == null || min <= 0) && (max == null || max <= 0)) {
-    return Array.isArray(rows) ? rows : [];
-  }
-  const hasMin = Number.isFinite(min) && min > 0;
-  const hasMax = Number.isFinite(max) && max > 0;
-  const effectiveMin = hasMin ? min : null;
-  const effectiveMax = hasMax ? max : null;
-  return (Array.isArray(rows) ? rows : []).filter((row) => {
-    const range = parseMonthlyPriceRangeFromRow(row);
-    if (range.min == null && range.max == null) {
-      // No public monthly $ (e.g. "call for pricing") — always keep; budget applies only when we can compare numbers.
-      return true;
-    }
-    const low = range.min ?? range.max;
-    const high = range.max ?? range.min;
-    if (low == null || high == null) return true;
-    if (effectiveMin != null && high < effectiveMin) return false;
-    if (effectiveMax != null && low > effectiveMax) return false;
-    return true;
-  });
-};
-
 const geocodeQueryToLatLng = async (query, signal) => {
   const q = String(query || "").trim();
   if (!q || !GOOGLE_MAPS_PLACES_API_KEY) return { latitude: null, longitude: null };
@@ -2168,10 +2122,6 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
 
   const bmin = Number(body.budget_min);
   const bmax = Number(body.budget_max);
-  if (Number.isFinite(bmin) && Number.isFinite(bmax) && bmin > 0 && bmax >= bmin) {
-    payload.budget_min = Math.round(bmin);
-    payload.budget_max = Math.round(bmax);
-  }
 
   const maxDistanceMiles = Number.parseFloat(String(body.max_distance_miles));
   if (Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0) {
@@ -2209,13 +2159,9 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     longitude,
     payload.max_distance_miles
   );
-  const budgetConstrainedRows = filterRowsByBudgetRange(
-    constrainedRows,
-    payload.budget_min,
-    payload.budget_max
-  );
-  const effectiveRows = budgetConstrainedRows;
-  const budgetFallbackApplied = false;
+  // Budget is applied in the client (Care Explorer / intake). Server-side row filtering here
+  // was zeroing dense metros when every listing’s advertised “from” price sat above the band.
+  const effectiveRows = constrainedRows;
   const facilities = await enrichDiscoveryFacilitiesWithPersonalizedScores(
     effectiveRows,
     {
@@ -2234,13 +2180,11 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     externalRows: Array.isArray(externalRows) ? externalRows.length : 0,
     deduped: deduped.length,
     constrainedByDistance: constrainedRows.length,
-    constrainedByBudget: budgetConstrainedRows.length,
-    effectiveAfterBudgetFallback: effectiveRows.length,
-    budgetFallbackApplied,
+    candidatesForEnrichment: effectiveRows.length,
     finalScored: facilities.length,
-    appliedBudget: {
-      min: payload.budget_min ?? null,
-      max: payload.budget_max ?? null,
+    enrichBudgetHintMonthly: {
+      min: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
+      max: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
     },
   });
 

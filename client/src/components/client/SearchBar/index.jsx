@@ -17,6 +17,7 @@ import LoadingOverlay from "@/components/client/LoadingOverlay";
 export default function SearchBar() {
   const navigate = useNavigate();
   const DEFAULT_SEARCH_MAX_MILES = 25;
+  /** Default Care Explorer slider after quick search (discover does not filter by this on the server). */
   const DEFAULT_BUDGET_MIN = 3000;
   const DEFAULT_BUDGET_MAX = 9000;
   const thinkingMessages = [
@@ -390,8 +391,6 @@ export default function SearchBar() {
         zip_code: zipCode || trimmed,
         location: trimmed,
         care_levels: resolvedCareLevels,
-        budget_min: DEFAULT_BUDGET_MIN,
-        budget_max: DEFAULT_BUDGET_MAX,
         max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
         ...(resolvedCoords || {}),
       };
