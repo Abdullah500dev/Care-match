@@ -2695,19 +2695,19 @@ const CareExplorer = () => {
                       type="button"
                       onClick={() => scrollMapCardsBy(-1)}
                       disabled={!mapCardsNav.canLeft}
-                      className="absolute -left-3 sm:-left-4 top-1/2 z-30 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-[#0F172A] text-white shadow-[0_10px_28px_rgba(15,23,42,0.42)] transition-all hover:scale-105 hover:bg-[#132329] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#94A3B8] disabled:text-white/80 disabled:opacity-60"
+                      className="absolute -left-3 sm:-left-4 top-1/2 z-30 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] shadow-[0_4px_14px_rgba(15,23,42,0.12)] transition-all hover:scale-105 hover:bg-[#F0FDFF] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#F1F5F9] disabled:text-[#94A3B8] disabled:opacity-70"
                       aria-label="Show previous cards"
                     >
-                      <ChevronLeft className="h-6 w-6" />
+                      <ChevronLeft className="h-6 w-6" strokeWidth={2.25} />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollMapCardsBy(1)}
                       disabled={!mapCardsNav.canRight}
-                      className="absolute -right-3 sm:-right-4 top-1/2 z-30 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-[#0F172A] text-white shadow-[0_10px_28px_rgba(15,23,42,0.42)] transition-all hover:scale-105 hover:bg-[#132329] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#94A3B8] disabled:text-white/80 disabled:opacity-60"
+                      className="absolute -right-3 sm:-right-4 top-1/2 z-30 inline-flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] shadow-[0_4px_14px_rgba(15,23,42,0.12)] transition-all hover:scale-105 hover:bg-[#F0FDFF] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#F1F5F9] disabled:text-[#94A3B8] disabled:opacity-70"
                       aria-label="Show next cards"
                     >
-                      <ChevronRight className="h-6 w-6" />
+                      <ChevronRight className="h-6 w-6" strokeWidth={2.25} />
                     </button>
                     <div
                       ref={mapCardsScrollRef}
