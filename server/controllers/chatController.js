@@ -21,8 +21,6 @@ import {
 } from "../services/aiDiscoveryBridge.js";
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 
-const PRELUDE_MAX_USER_MESSAGES = 2;
-const QUESTION_COUNT = 5;
 const ASSISTED_ONLY_CARE_LEVEL = "assisted living";
 
 const topValues = (items, limit = 6) => {
@@ -137,12 +135,31 @@ const inferBudgetFromText = (text) => {
   return null;
 };
 
+const assistantAskedForBudget = (text) =>
+  /\b(budget|monthly|per month|\/mo|afford|price range|comfortable range|how much)\b/i.test(
+    String(text || "")
+  );
+
 const inferBudgetFromMessages = (msgs) => {
-  const users = msgs.filter((m) => m.role === "user").map((m) => m.content || "");
-  for (let i = users.length - 1; i >= 0; i -= 1) {
-    const parsed = inferBudgetFromText(users[i]);
+  const thread = Array.isArray(msgs) ? msgs : [];
+
+  for (let i = thread.length - 1; i >= 0; i -= 1) {
+    if (thread[i]?.role !== "user") continue;
+    const content = String(thread[i].content || "");
+
+    const parsed = inferBudgetFromText(content);
     if (parsed != null && parsed > 0) return parsed;
+
+    // Bare amount after Carrie asked for budget (e.g. "6000" or "$8k").
+    for (let j = i - 1; j >= 0; j -= 1) {
+      if (thread[j]?.role !== "assistant") continue;
+      if (!assistantAskedForBudget(thread[j].content)) break;
+      const amount = parseBoundedBudgetAmount(content);
+      if (amount != null && amount > 0) return amount;
+      break;
+    }
   }
+
   return null;
 };
 
@@ -216,26 +233,73 @@ const inferLocationFromMessages = (msgs) => {
   return "";
 };
 
+const parseDistanceMiles = (value) => {
+  const n = Number.parseInt(String(value || ""), 10);
+  if (Number.isNaN(n) || n <= 0 || n > 200) return null;
+  return n;
+};
+
+const assistantAskedForRadius = (text) =>
+  /\b(radius|how far|how many miles|distance|within how many|search radius|mile radius)\b/i.test(
+    String(text || "")
+  );
+
 const inferMaxDistanceFromMessages = (msgs) => {
-  const users = msgs.filter((m) => m.role === "user").map((m) => String(m.content || ""));
-  for (let i = users.length - 1; i >= 0; i -= 1) {
-    const text = users[i].toLowerCase();
+  const thread = Array.isArray(msgs) ? msgs : [];
+
+  for (let i = thread.length - 1; i >= 0; i -= 1) {
+    if (thread[i]?.role !== "user") continue;
+    const text = String(thread[i].content || "").toLowerCase();
+
     const kmPattern =
       /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:-|\s)*(?:km|kilometer|kilometers)\b/;
     const kmMatch = text.match(kmPattern);
     if (kmMatch?.[1]) {
-      const value = Number.parseInt(kmMatch[1], 10);
-      if (!Number.isNaN(value) && value > 0) return value;
+      const value = parseDistanceMiles(kmMatch[1]);
+      if (value != null) return value;
     }
+
     const milesPattern =
       /\b(?:within|up to|no more than|under|around|about|at most)?\s*(\d{1,3})(?:\s*-\s*\d{1,3})?\s*(?:-|\s)*(?:mile|miles|mi)\b/;
     const m = text.match(milesPattern);
     if (m?.[1]) {
-      const value = Number.parseInt(m[1], 10);
-      if (!Number.isNaN(value) && value > 0) return value;
+      const value = parseDistanceMiles(m[1]);
+      if (value != null) return value;
+    }
+
+    // Bare number reply after Carrie asked for radius (e.g. "25").
+    for (let j = i - 1; j >= 0; j -= 1) {
+      if (thread[j]?.role !== "assistant") continue;
+      if (!assistantAskedForRadius(thread[j].content)) break;
+      const bare = String(thread[i].content || "").trim().match(/^(\d{1,3})$/);
+      if (bare?.[1]) {
+        const value = parseDistanceMiles(bare[1]);
+        if (value != null) return value;
+      }
+      break;
     }
   }
+
   return null;
+};
+
+const hasInferredBudget = (budget, range) =>
+  (budget != null && budget > 0) || (range?.max != null && range.max > 0);
+
+/** ZIP, monthly budget, and search radius must be present before facility matching. */
+const getMissingMandatoryIntake = ({
+  inferredZipCode,
+  inferredBudget,
+  inferredBudgetRange,
+  inferredMaxDistance,
+}) => {
+  const missing = [];
+  if (!inferredZipCode) missing.push("5-digit ZIP code");
+  if (!hasInferredBudget(inferredBudget, inferredBudgetRange)) {
+    missing.push("approximate monthly budget");
+  }
+  if (!inferredMaxDistance) missing.push("search radius in miles");
+  return missing;
 };
 
 const inferAmenityMustHavesFromMessages = (msgs) => {
@@ -294,22 +358,6 @@ const sanitizeCarrieChatText = (text) =>
     .replace(/\*/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
-
-const wantsRankedMatchesNow = (text) => {
-  const t = String(text || "");
-  if (!t.trim()) return false;
-  if (
-    /\b(?:ranked|top|best)\s+(?:matches|results|recommendations?|options)\b/i.test(t) ||
-    /\bprovide\s+(?:ranked\s+)?(?:matches|results|recommendations?|options)\b/i.test(t) ||
-    /\b(?:show|give|get|provide|return|find|list)\b.{0,100}\b(?:matches|results|rankings?|recommendations?|options)\b/i.test(
-      t
-    ) ||
-    /\bjust\s+(?:show|give|get|provide|return)\b.{0,50}\b(?:results|matches)\b/i.test(t)
-  ) {
-    return true;
-  }
-  return false;
-};
 
 const buildFriendlyDiscoveryFailureMessage = (error, aiParams) => {
   const message = String(error?.message || "").trim();
@@ -378,15 +426,6 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const userMessageCount = userMessages.length;
   const latestUserText = userMessages.at(-1)?.content || "";
 
-  const fullThreadText = sanitized.map((m) => m.content).join("\n");
-  const hasMatchIntent =
-    /\b(match|recommend|recommendation|rank|best fit|find|looking for|need|help me find|facility near|near me)\b/i.test(
-      fullThreadText
-    );
-  const explicitMatchNow = wantsRankedMatchesNow(latestUserText);
-
-  const preludeUsed = hasMatchIntent ? 0 : Math.min(PRELUDE_MAX_USER_MESSAGES, userMessageCount);
-  const intakeAnswerCount = Math.max(0, userMessageCount - preludeUsed);
   const inferredBudget = inferBudgetFromMessages(sanitized);
   const inferredBudgetRange = inferBudgetRangeFromMessages(sanitized);
   const inferredCareLevels = inferCareLevelsFromMessages(sanitized);
@@ -396,24 +435,15 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
   const inferredMaxDistance = inferMaxDistanceFromMessages(sanitized);
   const inferredAmenityMustHaves = inferAmenityMustHavesFromMessages(sanitized);
 
-  // Priority-ordered missing essentials:
-  // 1. Care Type (hard filter) — most critical
-  // 2. Location (city/state or ZIP)
-  // 3. Budget
-  // 4. Amenities (not tracked here, handled by GPT)
-  // 5. Care level sub-needs (lower priority)
-  const missingEssentials = [
-    ...((inferredLocation || inferredZipCode) ? [] : ["location (city/state or ZIP code)"]),
-    ...(inferredBudget ? [] : ["approximate monthly budget"]),
-    ...(inferredAmenityMustHaves.length > 0 ? [] : ["must-have amenities or preferences"]),
-  ];
-  // Assisted-living-only mode: collect location + budget + amenities.
+  const missingEssentials = getMissingMandatoryIntake({
+    inferredZipCode,
+    inferredBudget,
+    inferredBudgetRange,
+    inferredMaxDistance,
+  });
   const essentialTotalPoints = 3;
   const essentialPointCount = essentialTotalPoints - missingEssentials.length;
-  const shouldReturnResults =
-    explicitMatchNow ||
-    essentialPointCount >= essentialTotalPoints ||
-    intakeAnswerCount >= QUESTION_COUNT;
+  const shouldReturnResults = missingEssentials.length === 0;
 
   const callOpenAI = async (payload) => {
     let response;
@@ -448,24 +478,33 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       .lean();
 
     const directoryBlock = buildDirectoryContextBlock(facilities);
-    const minMessagesBeforeJson = preludeUsed + QUESTION_COUNT + 1;
-
     const stageRules =
       `CONVERSATION_RULES (server):\n` +
       `- User messages so far: ${userMessageCount}.\n` +
-      `- Collected essential intake points: ${essentialPointCount}/${essentialTotalPoints}.\n` +
+      `- Collected mandatory intake points: ${essentialPointCount}/${essentialTotalPoints} (ZIP, budget, radius).\n` +
       `- Inferred primary care type: ${inferredPrimaryCareType || "NOT YET KNOWN"}.\n` +
-      `- Inferred location: ${inferredLocation || inferredZipCode || "NOT YET KNOWN"}.\n` +
-      `- Inferred budget: ${inferredBudget ? `$${inferredBudget}/mo` : "NOT YET KNOWN"}.\n` +
-      `- Missing essentials (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
-      `- PRIORITY ORDER for questions: (1) Location + ZIP → (2) Budget → (3) Amenities → (4) Assisted-living sub-needs.\n` +
+      `- Inferred city/region: ${inferredLocation || "NOT YET KNOWN"}.\n` +
+      `- Inferred ZIP: ${inferredZipCode || "NOT YET KNOWN"}.\n` +
+      `- Inferred budget: ${
+        hasInferredBudget(inferredBudget, inferredBudgetRange)
+          ? inferredBudgetRange?.max != null
+            ? `$${inferredBudgetRange.min ?? "?"}–$${inferredBudgetRange.max}/mo`
+            : `$${inferredBudget}/mo`
+          : "NOT YET KNOWN"
+      }.\n` +
+      `- Inferred search radius: ${
+        inferredMaxDistance != null ? `${inferredMaxDistance} miles` : "NOT YET KNOWN"
+      }.\n` +
+      `- Missing mandatory fields (if any): ${missingEssentials.length ? missingEssentials.join(", ") : "none"}.\n` +
+      `- PRIORITY ORDER for questions: (1) 5-digit ZIP code → (2) monthly budget → (3) search radius in miles. City/state is helpful context but does **not** replace ZIP.\n` +
       `- CRITICAL: We support assisted living only. Never ask for or suggest any other care type.\n` +
-      `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until the user has sent **at least ${minMessagesBeforeJson}** messages, **unless** they clearly insist on seeing matches right now and you can honestly fill the JSON from the thread.\n` +
+      `- Do **not** output ---CAREMATCH_INTAKE_JSON--- ... ---END--- until **ZIP code, monthly budget, and search radius (miles)** are all known from the user.\n` +
       `- If you are not outputting that JSON block yet, **do not** include those delimiters at all.\n` +
       `- Keep replies feeling human; one gentle question max when you need info.\n` +
-      `- If essentials are missing, ask ONLY about the HIGHEST PRIORITY missing essential from the priority list above.\n` +
-      `- If location (city/state) is known but ZIP is not, ask once: "Do you have a ZIP code? That helps narrow results to your exact area.".\n` +
-      `- If essentials are all present, do not ask more intake questions; proceed to show matches.`;
+      `- If mandatory fields are missing, ask ONLY about the **highest-priority** missing field from the list above.\n` +
+      `- If the user asks for matches before mandatory fields are complete, warmly explain you need ZIP, budget, and radius first, then ask for the highest-priority missing one.\n` +
+      `- For radius, ask how many **miles** from the ZIP they want to search (e.g. 10, 25, 50). Accept answers like "25 miles" or just "25" if you just asked for miles.\n` +
+      `- If all mandatory fields are present, do not ask more intake questions; the server will run matching.`;
 
     const conversationSystem =
       process.env.CAREMATCH_CHAT_SYSTEM_PROMPT?.trim() ||
@@ -491,12 +530,12 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
     }
 
     const { userVisible, prefs: rawPrefs } = extractIntakeJsonBlock(text);
-    const jsonForbidden =
-      !explicitMatchNow && userMessageCount < minMessagesBeforeJson && rawPrefs != null;
+    const jsonForbidden = rawPrefs != null && missingEssentials.length > 0;
 
-    let out = jsonForbidden ? (userVisible || text).trim() : (userVisible || text).trim();
+    let out = (userVisible || text).trim();
     if (jsonForbidden && rawPrefs) {
-      out = `${out}\n\n_(I’m not running the matcher yet — tell me a bit more when you’re ready.)_`.trim();
+      const stillNeed = missingEssentials.join(", ");
+      out = `${out}\n\n_(I need your ${stillNeed} before I can search for communities.)_`.trim();
     }
 
     return res.status(200).json({
@@ -514,7 +553,7 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       {
         role: "system",
         content:
-          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences. Include requested details like meals, activities, physical therapy, hospice care, wheelchair-accessible entrance/parking, room types, staff qualifications, reviews, safety standards, and modern amenities when mentioned.\n4. If the user specifies distance/radius constraints like "within 20 miles", "under 20 miles", "20 mi", or "no more than 20 miles", set maxDistanceMiles to that number.\n5. All fields must be valid JSON. Use null for unknown numbers, [] for unknown arrays.\n6. If the user gives a budget RANGE (e.g. "$10,000 to $12,000", "between 10k and 12k", "$10,000-$12,000"), set budgetMinMonthly to the lower number and budgetMaxMonthly to the higher number. If they only say "under X" or "up to X", set budgetMaxMonthly to X and leave budgetMinMonthly as null.`,
+          `${extractionSystemBase}\n\nExtract best-effort intake JSON from this conversation and output ONLY the CAREMATCH JSON block. Do not ask questions.\n\nCRITICAL RULES FOR JSON EXTRACTION:\n1. searchLocation MUST ONLY contain geographic names (City, State, ZIP). NEVER include budget phrases (e.g. "under 1000", "for under"), care types, distance/radius phrases (e.g. "under 20 miles", "within 15 miles"), or sentence fragments. Correct typos (e.g. "arizonaa" → "Arizona", "taxes" → "Texas", "caa" → "CA"). Format as "City, ST".\n2. primaryCareType and careLevels must always be set to assisted living only.\n3. amenityMustHaves should be concise normalized phrases (e.g. "wheelchair accessible", "private room"), not raw sentences. Include requested details like meals, activities, physical therapy, hospice care, wheelchair-accessible entrance/parking, room types, staff qualifications, reviews, safety standards, and modern amenities when mentioned.\n4. **searchZipCode**, **budgetMaxMonthly** (or a min/max range), and **maxDistanceMiles** are REQUIRED — use null only if truly absent from the thread (the server will not run matching until all three are provided).\n5. If the user specifies distance/radius like "within 20 miles", "25 mi", or answers a miles question with a bare number (e.g. "25"), set maxDistanceMiles to that number.\n6. All fields must be valid JSON. Use null for unknown optional numbers, [] for unknown arrays.\n7. If the user gives a budget RANGE (e.g. "$10,000 to $12,000", "between 10k and 12k", "$10,000-$12,000"), set budgetMinMonthly to the lower number and budgetMaxMonthly to the higher number. If they only say "under X" or "up to X", set budgetMaxMonthly to X and leave budgetMinMonthly as null.`,
       },
       { role: "user", content: JSON.stringify({ messages: sanitized }) },
     ],
@@ -594,6 +633,28 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
       inferredMaxDistance != null
     ) {
       prefs.maxDistanceMiles = inferredMaxDistance;
+    }
+
+    const missingAfterBackfill = getMissingMandatoryIntake({
+      inferredZipCode:
+        String(prefs?.searchZipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5) || inferredZipCode,
+      inferredBudget: prefs?.budgetMaxMonthly ?? inferredBudget,
+      inferredBudgetRange,
+      inferredMaxDistance: prefs?.maxDistanceMiles ?? inferredMaxDistance,
+    });
+    if (missingAfterBackfill.length > 0) {
+      const stillNeed = missingAfterBackfill.join(", ");
+      return res.status(200).json({
+        success: true,
+        message: {
+          role: "assistant",
+          content: sanitizeCarrieChatText(
+            `I’m almost ready to search — I still need your **${stillNeed}** before I can show assisted living communities. What would you like to use?`
+          ),
+        },
+      });
     }
     if (prefs && inferredAmenityMustHaves.length > 0) {
       const existing = Array.isArray(prefs.amenityMustHaves)
