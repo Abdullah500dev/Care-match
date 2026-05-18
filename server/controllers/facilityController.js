@@ -407,15 +407,25 @@ const mapCaringPayloadToMatchRows = (payload, fallbackContext = {}) => {
       const careLevels = careTypes.length
         ? [...new Set(careTypes.map((t) => String(t || "").trim()).filter(Boolean))]
         : ["Assisted Living"];
+      const caringAmenities = [
+        ...toStringArray(row.amenities),
+        ...toStringArray(row.highlights),
+        ...toStringArray(row.features),
+        ...toStringArray(row.tags),
+      ].slice(0, 14);
+      const reviewSnippet = toOptionalString(row.lastReviewSnippet);
+      const description = [toOptionalString(row.description), reviewSnippet]
+        .filter(Boolean)
+        .join(" ");
       return {
         care_levels: careLevels,
         name: toOptionalString(row.name),
         email: syntheticExternalEmail("Caring", row.id || row.slug || row.name),
         phone: toOptionalString(row.phoneNumber),
         website: row.url ? `https://www.caring.com${String(row.url).trim()}` : "",
-        description: toOptionalString(row.description),
+        description,
         services: careLevels,
-        amenities: [],
+        amenities: caringAmenities,
         budget: {
           min_monthly: null,
           max_monthly: null,
@@ -472,11 +482,17 @@ const distanceMilesBetweenPoints = (aLat, aLng, bLat, bLng) => {
 
 const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles) => {
   const list = Array.isArray(rows) ? rows : [];
-  if (!Number.isFinite(anchorLat) || !Number.isFinite(anchorLng)) return list;
   const maxMiles =
     Number.isFinite(Number(maxDistanceMiles)) && Number(maxDistanceMiles) > 0
       ? Number(maxDistanceMiles)
-      : CARING_DEFAULT_DISTANCE_MILES;
+      : null;
+
+  if (maxMiles == null) return list;
+
+  if (!Number.isFinite(anchorLat) || !Number.isFinite(anchorLng)) {
+    return [];
+  }
+
   return list.filter((row) => {
     const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
     const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
@@ -484,6 +500,35 @@ const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles
     const miles = distanceMilesBetweenPoints(anchorLat, anchorLng, lat, lng);
     return Number.isFinite(miles) && miles <= maxMiles;
   });
+};
+
+/** Geocode facility addresses that are missing coordinates so radius filtering can be exact. */
+const hydrateMissingRowCoordinates = async (rows, signal, limit = 36) => {
+  const list = Array.isArray(rows) ? rows : [];
+  const needs = list.filter((row) => {
+    const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
+    const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
+    return !Number.isFinite(lat) || !Number.isFinite(lng);
+  });
+  const slice = needs.slice(0, Math.max(0, limit));
+  for (const row of slice) {
+    const addr = String(row?.address || row?.external_data?.full_address || "").trim();
+    const zip = normalizeFiveDigitZip(row?.zip_code || row?.external_data?.zip_code);
+    const query = [addr, zip].filter(Boolean).join(", ");
+    if (!query) continue;
+    const geo = await geocodeQueryToLatLng(query, signal);
+    if (geo.latitude == null || geo.longitude == null) continue;
+    row.latitude = geo.latitude;
+    row.longitude = geo.longitude;
+    if (row.external_data && typeof row.external_data === "object") {
+      if (!row.external_data.google_places || typeof row.external_data.google_places !== "object") {
+        row.external_data.google_places = {};
+      }
+      row.external_data.google_places.latitude = geo.latitude;
+      row.external_data.google_places.longitude = geo.longitude;
+    }
+  }
+  return list;
 };
 
 const geocodeQueryToLatLng = async (query, signal) => {
@@ -624,10 +669,8 @@ const fetchExternalZipSearchMatches = async (
 
   let caringRows = [];
   let caringRowsAcrossCandidates = [];
-  let caringFallbackAcrossCandidates = [];
   for (const candidate of caringParamCandidates) {
     let aggregated = [];
-    let fallbackAggregated = [];
     let knownTotalPages = null;
     let page = 1;
     let effectiveTargetPages = targetPageCount;
@@ -659,12 +702,25 @@ const fetchExternalZipSearchMatches = async (
         apiTotalPages: caringPayload?.data?.totalPages ?? null,
       });
 
-      const beforeAgg = aggregated.length;
-      if (mappedRows.length > 0) {
-        fallbackAggregated = dedupeMatchRows([...fallbackAggregated, ...mappedRows]);
+      let rowsWithinRadius = nearbyRows;
+      if (
+        rowsWithinRadius.length === 0 &&
+        mappedRows.length > 0 &&
+        Number.isFinite(toFiniteNumber(silverContext.latitude)) &&
+        Number.isFinite(toFiniteNumber(silverContext.longitude))
+      ) {
+        await hydrateMissingRowCoordinates(mappedRows, signal, 12);
+        rowsWithinRadius = filterRowsByAnchorDistance(
+          mappedRows,
+          toFiniteNumber(silverContext.latitude),
+          toFiniteNumber(silverContext.longitude),
+          maxDistanceMiles
+        );
       }
-      if (nearbyRows.length > 0) {
-        aggregated = dedupeMatchRows([...aggregated, ...nearbyRows]);
+
+      const beforeAgg = aggregated.length;
+      if (rowsWithinRadius.length > 0) {
+        aggregated = dedupeMatchRows([...aggregated, ...rowsWithinRadius]);
       }
       const gained = aggregated.length - beforeAgg;
       stalePageCount = gained === 0 ? stalePageCount + 1 : 0;
@@ -688,31 +744,41 @@ const fetchExternalZipSearchMatches = async (
         ...aggregated,
       ]);
     }
-    if (fallbackAggregated.length > 0) {
-      caringFallbackAcrossCandidates = dedupeMatchRows([
-        ...caringFallbackAcrossCandidates,
-        ...fallbackAggregated,
-      ]);
-    }
     console.log("[discover] caring candidate done:", {
       keyword: candidate.keyword,
       includeLatLng: candidate.includeLatLng,
-      aggregatedNearby: aggregated.length,
-      aggregatedFallback: fallbackAggregated.length,
+      aggregatedWithinRadius: aggregated.length,
     });
   }
   if (caringRowsAcrossCandidates.length > 0) {
     caringRows = caringRowsAcrossCandidates;
-  } else if (caringFallbackAcrossCandidates.length > 0) {
-    caringRows = caringFallbackAcrossCandidates;
   }
-  const merged = dedupeMatchRows([...silverRows, ...caringRows]);
+
+  let merged = dedupeMatchRows([...silverRows, ...caringRows]);
+  const anchorLat = toFiniteNumber(silverContext.latitude);
+  const anchorLng = toFiniteNumber(silverContext.longitude);
+  if (
+    merged.length > 0 &&
+    Number.isFinite(anchorLat) &&
+    Number.isFinite(anchorLng) &&
+    requestedDistanceMiles > 0
+  ) {
+    await hydrateMissingRowCoordinates(merged, signal, 40);
+    merged = filterRowsByAnchorDistance(
+      merged,
+      anchorLat,
+      anchorLng,
+      requestedDistanceMiles
+    );
+  }
+
   console.log("[discover] merge stats:", {
     silverRows: silverRows.length,
     caringRows: caringRows.length,
-    merged: merged.length,
-    usedFallbackOnly:
-      caringRowsAcrossCandidates.length === 0 && caringFallbackAcrossCandidates.length > 0,
+    mergedWithinRadius: merged.length,
+    anchorLat,
+    anchorLng,
+    requestedDistanceMiles,
   });
   return merged;
 };
@@ -2127,15 +2193,27 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   if (Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0) {
     payload.max_distance_miles = maxDistanceMiles;
   }
-  const latitude = toFiniteNumber(
+  let latitude = toFiniteNumber(
     body.latitude ?? body.lat ?? body?.coords?.lat ?? body?.coordinates?.lat
   );
-  const longitude = toFiniteNumber(
+  let longitude = toFiniteNumber(
     body.longitude ?? body.lng ?? body.lon ?? body?.coords?.lng ?? body?.coordinates?.lng
   );
 
   const fetchController = new AbortController();
   const fetchSignal = fetchController.signal;
+
+  if (latitude == null || longitude == null) {
+    const geo = await geocodeQueryToLatLng(
+      [location, normalizeFiveDigitZip(zipCode)].filter(Boolean).join(", ") ||
+        normalizeFiveDigitZip(zipCode) ||
+        location,
+      fetchSignal
+    );
+    latitude = geo.latitude ?? latitude;
+    longitude = geo.longitude ?? longitude;
+  }
+
   let externalRows = [];
   try {
     externalRows = await fetchExternalZipSearchMatches(
@@ -2153,14 +2231,29 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   }
 
   const deduped = dedupeMatchRows(externalRows);
-  const constrainedRows = filterRowsByAnchorDistance(
+  let constrainedRows = filterRowsByAnchorDistance(
     deduped,
     latitude,
     longitude,
     payload.max_distance_miles
   );
-  // Budget is applied in the client (Care Explorer / intake). Server-side row filtering here
-  // was zeroing dense metros when every listing’s advertised “from” price sat above the band.
+
+  if (
+    constrainedRows.length === 0 &&
+    deduped.length > 0 &&
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    payload.max_distance_miles
+  ) {
+    await hydrateMissingRowCoordinates(deduped, fetchSignal, 40);
+    constrainedRows = filterRowsByAnchorDistance(
+      deduped,
+      latitude,
+      longitude,
+      payload.max_distance_miles
+    );
+  }
+
   const effectiveRows = constrainedRows;
   const facilities = await enrichDiscoveryFacilitiesWithPersonalizedScores(
     effectiveRows,
@@ -2174,7 +2267,7 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
       budgetMinMonthly: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
       budgetMaxMonthly: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
     },
-    undefined
+    fetchSignal
   );
   console.log("[discover] pipeline counts:", {
     externalRows: Array.isArray(externalRows) ? externalRows.length : 0,
@@ -2192,6 +2285,11 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     success: true,
     count: facilities.length,
     facilities,
+    search_center:
+      Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? { lat: latitude, lng: longitude }
+        : null,
+    max_distance_miles: payload.max_distance_miles ?? null,
   });
 });
 

@@ -534,7 +534,7 @@ const FiltersSidebar = ({
         <p className="hidden lg:block text-xs text-[#64748b] mb-3 leading-relaxed">
           {hideApplyFiltersButton
             ? "Location, ZIP, budget, and distance refresh results as you change them (brief pause while we search). Sort order and must-have amenities refine the list you already have."
-            : "Enter location, ZIP, budget, and distance, then use Apply Filters to load communities. Rank results and must-have amenities refine the list you already have—no new search."}
+            : "Enter a 5-digit ZIP (city/state helps), set max distance (miles), then click Apply Filters to load communities for that ZIP from our live directory. Budget, sort, and must-have amenities refine those results as you change them."}
         </p>
 
         {/* Location autocomplete */}
