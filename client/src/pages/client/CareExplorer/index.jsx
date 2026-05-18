@@ -44,7 +44,6 @@ const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
 const DEFAULT_PRICE_RANGE = "Price on call";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
-const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
 const AUTO_APPLY_FILTERS = false;
 const ZIP_ONLY_DISCOVERY_MODE = true;
 const DISCOVER_DUPLICATE_WINDOW_MS = 1200;
@@ -460,6 +459,59 @@ function normalizeFacilityForCard(m) {
       m.distance_miles != null && Number.isFinite(Number(m.distance_miles))
         ? Number(m.distance_miles)
         : null,
+  };
+}
+
+function normalizeSavedFacilityDetail(detail) {
+  const src = detail && typeof detail === "object" ? detail : {};
+  const key = String(src.facilityId || src.id || src._id || src.name || "").trim();
+  const normalizedImageUrls = Array.isArray(src.imageUrls)
+    ? src.imageUrls
+        .map((img) => resolveFacilityImageUrl(img))
+        .filter((img) => typeof img === "string" && img.trim().length > 0)
+    : [];
+  const imageSrc = resolveFacilityImageUrl(src.imageSrc) || normalizedImageUrls[0] || DEFAULT_CARD_IMAGE;
+  const pricingText = String(src.priceRange || src.pricing || "").trim();
+  const numericPrice = parsePriceRangeNumbers(pricingText);
+  const parsedRating = Number(src.rating);
+  const parsedReviewCount = Number(src.reviewCount);
+  const lat = Number(src.lat ?? src.latitude);
+  const lng = Number(src.lng ?? src.longitude);
+  return {
+    key: key || String(src.name || "saved-facility"),
+    matchPercent: Number.isFinite(Number(src.matchPercent)) ? Number(src.matchPercent) : 0,
+    imageSrc,
+    imageUrls: normalizedImageUrls,
+    category: String(src.category || "SENIOR LIVING"),
+    name: String(src.name || "Community"),
+    priceRange: formatPriceRange(pricingText),
+    priceMin: numericPrice.min,
+    priceMax: numericPrice.max,
+    distance: String(src.distance || "Saved facility"),
+    features: Array.isArray(src.features) ? src.features : [],
+    address: String(src.address || ""),
+    zipCode: String(src.zipCode || src.zip_code || ""),
+    phone: String(src.phone || ""),
+    website: String(src.website || ""),
+    rating: Number.isFinite(parsedRating) ? parsedRating : 4.8,
+    reviewCount: Number.isFinite(parsedReviewCount) ? parsedReviewCount : null,
+    ratingLabel: "family reviews",
+    specialty: Array.isArray(src.specialty) ? src.specialty : [],
+    description: String(src.description || ""),
+    sourcePlatform: String(src.sourcePlatform || src.source_platform || ""),
+    isExternal: Boolean(src.isExternal ?? src.is_external),
+    externalSourceUrl: String(src.externalSourceUrl || src.external_source_url || ""),
+    careLevels: Array.isArray(src.careLevels) ? src.careLevels : [],
+    amenities: Array.isArray(src.amenities) ? src.amenities : [],
+    services: Array.isArray(src.services) ? src.services : [],
+    availability: String(src.availability || ""),
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+    distanceMiles:
+      src.distanceMiles != null && Number.isFinite(Number(src.distanceMiles))
+        ? Number(src.distanceMiles)
+        : null,
+    savedAt: src.savedAt || null,
   };
 }
 
@@ -1124,6 +1176,7 @@ const CareExplorer = () => {
   /** `undefined` = use Carrie / directory; array = last live discover from filters (may be empty). */
   const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [liveFilterLoading, setLiveFilterLoading] = useState(false);
   const discoverThinkingMessages = useMemo(
     () => [
       "Reviewing care preferences",
@@ -1151,9 +1204,53 @@ const CareExplorer = () => {
   const lastDiscoverMaxMilesRef = useRef("");
   /** Last discover zip+location — do not merge widen results across different searches. */
   const lastDiscoverMergeContextKeyRef = useRef("");
+  const liveFilterLoaderTimeoutRef = useRef(null);
+  const skipLiveFilterLoaderMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
+  const [favoriteFacilityDetails, setFavoriteFacilityDetails] = useState([]);
+  const showResultsLoading = discoverLoading || liveFilterLoading;
+
+  const liveRefinementFilterKey = useMemo(
+    () =>
+      JSON.stringify({
+        sortBy: String(filters.sortBy || "bestMatch"),
+        budgetMin: Number(filters.budgetMin) || 1000,
+        budgetMax: Number(filters.budgetMax) || 15000,
+        selectedAmenities: [...(filters.selectedAmenities || [])]
+          .map((x) => String(x || "").trim().toLowerCase())
+          .filter(Boolean)
+          .sort(),
+      }),
+    [filters.sortBy, filters.budgetMin, filters.budgetMax, filters.selectedAmenities],
+  );
+
+  useEffect(() => {
+    if (skipLiveFilterLoaderMountRef.current) {
+      skipLiveFilterLoaderMountRef.current = false;
+      return;
+    }
+    if (discoverLoading) return;
+
+    setLiveFilterLoading(true);
+    if (liveFilterLoaderTimeoutRef.current) {
+      clearTimeout(liveFilterLoaderTimeoutRef.current);
+    }
+    liveFilterLoaderTimeoutRef.current = setTimeout(() => {
+      setLiveFilterLoading(false);
+      liveFilterLoaderTimeoutRef.current = null;
+    }, 240);
+  }, [liveRefinementFilterKey, discoverLoading]);
+
+  useEffect(
+    () => () => {
+      if (liveFilterLoaderTimeoutRef.current) {
+        clearTimeout(liveFilterLoaderTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
 
   const scrollToListingTop = () => {
@@ -1175,33 +1272,39 @@ const CareExplorer = () => {
     if (apiKey) loadGoogleMapsScript(apiKey).catch(() => { });
   }, []);
 
-  // Load initial favorites from backend or local storage
+  // Load favorites strictly from backend for authenticated users.
   useEffect(() => {
     const loadFavorites = async () => {
-      if (isAuthenticated) {
-        try {
-          const response = await apiClient.get("/api/auth/favorites");
-          if (response.data.success) {
-            setFavoriteFacilityIds(response.data.favorites.map(id => String(id)));
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to fetch favorites from database", error);
-        }
+      if (!isAuthenticated) {
+        setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
+        return;
       }
 
-      // Fallback to local storage if not authenticated or API fails
       try {
-        const raw = localStorage.getItem(FAVORITE_FACILITY_IDS_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        setFavoriteFacilityIds(Array.isArray(parsed) ? parsed.map((id) => String(id)) : []);
-      } catch {
+        const response = await apiClient.get("/api/auth/favorites");
+        if (response.data.success) {
+          setFavoriteFacilityIds(
+            (response.data.favorites || []).map((id) => String(id)),
+          );
+          setFavoriteFacilityDetails(
+            Array.isArray(response.data.facilityDetails)
+              ? response.data.facilityDetails
+              : [],
+          );
+          return;
+        }
         setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
+      } catch (error) {
+        console.error("Failed to fetch favorites from database", error);
+        setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
       }
     };
 
     loadFavorites();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userData?._id, userData?.id]);
 
   const handleAskCarrie = () => {
     if (location.pathname !== "/") {
@@ -1216,7 +1319,8 @@ const CareExplorer = () => {
 
   const handleToggleFavorite = async (facilityId, facilityData) => {
     const safeId = String(facilityId || "").trim();
-    if (!safeId) return;
+    if (!safeId || !isAuthenticated) return;
+    const wasFavorite = favoriteFacilityIds.includes(safeId);
 
     // Optimistic UI update
     setFavoriteFacilityIds((prev) =>
@@ -1224,22 +1328,51 @@ const CareExplorer = () => {
         ? prev.filter((id) => id !== safeId)
         : [...prev, safeId],
     );
+    setFavoriteFacilityDetails((prev) => {
+      const existing = Array.isArray(prev) ? prev : [];
+      if (wasFavorite) {
+        return existing.filter(
+          (item) => String(item?.facilityId || item?.id || "") !== safeId,
+        );
+      }
+      if (!facilityData || typeof facilityData !== "object") return existing;
+      const alreadyExists = existing.some(
+        (item) => String(item?.facilityId || item?.id || "") === safeId,
+      );
+      if (alreadyExists) return existing;
+      return [...existing, { ...facilityData, facilityId: safeId, savedAt: new Date().toISOString() }];
+    });
 
-    if (isAuthenticated) {
+    try {
+      const response = await apiClient.post("/api/auth/toggle-favorite", {
+        facilityId: safeId,
+        facilityData: facilityData || null,
+      });
+      if (response?.data?.success) {
+        setFavoriteFacilityIds((response.data.favorites || []).map((id) => String(id)));
+        setFavoriteFacilityDetails(
+          Array.isArray(response.data.facilityDetails)
+            ? response.data.facilityDetails
+            : [],
+        );
+      }
+    } catch (error) {
+      console.error("Failed to sync favorite with database", error);
       try {
-        await apiClient.post("/api/auth/toggle-favorite", { facilityId: safeId, facilityData: facilityData || null });
-      } catch (error) {
-        console.error("Failed to sync favorite with database", error);
+        const response = await apiClient.get("/api/auth/favorites");
+        if (response?.data?.success) {
+          setFavoriteFacilityIds((response.data.favorites || []).map((id) => String(id)));
+          setFavoriteFacilityDetails(
+            Array.isArray(response.data.facilityDetails)
+              ? response.data.facilityDetails
+              : [],
+          );
+        }
+      } catch {
+        // Keep optimistic state if recovery fetch fails.
       }
     }
   };
-
-  useEffect(() => {
-    localStorage.setItem(
-      FAVORITE_FACILITY_IDS_STORAGE_KEY,
-      JSON.stringify(favoriteFacilityIds),
-    );
-  }, [favoriteFacilityIds]);
 
   const liveFacilities = useMemo(() => {
     if (!Array.isArray(carrieMatches) || carrieMatches.length === 0)
@@ -1732,12 +1865,19 @@ const CareExplorer = () => {
   const scopedFacilities = useMemo(() => {
     if (scope !== "saved") return uniqueBaseFacilities;
     const favoriteSet = new Set(favoriteFacilityIds.map((id) => String(id)));
-    return uniqueBaseFacilities.filter((f) =>
+    const savedFromCurrentResults = uniqueBaseFacilities.filter((f) =>
       favoriteSet.has(String(f.key ?? f.facilityId ?? f.name)),
     );
-  }, [scope, uniqueBaseFacilities, favoriteFacilityIds]);
+    const savedFromDatabase = (favoriteFacilityDetails || [])
+      .filter((item) =>
+        favoriteSet.has(String(item?.facilityId || item?.id || item?.name || "")),
+      )
+      .map(normalizeSavedFacilityDetail);
+    return dedupeFacilities([...savedFromDatabase, ...savedFromCurrentResults]);
+  }, [scope, uniqueBaseFacilities, favoriteFacilityIds, favoriteFacilityDetails]);
 
   const filteredFacilities = useMemo(() => {
+    if (scope === "saved") return scopedFacilities;
     const q = String(activeFilters.searchQuery || "")
       .trim()
       .toLowerCase();
@@ -1850,6 +1990,7 @@ const CareExplorer = () => {
     filters.budgetMax,
     filters.selectedAmenities,
     scopedFacilities,
+    scope,
     carrieLocationQuery,
     locationCenterCoords,
     fromCarrie,
@@ -2022,23 +2163,14 @@ const CareExplorer = () => {
   );
 
   const mapFacilities = useMemo(
-    () => (view === "map" ? scopedFacilities : []),
-    [view, scopedFacilities],
+    () => (view === "map" ? rankedFacilities : []),
+    [view, rankedFacilities],
   );
 
   const visibleMapFacilities = useMemo(() => {
     if (!Array.isArray(mapFacilities)) return [];
-    if (
-      !Array.isArray(nearbyMapFacilityKeys) ||
-      nearbyMapFacilityKeys.length === 0
-    )
-      return [];
-    const allowed = new Set(nearbyMapFacilityKeys);
-    const onMap = mapFacilities.filter((f) => allowed.has(f.key));
-    return [...onMap].sort(
-      (a, b) => (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0),
-    );
-  }, [mapFacilities, nearbyMapFacilityKeys]);
+    return mapFacilities;
+  }, [mapFacilities]);
 
   const updateMapCardsNavState = useCallback(() => {
     const el = mapCardsScrollRef.current;
@@ -2242,12 +2374,20 @@ const CareExplorer = () => {
     mapMarkersRef.current = [];
     setNearbyMapFacilityKeys([]);
 
-    const candidates = [...(mapFacilities || [])]
-      .filter((f) => f.address)
-      .sort(
-        (a, b) => (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0),
+    const withCoords = [...(mapFacilities || [])].filter(
+      (f) =>
+        Number.isFinite(Number(f?.lat)) &&
+        Number.isFinite(Number(f?.lng)),
+    );
+    const withoutCoords = [...(mapFacilities || [])]
+      .filter(
+        (f) =>
+          (!Number.isFinite(Number(f?.lat)) ||
+            !Number.isFinite(Number(f?.lng))) &&
+          String(f?.address || "").trim(),
       )
-      .slice(0, 15);
+      .slice(0, 40);
+    const candidates = [...withCoords, ...withoutCoords];
     if (candidates.length === 0) return;
 
     let cancelled = false;
@@ -2277,8 +2417,11 @@ const CareExplorer = () => {
           : f.address;
 
         let loc = null;
-        if (f.lat && f.lng) {
-          loc = { lat: () => f.lat, lng: () => f.lng };
+        if (
+          Number.isFinite(Number(f?.lat)) &&
+          Number.isFinite(Number(f?.lng))
+        ) {
+          loc = { lat: () => Number(f.lat), lng: () => Number(f.lng) };
         } else {
           let locFromCache = cache[queryStr];
           if (!locFromCache) {
@@ -2334,7 +2477,11 @@ const CareExplorer = () => {
       setNearbyMapFacilityKeys(valid.map((x) => x.key));
       valid.forEach((x) => mapMarkersRef.current.push({ marker: x.marker, key: x.key }));
 
-      if (valid.length === 0) return;
+      if (valid.length === 0) {
+        mapInstanceRef.current.setCenter(DEFAULT_MAP_CENTER);
+        mapInstanceRef.current.setZoom(11);
+        return;
+      }
 
       const bounds = new window.google.maps.LatLngBounds();
       valid.forEach((x) => bounds.extend(x.latLng));
@@ -2510,7 +2657,7 @@ const CareExplorer = () => {
           onScopeChange={setScope}
           matchCount={matchCountForHeader}
           locationLabel={locationLabelForHeader}
-          isDiscoverLoading={discoverLoading}
+          isDiscoverLoading={showResultsLoading}
         />
 
         {/* How we matched - bordered card; responsive */}
@@ -2651,7 +2798,7 @@ const CareExplorer = () => {
                   : "grid content-start items-start grid-cols-1 min-[520px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
                 }`}
             >
-              {discoverLoading ? (
+              {showResultsLoading ? (
                 <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-8">
                   <div className="mx-auto max-w-xl rounded-3xl border border-[#00CFF4]/20 bg-gradient-to-br from-white to-[#F0FBFF] px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] sm:px-6">
                     <div className="flex items-start gap-4">
@@ -2678,7 +2825,9 @@ const CareExplorer = () => {
                           </div>
                         </div>
                         <p className="mt-1 text-sm text-slate-600">
-                          {discoverThinkingMessages[discoverThinkingIndex]}
+                          {discoverLoading
+                            ? discoverThinkingMessages[discoverThinkingIndex]
+                            : "Applying your filters and refreshing listings..."}
                         </p>
                         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]">
                           <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-[#00CFF4] via-[#60A5FA] to-[#818CF8] animate-pulse" />
@@ -2730,7 +2879,7 @@ const CareExplorer = () => {
                 ))
               )}
 
-              {!discoverLoading && listingItems.length === 0 && (
+              {!showResultsLoading && listingItems.length === 0 && (
                 <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-6 text-center text-sm text-[#64748b]">
                   No facilities available yet for the selected filters.
                 </div>
