@@ -269,18 +269,46 @@ export async function enrichDiscoveryFacilitiesWithPersonalizedScores(rows, ctx,
     signal
   );
 
-  if (!gptMap) return ruleScored;
+  const scored = !gptMap
+    ? ruleScored
+    : ruleScored.map((row) => {
+        const gpt = gptMap.get(row.facilityId);
+        if (gpt == null) return row;
+        const fz = normalizeZip(row.zip_code || row?.external_data?.zip_code);
+        const zipExact = searchZip && fz && searchZip === fz;
+        let merged = gpt;
+        if (!zipExact) merged = Math.min(merged, 94);
+        const rule = computeDiscoveryPersonalizedPercent(row, scoreCtx);
+        merged = Math.max(40, Math.min(100, Math.round((merged + rule) / 2)));
+        if (!zipExact) merged = Math.min(merged, 94);
+        return { ...row, score: merged };
+      });
 
-  return ruleScored.map((row) => {
-    const gpt = gptMap.get(row.facilityId);
-    if (gpt == null) return row;
-    const fz = normalizeZip(row.zip_code || row?.external_data?.zip_code);
-    const zipExact = searchZip && fz && searchZip === fz;
-    let merged = gpt;
-    if (!zipExact) merged = Math.min(merged, 94);
-    const rule = computeDiscoveryPersonalizedPercent(row, scoreCtx);
-    merged = Math.max(40, Math.min(100, Math.round((merged + rule) / 2)));
-    if (!zipExact) merged = Math.min(merged, 94);
-    return { ...row, score: merged };
-  });
+  const maxDist = Number(maxDistanceMiles);
+  if (
+    !Number.isFinite(maxDist) ||
+    maxDist <= 0 ||
+    anchorLat == null ||
+    anchorLng == null
+  ) {
+    return scored;
+  }
+
+  return scored
+    .map((row) => {
+      const lat = toFinite(row.latitude ?? row?.external_data?.google_places?.latitude);
+      const lng = toFinite(row.longitude ?? row?.external_data?.google_places?.longitude);
+      let miles = null;
+      if (lat != null && lng != null) {
+        miles = distanceMilesBetweenPoints(anchorLat, anchorLng, lat, lng);
+      }
+      return {
+        ...row,
+        distance_miles: miles != null ? Math.round(miles * 10) / 10 : null,
+      };
+    })
+    .filter((row) => {
+      const miles = Number(row.distance_miles);
+      return Number.isFinite(miles) && miles <= maxDist;
+    });
 }

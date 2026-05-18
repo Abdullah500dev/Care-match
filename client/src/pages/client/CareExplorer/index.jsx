@@ -45,7 +45,7 @@ const DEFAULT_PRICE_RANGE = "Price on call";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
-const AUTO_APPLY_FILTERS = true;
+const AUTO_APPLY_FILTERS = false;
 const ZIP_ONLY_DISCOVERY_MODE = true;
 const DISCOVER_DUPLICATE_WINDOW_MS = 1200;
 const FIXED_AMENITY_OPTIONS = [
@@ -456,6 +456,10 @@ function normalizeFacilityForCard(m) {
     availability: m.availability || "",
     lat: googlePlaces.latitude ?? externalData.latitude ?? m.latitude ?? null,
     lng: googlePlaces.longitude ?? externalData.longitude ?? m.longitude ?? null,
+    distanceMiles:
+      m.distance_miles != null && Number.isFinite(Number(m.distance_miles))
+        ? Number(m.distance_miles)
+        : null,
   };
 }
 
@@ -493,6 +497,40 @@ function amenityMatchVariants(selectedLower) {
     }
   }
   return [key];
+}
+
+/** Searchable text pool for must-have amenity matching on a facility card. */
+function buildFacilityAmenitySearchPool(facility) {
+  const specialty = Array.isArray(facility?.specialty) ? facility.specialty : [];
+  return [
+    ...(facility?.amenities || []).map(amenityText),
+    ...(facility?.services || []).map(amenityText),
+    ...(facility?.features || []).map(amenityText),
+    ...(facility?.careLevels || []).map(amenityText),
+    ...specialty.map(amenityText),
+    String(facility?.description || ""),
+    String(facility?.name || ""),
+    String(facility?.category || ""),
+    String(facility?.priceRange || ""),
+    String(facility?.address || ""),
+  ]
+    .map((x) => normMatchToken(x))
+    .filter(Boolean);
+}
+
+function amenityPreferenceMatches(pool, selectedLower) {
+  const variants = amenityMatchVariants(selectedLower);
+  if (variants.length === 0) return true;
+  return variants.some((want) =>
+    pool.some((p) => p.includes(want) || want.includes(p)),
+  );
+}
+
+/** All selected must-haves must match (AND). Empty selection = no filter. */
+function facilityMeetsMustHaveAmenities(facility, selectedAmenities) {
+  if (!selectedAmenities.length) return true;
+  const pool = buildFacilityAmenitySearchPool(facility);
+  return selectedAmenities.every((want) => amenityPreferenceMatches(pool, want));
 }
 
 function deriveServicesFromPreferencePhrases(values) {
@@ -847,23 +885,38 @@ function extractStateFromLocation(locStr) {
   return m ? m[1].toUpperCase() : "";
 }
 
-/** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
-function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
-  const locRaw = String(filters.locationQuery || carrieLocationQuery || "").trim();
+/**
+ * Build POST /api/facilities/discover body from sidebar (+ optional Carrie intake).
+ * @param {{ sidebarOnly?: boolean }} [options] — when true (Apply Filters), use only sidebar fields.
+ */
+function buildDiscoverRequestBody(
+  filters,
+  carrieFilters,
+  carrieLocationQuery,
+  options = {},
+) {
+  const sidebarOnly = options.sidebarOnly === true;
+  const locRaw = sidebarOnly
+    ? String(filters.locationQuery || "").trim()
+    : String(filters.locationQuery || carrieLocationQuery || "").trim();
   const explicitZip = String(filters.zipCode || "")
     .replace(/\D/g, "")
     .slice(0, 5);
-  const zipFromPrefs = String(carrieFilters?.searchZipCode || "")
-    .replace(/\D/g, "")
-    .slice(0, 5);
-  const zip =
-    explicitZip ||
-    extractFiveDigitZip(locRaw) ||
-    extractFiveDigitZip(String(carrieLocationQuery || "")) ||
-    extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
-    (zipFromPrefs.length === 5 ? zipFromPrefs : "");
-  const baseLocation =
-    locRaw || String(carrieFilters?.searchLocation || "").trim();
+  const zipFromPrefs = sidebarOnly
+    ? ""
+    : String(carrieFilters?.searchZipCode || "")
+        .replace(/\D/g, "")
+        .slice(0, 5);
+  const zip = sidebarOnly
+    ? explicitZip || extractFiveDigitZip(locRaw)
+    : explicitZip ||
+      extractFiveDigitZip(locRaw) ||
+      extractFiveDigitZip(String(carrieLocationQuery || "")) ||
+      extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
+      (zipFromPrefs.length === 5 ? zipFromPrefs : "");
+  const baseLocation = sidebarOnly
+    ? locRaw
+    : locRaw || String(carrieFilters?.searchLocation || "").trim();
 
   // Keep the location scoped to the city/state even when max distance changes,
   // so increasing radius never narrows the base discovery query.
@@ -912,6 +965,15 @@ function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
   }
 
   return body;
+}
+
+/** Zip + normalized location — radius widen merge only when this matches the last completed discover. */
+function discoverMergeContextKey(body) {
+  const zip = String(body?.zip_code || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  const loc = String(body?.location || "").trim().toLowerCase();
+  return `${zip}|${loc}`;
 }
 
 function buildDiscoverRequestSignature(body) {
@@ -963,10 +1025,16 @@ function normalizeFilterStateForCompare(filters) {
   };
 }
 
-/** Draft vs applied for “needs Apply” — sort and must-have amenities apply live (client-side). */
+/** Draft vs applied for “needs Apply” — sort, budget, and amenities refine the list live (client-side). */
 function filterStateForApplyPendingCompare(filters) {
   const norm = normalizeFilterStateForCompare(filters);
-  const { sortBy: _sort, selectedAmenities: _amenities, ...rest } = norm;
+  const {
+    sortBy: _sort,
+    selectedAmenities: _amenities,
+    budgetMin: _budgetMin,
+    budgetMax: _budgetMax,
+    ...rest
+  } = norm;
   return rest;
 }
 
@@ -1022,7 +1090,8 @@ const CareExplorer = () => {
 
   // `filters` are the draft values (typing/selecting in the sidebar)
   const [filters, setFilters] = useState(initialFilters);
-  // With AUTO_APPLY_FILTERS, listing uses `filters` via `activeFilters`; `appliedFilters` stays in sync for map/geocode/summary.
+  // `filters` = sidebar draft. When AUTO_APPLY_FILTERS is true, `appliedFilters` mirrors `filters`
+  // and `activeFilters` is the draft; when false, `activeFilters` is last-applied until user clicks Apply.
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
   const hasPendingFilterChanges = useMemo(() => {
     const draft = filterStateForApplyPendingCompare(filters);
@@ -1067,14 +1136,21 @@ const CareExplorer = () => {
   const [discoverThinkingIndex, setDiscoverThinkingIndex] = useState(0);
   const discoverRunIdRef = useRef(0);
   const discoverAbortControllerRef = useRef(null);
-  const discoverInFlightSignatureRef = useRef("");
-  const lastDiscoverSignatureRef = useRef("");
-  const lastDiscoverStartedAtRef = useRef(0);
+  /** Same discover body in flight — share one promise so callers never get `undefined`. */
+  const discoverInflightPromiseBySignatureRef = useRef(new Map());
+  /** Recent successful normalized rows keyed by request signature (short TTL). */
+  const discoverCachedRowsBySignatureRef = useRef(new Map());
+  /** Last discover listing snapshot — merge fallback when React state `prev` is briefly empty. */
+  const lastDiscoverSnapshotForMergeRef = useRef([]);
   const carrieBootstrapDiscoverDoneRef = useRef(false);
+  /** After Apply Filters, listings come from POST /api/facilities/discover (Caring/SilverAssist), not Carrie results.js. */
+  const discoverApplyCompletedRef = useRef(false);
   const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
   /** Last completed discover `maxMiles` string — used to merge when the user widens radius. */
   const lastDiscoverMaxMilesRef = useRef("");
+  /** Last discover zip+location — do not merge widen results across different searches. */
+  const lastDiscoverMergeContextKeyRef = useRef("");
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
@@ -1175,10 +1251,13 @@ const CareExplorer = () => {
     if (discoverOverrideRows !== undefined) {
       return Array.isArray(discoverOverrideRows) ? discoverOverrideRows : [];
     }
-    if (liveFacilities?.length) return liveFacilities;
+    // Before the first Apply, Carrie may show chat matches (results.js). After Apply, only API/directory.
+    if (fromCarrie && liveFacilities?.length && !discoverApplyCompletedRef.current) {
+      return liveFacilities;
+    }
     if (directoryFacilities.length) return directoryFacilities;
     return [];
-  }, [discoverOverrideRows, liveFacilities, directoryFacilities]);
+  }, [discoverOverrideRows, fromCarrie, liveFacilities, directoryFacilities]);
   const uniqueBaseFacilities = useMemo(
     () => dedupeFacilities(baseFacilities),
     [baseFacilities],
@@ -1206,6 +1285,7 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
+    if (discoverApplyCompletedRef.current || hasUserTouchedFiltersRef.current) return;
     const fromFilters = resolveCarrieBudgetRange(carrieFilters);
     const fromMatches = resolveBudgetRangeFromCarrieMatches(carrieMatches);
     const parsedMinBudget = fromFilters.min ?? fromMatches.min;
@@ -1266,13 +1346,18 @@ const CareExplorer = () => {
 
   useEffect(() => {
     const query = buildEffectiveLocationQuery(
-      String(appliedFilters.locationQuery || carrieLocationQuery || "").trim(),
+      String(appliedFilters.locationQuery || "").trim(),
       appliedFilters.zipCode,
     );
     if (!query) {
       setLocationCenterCoords(null);
       return;
     }
+
+    // Clear anchor immediately when ZIP/location change so we never filter a fresh discover
+    // response against the *previous* geocode (async gap). Otherwise almost every row looks
+    // "outside" the new radius and the list collapses to 0–1 facilities until geocode finishes.
+    setLocationCenterCoords(null);
 
     let cancelled = false;
     const apiKey = getGoogleMapsApiKey();
@@ -1348,69 +1433,88 @@ const CareExplorer = () => {
       typeof options.silent === "boolean" ? options.silent : AUTO_APPLY_FILTERS;
     const signature = buildDiscoverRequestSignature(body);
     const now = Date.now();
-    console.log("[CareExplorer] discover request:", body);
+    console.log(
+      "[CareExplorer] discover request (POST /api/facilities/discover → Caring.com + SilverAssist, not results.js):",
+      body,
+    );
 
-    if (discoverInFlightSignatureRef.current === signature) {
-      return;
-    }
+    const inflight = discoverInflightPromiseBySignatureRef.current.get(signature);
+    if (inflight) return inflight;
 
+    const cached = discoverCachedRowsBySignatureRef.current.get(signature);
     if (
-      lastDiscoverSignatureRef.current === signature &&
-      now - lastDiscoverStartedAtRef.current < DISCOVER_DUPLICATE_WINDOW_MS
+      cached &&
+      Array.isArray(cached.rows) &&
+      now - cached.at < DISCOVER_DUPLICATE_WINDOW_MS
     ) {
-      return;
+      return cached.rows;
     }
 
     const runId = ++discoverRunIdRef.current;
-    lastDiscoverSignatureRef.current = signature;
-    lastDiscoverStartedAtRef.current = now;
 
     if (discoverAbortControllerRef.current) {
       discoverAbortControllerRef.current.abort();
     }
     const controller = new AbortController();
     discoverAbortControllerRef.current = controller;
-    discoverInFlightSignatureRef.current = signature;
 
-    if (!silent) {
-      setDiscoverLoading(true);
-    }
-    try {
-      const { data } = await apiClient.post("/api/facilities/discover", body, {
-        signal: controller.signal,
-      });
-      if (runId !== discoverRunIdRef.current) return;
-      const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-      console.log("[CareExplorer] discover response:", {
-        count: rows.length,
-        success: Boolean(data?.success),
-      });
-      return rows.map(normalizeFacilityForCard);
-    } catch (err) {
-      const cancelled =
-        axios.isCancel?.(err) || err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
-      if (cancelled || runId !== discoverRunIdRef.current) return;
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        "Request failed";
-      toast.error("Could not refresh listings", { description: String(msg) });
-      return null;
-    } finally {
-      if (discoverAbortControllerRef.current === controller) {
-        discoverAbortControllerRef.current = null;
+    const promise = (async () => {
+      if (!silent) {
+        setDiscoverLoading(true);
       }
-      if (discoverInFlightSignatureRef.current === signature) {
-        discoverInFlightSignatureRef.current = "";
-      }
-      if (runId === discoverRunIdRef.current) {
-        if (!silent) {
-          setDiscoverLoading(false);
+      try {
+        const { data } = await apiClient.post("/api/facilities/discover", body, {
+          signal: controller.signal,
+        });
+        if (runId !== discoverRunIdRef.current) return null;
+        const rows = Array.isArray(data?.facilities) ? data.facilities : [];
+        console.log("[CareExplorer] discover response:", {
+          count: rows.length,
+          success: Boolean(data?.success),
+        });
+        const center = data?.search_center;
+        if (
+          center &&
+          Number.isFinite(Number(center.lat)) &&
+          Number.isFinite(Number(center.lng))
+        ) {
+          setLocationCenterCoords({
+            lat: Number(center.lat),
+            lng: Number(center.lng),
+          });
+        }
+        const normalized = rows.map(normalizeFacilityForCard);
+        discoverCachedRowsBySignatureRef.current.set(signature, {
+          at: Date.now(),
+          rows: normalized,
+        });
+        return normalized;
+      } catch (err) {
+        const cancelled =
+          axios.isCancel?.(err) || err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
+        if (cancelled || runId !== discoverRunIdRef.current) return null;
+        const msg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "Request failed";
+        toast.error("Could not refresh listings", { description: String(msg) });
+        return null;
+      } finally {
+        if (discoverAbortControllerRef.current === controller) {
+          discoverAbortControllerRef.current = null;
+        }
+        discoverInflightPromiseBySignatureRef.current.delete(signature);
+        if (runId === discoverRunIdRef.current) {
+          if (!silent) {
+            setDiscoverLoading(false);
+          }
         }
       }
-    }
-    return null;
+    })();
+
+    discoverInflightPromiseBySignatureRef.current.set(signature, promise);
+    return promise;
   }, []);
 
   // Debounced live discover when filters change (POST /api/facilities/discover — external APIs only).
@@ -1448,24 +1552,35 @@ const CareExplorer = () => {
       const prevMaxMiles = Number.parseFloat(String(lastDiscoverMaxMilesRef.current || "").trim());
       const nextIsFinite = Number.isFinite(nextMaxMiles);
       const prevIsFinite = Number.isFinite(prevMaxMiles);
+      const ctxKey = discoverMergeContextKey(body);
+      const sameSearchPlace = lastDiscoverMergeContextKeyRef.current === ctxKey;
+      // Only merge when the user widens an already-applied radius (e.g. 25→50) for the **same**
+      // zip/location. First search with miles must replace — never merge into the public directory.
       const shouldExpand =
+        sameSearchPlace &&
         nextIsFinite &&
-        ((prevIsFinite && nextMaxMiles > prevMaxMiles) ||
-          (!prevIsFinite && nextMaxMiles > 0));
+        prevIsFinite &&
+        nextMaxMiles > prevMaxMiles;
       const mergeOutcomeRef = { kind: "replace" };
       setDiscoverOverrideRows((prev) => {
         if (shouldExpand) {
           const previousRows =
             Array.isArray(prev) && prev.length > 0
               ? prev
-              : uniqueBaseFacilitiesForMergeRef.current;
+              : lastDiscoverSnapshotForMergeRef.current.length > 0
+                ? lastDiscoverSnapshotForMergeRef.current
+                : [];
           if (Array.isArray(previousRows) && previousRows.length > 0) {
             mergeOutcomeRef.kind = "merge";
-            return dedupeFacilities([...previousRows, ...rows]);
+            const merged = dedupeFacilities([...previousRows, ...rows]);
+            lastDiscoverSnapshotForMergeRef.current = merged;
+            return merged;
           }
         }
+        lastDiscoverSnapshotForMergeRef.current = rows;
         return rows;
       });
+      lastDiscoverMergeContextKeyRef.current = ctxKey;
       if (mergeOutcomeRef.kind !== "merge") {
         setPage(1);
       }
@@ -1506,6 +1621,8 @@ const CareExplorer = () => {
     carrieBootstrapDiscoverDoneRef.current = true;
     runDiscoverRequest(body).then((rows) => {
       if (Array.isArray(rows) && rows.length > 0) {
+        lastDiscoverSnapshotForMergeRef.current = rows;
+        lastDiscoverMergeContextKeyRef.current = discoverMergeContextKey(body);
         setDiscoverOverrideRows(rows);
         lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
         setPage(1);
@@ -1523,38 +1640,81 @@ const CareExplorer = () => {
   const handleApplyFilters = async () => {
     if (!hasPendingFilterChanges) return;
     hasUserTouchedFiltersRef.current = true;
-    setAppliedFilters(filters);
-    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
-    const hasLocation = String(body.location || "").trim().length > 0;
-    const hasZip = String(body.zip_code || "").trim().length > 0;
-    if (!hasLocation && !hasZip) {
-      setDiscoverOverrideRows(undefined);
-      setDiscoverLoading(false);
-      toast.error("Please enter a city, state, or ZIP code before searching.");
+
+    const zipDigits = String(filters.zipCode || "").replace(/\D/g, "").slice(0, 5);
+    if (zipDigits.length !== 5) {
+      toast.error("Please enter a valid 5-digit ZIP code, then click Apply Filters.");
       return;
     }
-    if (!body.zip_code && hasLocation) {
-      body.zip_code = body.location;
+
+    setAppliedFilters(filters);
+    setLocationCenterCoords(null);
+    setDiscoverOverrideRows([]);
+    setDiscoverLoading(true);
+    discoverCachedRowsBySignatureRef.current.clear();
+    lastDiscoverMergeContextKeyRef.current = "";
+    lastDiscoverMaxMilesRef.current = "";
+
+    const body = buildDiscoverRequestBody(filters, {}, "", { sidebarOnly: true });
+    body.zip_code = zipDigits;
+    if (!String(body.location || "").trim()) {
+      body.location = zipDigits;
     }
 
-    const rows = await runDiscoverRequest(body);
-    if (!rows) return;
+    const rows = await runDiscoverRequest(body, { silent: false });
+    if (!rows) {
+      setDiscoverLoading(false);
+      return;
+    }
+
+    discoverApplyCompletedRef.current = true;
+    const appliedCarrieFilters = {
+      ...(location.state?.carrieFilters ?? carrieFilters ?? {}),
+      searchZipCode: zipDigits,
+      searchLocation: String(filters.locationQuery || "").trim() || zipDigits,
+      locationQuery: String(filters.locationQuery || "").trim(),
+    };
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      {
+        replace: true,
+        state: {
+          fromCarrie: Boolean(fromCarrie),
+          carrieFilters: appliedCarrieFilters,
+        },
+      },
+    );
+
+    const ctxKey = discoverMergeContextKey(body);
+    const sameSearchPlace = lastDiscoverMergeContextKeyRef.current === ctxKey;
     const nextMaxMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
     const prevMaxMiles = Number.parseFloat(String(appliedFilters.maxMiles || "").trim());
     const nextIsFinite = Number.isFinite(nextMaxMiles);
     const prevIsFinite = Number.isFinite(prevMaxMiles);
+    // Widen radius only for the same ZIP/location; a new ZIP always replaces results from the API.
     const shouldExpand =
-      nextIsFinite && ((prevIsFinite && nextMaxMiles > prevMaxMiles) || (!prevIsFinite && nextMaxMiles > 0));
+      sameSearchPlace &&
+      nextIsFinite &&
+      prevIsFinite &&
+      nextMaxMiles > prevMaxMiles;
     if (shouldExpand) {
-      const previousRows = Array.isArray(discoverOverrideRows)
-        ? discoverOverrideRows
-        : uniqueBaseFacilities;
+      const previousRows =
+        Array.isArray(discoverOverrideRows) && discoverOverrideRows.length > 0
+          ? discoverOverrideRows
+          : lastDiscoverSnapshotForMergeRef.current.length > 0
+            ? lastDiscoverSnapshotForMergeRef.current
+            : [];
       if (Array.isArray(previousRows) && previousRows.length > 0) {
-        setDiscoverOverrideRows(dedupeFacilities([...previousRows, ...rows]));
+        const merged = dedupeFacilities([...previousRows, ...rows]);
+        lastDiscoverSnapshotForMergeRef.current = merged;
+        lastDiscoverMergeContextKeyRef.current = ctxKey;
+        setDiscoverOverrideRows(merged);
         lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
         return;
       }
     }
+    lastDiscoverSnapshotForMergeRef.current = rows;
+    lastDiscoverMergeContextKeyRef.current = ctxKey;
     setDiscoverOverrideRows(rows);
     lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
     setPage(1);
@@ -1596,8 +1756,8 @@ const CareExplorer = () => {
     const maxMilesNum = Number.parseFloat(
       String(activeFilters.maxMiles || "").trim(),
     );
-    const budgetMin = Number(activeFilters.budgetMin) || 1000;
-    const budgetMax = Number(activeFilters.budgetMax) || 15000;
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
     const budgetFilterActive = budgetMin > 1000 || budgetMax < 15000;
     const selectedCare = new Set(
       (activeFilters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
@@ -1608,27 +1768,6 @@ const CareExplorer = () => {
     const selectedAvailability = new Set(
       (activeFilters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
     );
-
-    const getAmenityHits = (facility) => {
-      if (selectedAmenities.length === 0) return 0;
-      const pool = [
-        ...(facility.amenities || []).map(amenityText),
-        ...(facility.services || []).map(amenityText),
-        ...(facility.features || []).map(amenityText),
-        String(facility.description || ""),
-        String(facility.name || ""),
-      ]
-        .map((x) => normMatchToken(x))
-        .filter(Boolean);
-
-      return selectedAmenities.filter((a) => {
-        const variants = amenityMatchVariants(a);
-        if (variants.length === 0) return true;
-        return variants.some((want) =>
-          pool.some((p) => p.includes(want) || want.includes(p)),
-        );
-      }).length;
-    };
 
     const matchesFacility = (facility) => {
       const assistedOnlyLevels = [
@@ -1649,22 +1788,13 @@ const CareExplorer = () => {
         if (!isCarrieResult) return false;
       }
 
-      // Match city/state/ZIP from applied filters. Carrie or the API can still return
-      // out-of-area rows; never skip this for fromCarrie or suburbs break only via radius below.
-      if (effectiveLocation) {
-        const addrOk = addressMatchesLocation(facility.address, effectiveLocation);
-        if (!addrOk) {
-          let withinAppliedRadius = false;
-          if (
-            !Number.isNaN(maxMilesNum) &&
-            maxMilesNum > 0 &&
-            locationCenterCoords
-          ) {
-            const miles = computeFacilityMiles(facility, locationCenterCoords);
-            withinAppliedRadius = !Number.isNaN(miles) && miles <= maxMilesNum;
-          }
-          if (!withinAppliedRadius) return false;
-        }
+      // Strict radius: only show communities with a verified distance <= max miles from search center.
+      if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
+        if (!locationCenterCoords) return false;
+        const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
+        if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) return false;
+      } else if (effectiveLocation) {
+        if (!addressMatchesLocation(facility.address, effectiveLocation)) return false;
       } else if (locationQuery && !isZipOnlyLocationQuery) {
         if (!addressMatchesLocation(facility.address, locationQuery)) return false;
       }
@@ -1699,9 +1829,8 @@ const CareExplorer = () => {
         if (!hasCare) return false;
       }
 
-      if (!ZIP_ONLY_DISCOVERY_MODE && selectedAmenities.length > 0) {
-        const hits = getAmenityHits(facility);
-        if (hits === 0) return false;
+      if (!facilityMeetsMustHaveAmenities(facility, selectedAmenities)) {
+        return false;
       }
 
       // Intake / Carrie pass move-in timing into discovery; facility rows rarely use the same
@@ -1711,17 +1840,14 @@ const CareExplorer = () => {
         if (a && !selectedAvailability.has(a)) return false;
       }
 
-      if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        const facilityMiles = computeFacilityMiles(facility, locationCenterCoords);
-        if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum) return false;
-      }
-
       return true;
     };
 
     return scopedFacilities.filter((f) => matchesFacility(f));
   }, [
     activeFilters,
+    filters.budgetMin,
+    filters.budgetMax,
     filters.selectedAmenities,
     scopedFacilities,
     carrieLocationQuery,
@@ -1751,8 +1877,8 @@ const CareExplorer = () => {
     const selectedAvailability = (activeFilters.selectedAvailability || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const budgetMin = Number(activeFilters.budgetMin) || 1000;
-    const budgetMax = Number(activeFilters.budgetMax) || 15000;
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
     const sortBy = String(filters.sortBy || "bestMatch");
 
     const getRelevanceScore = (facility) => {
@@ -1781,21 +1907,10 @@ const CareExplorer = () => {
       }
 
       if (selectedAmenities.length > 0) {
-        const pool = [
-          ...(facility.amenities || []).map(amenityText),
-          ...(facility.services || []).map(amenityText),
-          ...(facility.features || []).map(amenityText),
-          String(facility.description || ""),
-          String(facility.name || ""),
-        ]
-          .map((x) => normMatchToken(x))
-          .filter(Boolean);
-        const amenityHits = selectedAmenities.filter((want) => {
-          const variants = amenityMatchVariants(want);
-          return variants.some((v) =>
-            pool.some((p) => p.includes(v) || v.includes(p)),
-          );
-        }).length;
+        const pool = buildFacilityAmenitySearchPool(facility);
+        const amenityHits = selectedAmenities.filter((want) =>
+          amenityPreferenceMatches(pool, want),
+        ).length;
         score += (amenityHits / selectedAmenities.length) * 12;
       } else {
         score += 6;
@@ -1870,12 +1985,14 @@ const CareExplorer = () => {
     filteredFacilities,
     activeFilters,
     filters.sortBy,
+    filters.budgetMin,
+    filters.budgetMax,
     filters.selectedAmenities,
     carrieLocationQuery,
     locationCenterCoords,
   ]);
 
-  /** When these change, reset listing pagination; omit budget while auto-apply so sliders do not jump to page 1. */
+  /** When these change, reset listing pagination. Budget is live-only and omitted so the slider does not jump pages. */
   const listingPagingResetKey = useMemo(() => {
     const a = appliedFilters;
     const care = JSON.stringify([...(a.selectedCareTypes || [])].map(String).sort());
@@ -1888,9 +2005,6 @@ const CareExplorer = () => {
       care,
       avail,
     ];
-    if (!AUTO_APPLY_FILTERS) {
-      parts.push(String(Number(a.budgetMin) || 1000), String(Number(a.budgetMax) || 15000));
-    }
     return parts.join("|");
   }, [
     appliedFilters.locationQuery,
@@ -1908,13 +2022,8 @@ const CareExplorer = () => {
   );
 
   const mapFacilities = useMemo(
-    () =>
-      view === "map"
-        ? fromCarrie && liveFacilities
-          ? filteredFacilities
-          : scopedFacilities
-        : [],
-    [view, fromCarrie, liveFacilities, filteredFacilities, scopedFacilities],
+    () => (view === "map" ? scopedFacilities : []),
+    [view, scopedFacilities],
   );
 
   const visibleMapFacilities = useMemo(() => {
@@ -1968,7 +2077,7 @@ const CareExplorer = () => {
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     buildEffectiveLocationQuery(
-      String(appliedFilters.locationQuery || "").trim() || carrieLocationQuery,
+      String(appliedFilters.locationQuery || "").trim(),
       appliedFilters.zipCode,
     ) ||
     String(appliedFilters.searchQuery || "").trim() ||
@@ -2508,9 +2617,10 @@ const CareExplorer = () => {
                     discoverAbortControllerRef.current.abort();
                     discoverAbortControllerRef.current = null;
                   }
-                  discoverInFlightSignatureRef.current = "";
-                  lastDiscoverSignatureRef.current = "";
-                  lastDiscoverStartedAtRef.current = 0;
+                  discoverInflightPromiseBySignatureRef.current.clear();
+                  discoverCachedRowsBySignatureRef.current.clear();
+                  lastDiscoverSnapshotForMergeRef.current = [];
+                  lastDiscoverMergeContextKeyRef.current = "";
                   carrieBootstrapDiscoverDoneRef.current = false;
                   discoverRunIdRef.current += 1;
                   hasUserTouchedFiltersRef.current = false;
