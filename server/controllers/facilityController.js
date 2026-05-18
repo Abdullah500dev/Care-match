@@ -30,6 +30,10 @@ import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
+import {
+  APIFY_DISABLED_RESULT,
+  isApifyIntegrationEnabled,
+} from "../config/apify.js";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -1384,6 +1388,10 @@ const upsertExternalFacilities = async (records) => {
 };
 
 export const syncFacilitiesFromApify = async (actorInput = {}) => {
+  if (!isApifyIntegrationEnabled()) {
+    return { ...APIFY_DISABLED_RESULT };
+  }
+
   const apifyToken = process.env.APIFY_TOKEN;
   if (!apifyToken) {
     throw new Error("APIFY_TOKEN is required in environment variables");
@@ -2026,6 +2034,12 @@ export const deleteFacility = catchAsyncError(async (req, res, next) => {
 });
 
 export const importFacilitiesFromApify = catchAsyncError(async (req, res, next) => {
+  if (!isApifyIntegrationEnabled()) {
+    return next(
+      new ErrorHandler("Apify import is disabled (integration turned off)", 503)
+    );
+  }
+
   const admin = await assertAdmin(req.user?.id);
   if (!admin) {
     return next(new ErrorHandler("Only admins can import external facilities", 403));
