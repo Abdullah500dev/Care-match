@@ -1423,16 +1423,22 @@ const CareExplorer = () => {
     const fromMatches = resolveBudgetRangeFromCarrieMatches(carrieMatches);
     const parsedMinBudget = fromFilters.min ?? fromMatches.min;
     const parsedMaxBudget = fromFilters.max ?? fromMatches.max;
+    const shouldPrefillBudget = carrieFilters?.skipInitialBudgetPrefill !== true;
     console.log("[CareExplorer] carrieFilters budget:", {
       budgetMinMonthly: carrieFilters.budgetMinMonthly,
       budgetMaxMonthly: carrieFilters.budgetMaxMonthly,
       budgetFromMatches: fromMatches,
       resolvedMin: parsedMinBudget,
       resolvedMax: parsedMaxBudget,
+      shouldPrefillBudget,
     });
-    const effectiveMaxBudget = parsedMaxBudget ?? parsedMinBudget ?? 15000;
+    const effectiveMaxBudget = shouldPrefillBudget
+      ? parsedMaxBudget ?? parsedMinBudget ?? 15000
+      : 15000;
     const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
-    const effectiveMinBudget = parsedMinBudget ?? Math.min(1000, safeMax);
+    const effectiveMinBudget = shouldPrefillBudget
+      ? parsedMinBudget ?? Math.min(1000, safeMax)
+      : 1000;
     const safeMin = Math.min(safeMax, Math.max(1000, Math.round(effectiveMinBudget)));
     const intakeAmenitySelections = [
       ...(Array.isArray(carrieFilters?.displayCriteria?.mustHaveNeeds)
