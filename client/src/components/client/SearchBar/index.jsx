@@ -304,6 +304,64 @@ export default function SearchBar() {
     { role: "user", content: userText },
   ];
 
+  const toFiveDigitZip = (value) =>
+    String(value || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+
+  const toPositiveNumberOrNull = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const parseBudgetNumber = (value) => {
+    if (value == null) return null;
+    const parsed = Number.parseInt(String(value).replace(/[^\d]+/g, ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const hasBudgetRangeInCarriePrefs = (prefs) => {
+    const safePrefs = prefs && typeof prefs === "object" ? prefs : {};
+    const minBudget = parseBudgetNumber(
+      safePrefs.budgetMinMonthly ?? safePrefs.budgetMin ?? safePrefs.budget_min
+    );
+    const maxBudget = parseBudgetNumber(
+      safePrefs.budgetMaxMonthly ?? safePrefs.budgetMax ?? safePrefs.budget_max
+    );
+    return minBudget != null || maxBudget != null;
+  };
+
+  const buildDiscoverPayloadFromCarriePrefs = (prefs) => {
+    const safePrefs = prefs && typeof prefs === "object" ? prefs : {};
+    const rawLocation =
+      String(safePrefs.searchLocation || safePrefs.locationQuery || "").trim();
+    const zipFromPrefs = toFiveDigitZip(safePrefs.searchZipCode);
+    const zipFromLocation = toFiveDigitZip(rawLocation.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1]);
+    const zipCode = zipFromPrefs || zipFromLocation;
+    const location = rawLocation || zipCode;
+    const careLevels = Array.isArray(safePrefs.careLevels)
+      ? safePrefs.careLevels.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+    const maxDistance =
+      toPositiveNumberOrNull(
+        safePrefs.maxDistanceMiles ??
+          safePrefs.max_distance_miles ??
+          DEFAULT_SEARCH_MAX_MILES,
+      ) ?? DEFAULT_SEARCH_MAX_MILES;
+
+    return {
+      zip_code: zipCode || location,
+      location,
+      care_levels: careLevels.length > 0 ? careLevels : resolvedCareLevels,
+      amenities: Array.isArray(safePrefs.amenityMustHaves)
+        ? safePrefs.amenityMustHaves.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+      services: [],
+      keywords: [],
+      max_distance_miles: Math.round(maxDistance),
+    };
+  };
+
   const sendCarrieReply = async (text, { restoreToQuery, restoreToComposer } = {}) => {
     const trimmed = text.trim();
     if (!trimmed || chatSending) return;
@@ -317,19 +375,52 @@ export default function SearchBar() {
     try {
       const { data } = await sendChatMessages(apiPayload);
       const reply = data?.message;
+      let matches = Array.isArray(data?.matchedFacilities) ? data.matchedFacilities : [];
+      const matchedPreferences = data?.matchedPreferences;
+
+      if (matchedPreferences) {
+        const discoverPayload = buildDiscoverPayloadFromCarriePrefs(matchedPreferences);
+        const canRunDiscover =
+          String(discoverPayload?.location || "").trim().length > 0 ||
+          String(discoverPayload?.zip_code || "").trim().length > 0;
+
+        if (canRunDiscover) {
+          try {
+            const discoverRes = await postDiscoverFacilities(discoverPayload);
+            const discoverMatches = Array.isArray(discoverRes?.data?.facilities)
+              ? discoverRes.data.facilities
+              : [];
+            if (discoverMatches.length > 0 || matches.length === 0) {
+              matches = discoverMatches;
+            }
+          } catch (discoverErr) {
+            console.error(
+              "[SearchBar] discover fetch from chat preferences failed:",
+              discoverErr?.message || discoverErr
+            );
+          }
+        }
+
+        setIsChatOpen(false);
+        navigate("/care-explorer", {
+          state: {
+            carrieMatches: Array.isArray(matches) ? matches : [],
+            carrieFilters: {
+              ...(matchedPreferences || {}),
+              // Preserve user-entered budget range from chat when present; otherwise keep default slider.
+              skipInitialBudgetPrefill: !hasBudgetRangeInCarriePrefs(matchedPreferences),
+            },
+            fromCarrie: true,
+          },
+        });
+        return;
+      }
+
       if (reply?.role === "assistant" && reply?.content) {
         setChatMessages((prev) => [
           ...prev,
           { id: `${Date.now()}-a`, role: "assistant", text: reply.content },
         ]);
-        const matches = data?.matchedFacilities;
-        const matchedPreferences = data?.matchedPreferences;
-        if (Array.isArray(matches) && matches.length > 0) {
-          setIsChatOpen(false);
-          navigate("/care-explorer", {
-            state: { carrieMatches: matches, carrieFilters: matchedPreferences, fromCarrie: true },
-          });
-        }
       } else {
         toast.error("No reply from Carrie");
         setChatMessages((prev) => prev.filter((m) => m.id !== userEntry.id));

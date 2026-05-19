@@ -8,18 +8,9 @@ import {
 import Facility from "../models/facilityModel.js";
 import {
   extractIntakeJsonBlock,
-  formatRecommendationsForChat,
   normalizeIntakePreferences,
   parseBudgetLikeValue,
-  rankFacilities,
 } from "../services/matchingEngine.js";
-import { getCareMatchResults } from "../scripts/results.js";
-import {
-  formatAiDiscoveryMatchesForChat,
-  intakePreferencesToAiSearchParams,
-  mapAiDiscoveryFacilityToMatchRow,
-} from "../services/aiDiscoveryBridge.js";
-import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 
 const ASSISTED_ONLY_CARE_LEVEL = "assisted living";
 
@@ -122,6 +113,31 @@ const inferBudgetFromText = (text) => {
     const a = parseBoundedBudgetAmount(range[1]);
     const b = parseBoundedBudgetAmount(range[2]);
     if (a != null && b != null) return Math.max(a, b);
+  }
+
+  // Prefer explicit budget phrasing so ZIP/radius numbers in the same sentence do not interfere.
+  const budgetPhraseMatches = [
+    ...raw.matchAll(
+      /\b(?:budget|monthly|per month|up to|under|maximum|max|around|about)\b[^$\d]{0,20}\$?\s*(\d[\d,]*(?:\.\d+)?\s*k?)\b/g
+    ),
+  ];
+  for (let i = budgetPhraseMatches.length - 1; i >= 0; i -= 1) {
+    const candidate = parseBoundedBudgetAmount(budgetPhraseMatches[i]?.[1]);
+    if (candidate != null) return candidate;
+  }
+
+  const dollarMatches = [...raw.matchAll(/\$\s*(\d[\d,]*(?:\.\d+)?\s*k?)\b/g)];
+  for (let i = dollarMatches.length - 1; i >= 0; i -= 1) {
+    const candidate = parseBoundedBudgetAmount(dollarMatches[i]?.[1]);
+    if (candidate != null) return candidate;
+  }
+
+  const monthlyAmountMatches = [
+    ...raw.matchAll(/\b(\d[\d,]*(?:\.\d+)?\s*k?)\s*(?:\/\s*mo|per\s*month|monthly)\b/g),
+  ];
+  for (let i = monthlyAmountMatches.length - 1; i >= 0; i -= 1) {
+    const candidate = parseBoundedBudgetAmount(monthlyAmountMatches[i]?.[1]);
+    if (candidate != null) return candidate;
   }
 
   const hasBudgetHints =
@@ -358,29 +374,6 @@ const sanitizeCarrieChatText = (text) =>
     .replace(/\*/g, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim();
-
-const buildFriendlyDiscoveryFailureMessage = (error, aiParams) => {
-  const message = String(error?.message || "").trim();
-  const location = String(aiParams?.location || "").trim();
-  const zip = String(aiParams?.zip_code || "").trim();
-  const locationLabel = [location, zip].filter(Boolean).join(" ");
-
-  if (/geographic validation/i.test(message)) {
-    return (
-      "\n\n---\n**Your matches**\n" +
-      `I couldn’t confirm enough live communities directly in **${locationLabel || "your requested area"}** yet.\n\n` +
-      "Try one of these:\n" +
-      "- keep the same care type, but widen the area to a nearby city or metro\n" +
-      "- double-check the ZIP code and state\n" +
-      "- increase the distance radius a bit and ask me to search again\n"
-    );
-  }
-
-  return (
-    "\n\n---\n**Your matches**\n" +
-    "_I couldn’t load live suggestions just now. Please try again in a moment._"
-  );
-};
 
 /**
  * POST /api/chat
@@ -694,80 +687,15 @@ export const sendChat = catchAsyncError(async (req, res, next) => {
         .replace(/\s+/g, " ")
         .trim();
     }
-    const aiParams = intakePreferencesToAiSearchParams(prefs);
-    let aiMatchRows = [];
-    let aiMatchError = null;
-    if (aiParams) {
-      try {
-        const aiOut = await getCareMatchResults(aiParams);
-        aiMatchRows = (aiOut.results || []).map((row, idx) =>
-          mapAiDiscoveryFacilityToMatchRow(row, idx)
-        );
-        if (aiMatchRows.length > 0 && prefs) {
-          const searchZip =
-            String(prefs.searchZipCode || "")
-              .replace(/\D/g, "")
-              .slice(0, 5) ||
-            String(prefs.searchLocation || "").match(/\b(\d{5})\b/)?.[1] ||
-            "";
-          aiMatchRows = await enrichDiscoveryFacilitiesWithPersonalizedScores(
-            aiMatchRows,
-            {
-              searchZip,
-              locationText: String(prefs.searchLocation || "").trim(),
-              maxDistanceMiles: prefs.maxDistanceMiles ?? null,
-              careLevels: prefs.careLevels || [],
-              seedLat: null,
-              seedLng: null,
-              budgetMinMonthly: prefs.budgetMinMonthly ?? null,
-              budgetMaxMonthly: prefs.budgetMaxMonthly ?? null,
-            },
-            undefined
-          );
-        }
-      } catch (err) {
-        aiMatchError = err;
-        console.error("[sendChat] AI discovery search failed:", err?.message || err);
-      }
-    }
-
-    let finalMatchRows = aiMatchRows;
-    let fallbackRuleBasedSection = "";
-    if (finalMatchRows.length === 0) {
-      try {
-        const localFacilities = await Facility.find()
-          .select(
-            "name address pricing care_levels website specialty description source_platform is_external amenities services external_data images"
-          )
-          .lean();
-        const fallbackRows = rankFacilities(localFacilities, prefs, { limit: 6 });
-        if (fallbackRows.length > 0) {
-          finalMatchRows = fallbackRows;
-          fallbackRuleBasedSection = formatRecommendationsForChat(localFacilities, prefs);
-        }
-      } catch (err) {
-        console.error("[sendChat] Rule-based fallback failed:", err?.message || err);
-      }
-    }
-
-    const matchSection = finalMatchRows.length > 0
-      ? aiMatchRows.length > 0
-        ? formatAiDiscoveryMatchesForChat(aiMatchRows, 6)
-        : fallbackRuleBasedSection
-      : aiMatchError
-        ? buildFriendlyDiscoveryFailureMessage(aiMatchError, aiParams)
-      : aiParams
-        ? "\n\n---\n**Your matches**\n_I couldn’t load live suggestions just now. Try again in a moment._"
-        : "\n\n---\n**Your matches**\n_Add a **ZIP code** with your city or state (for example, “Boston, MA 02108”) so I can run live discovery._";
-
-    finalContent = `Here's what I pulled together from our conversation — your best-fit communities are below.${matchSection}`;
+    finalContent =
+      "Perfect — I have your details. Fetching live communities now and opening them in Care Explorer.";
     if (prefs) {
       // Keep budget aliases for client compatibility across flows.
       prefs.budgetMin = prefs.budgetMinMonthly;
       prefs.budgetMax = prefs.budgetMaxMonthly;
       prefs.budget_min = prefs.budgetMinMonthly;
       prefs.budget_max = prefs.budgetMaxMonthly;
-      matchedFacilities = finalMatchRows;
+      matchedFacilities = [];
       matchedPreferences = prefs;
     }
   }
