@@ -614,15 +614,30 @@ const fetchExternalZipSearchMatches = async (
     Number.isFinite(Number(maxDistanceMiles)) && Number(maxDistanceMiles) > 0
       ? Number(maxDistanceMiles)
       : CARING_DEFAULT_DISTANCE_MILES;
+  // Caring's own distance facet can return empty results for very small radii (e.g. 5 miles)
+  // even when close communities exist. Fetch from a wider upstream radius and apply our own
+  // precise haversine distance gate locally.
+  const upstreamDistanceMiles = Math.max(
+    25,
+    Math.min(60, Math.ceil(requestedDistanceMiles * 2))
+  );
   const fetchStartedAt = Date.now();
+  // Caring's "recommended" ordering does not always surface the nearest facilities first.
+  // For tight radii, scan deeper before giving up so 1-3 mile matches are not skipped.
   const distanceTargetPageCount =
-    requestedDistanceMiles >= 50
+    requestedDistanceMiles <= 10
       ? 6
-      : requestedDistanceMiles >= 35
-        ? 4
-        : requestedDistanceMiles >= 25
-          ? 3
-          : 2;
+      : requestedDistanceMiles <= 25
+        ? 5
+        : requestedDistanceMiles <= 35
+          ? 4
+          : requestedDistanceMiles <= 50
+            ? 3
+            : 2;
+  const minPagesBeforeStaleStop =
+    requestedDistanceMiles <= 10 ? 6 : requestedDistanceMiles <= 25 ? 5 : 3;
+  const maxConsecutiveStalePages =
+    requestedDistanceMiles <= 10 ? 5 : requestedDistanceMiles <= 25 ? 4 : 2;
   const targetPageCount = distanceTargetPageCount;
 
   const buildCaringParams = (keyword, includeLatLng, page) =>
@@ -632,7 +647,7 @@ const fetchExternalZipSearchMatches = async (
       page: String(page),
       sortBy: "recommended",
       "criteria[careType]": "assisted-living",
-      "criteria[distanceInMiles]": String(Math.max(1, Math.ceil(requestedDistanceMiles))),
+      "criteria[distanceInMiles]": String(Math.max(1, Math.ceil(upstreamDistanceMiles))),
       "criteria[domain]": "caring.com",
       "criteria[keyword]": keyword,
       ...(includeLatLng &&
@@ -738,7 +753,9 @@ const fetchExternalZipSearchMatches = async (
         );
       }
       if (mappedRows.length === 0) break;
-      if (stalePageCount >= 2) break;
+      if (page >= minPagesBeforeStaleStop && stalePageCount >= maxConsecutiveStalePages) {
+        break;
+      }
       page += 1;
     }
 
