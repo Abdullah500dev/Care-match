@@ -28,7 +28,6 @@ import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
 import {
   postDiscoverFacilities,
-  postMatchRecommendations,
 } from "@/services/matchService";
 import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
 import { getUser } from "@/store/auth/authSlice";
@@ -352,32 +351,16 @@ export default function IntakeSearch() {
 
       const startedAt = Date.now();
       try {
-        let recs = [];
-        let liveDiscoveryError = null;
-        try {
-          const { data } = await postDiscoverFacilities(discoverPayload);
-          recs = Array.isArray(data?.facilities) ? data.facilities : [];
-        } catch (error) {
-          liveDiscoveryError = error;
-        }
+        const { data } = await postDiscoverFacilities(discoverPayload);
+        const recs = Array.isArray(data?.facilities) ? data.facilities : [];
+        if (cancelled) return;
 
-        // Fallback when live discovery errors OR returns zero rows.
         if (recs.length === 0) {
-          // Fallback keeps the old non-scraping matcher flow alive.
-          const { data } = await postMatchRecommendations(matcherPayload);
-          recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
-        }
-
-        if (recs.length === 0 && liveDiscoveryError) {
-          const liveErrorMessage =
-            liveDiscoveryError?.response?.data?.message ||
-            liveDiscoveryError?.message ||
-            "Live discovery could not return any matches.";
           toast.error("No matches found yet", {
-            description: String(liveErrorMessage),
+            description:
+              "We could not find facilities for the selected filters. Try expanding distance or budget.",
           });
         }
-        if (cancelled) return;
 
         const elapsed = Date.now() - startedAt;
         const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
@@ -393,6 +376,9 @@ export default function IntakeSearch() {
         }, remaining);
       } catch {
         if (cancelled) return;
+        toast.error("Could not fetch matches", {
+          description: "Please try again in a moment.",
+        });
         const elapsed = Date.now() - startedAt;
         const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
         window.setTimeout(() => {

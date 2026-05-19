@@ -1434,6 +1434,20 @@ const CareExplorer = () => {
     const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
     const effectiveMinBudget = parsedMinBudget ?? Math.min(1000, safeMax);
     const safeMin = Math.min(safeMax, Math.max(1000, Math.round(effectiveMinBudget)));
+    const intakeAmenitySelections = [
+      ...(Array.isArray(carrieFilters?.displayCriteria?.mustHaveNeeds)
+        ? carrieFilters.displayCriteria.mustHaveNeeds
+        : []),
+      ...(Array.isArray(carrieFilters?.amenityMustHaves)
+        ? carrieFilters.amenityMustHaves
+        : []),
+      ...(Array.isArray(carrieFilters?.amenities) ? carrieFilters.amenities : []),
+    ];
+    const mappedAmenitySelections = mapSelectionsToOptions(
+      intakeAmenitySelections,
+      amenityOptions,
+      AMENITY_ALIASES,
+    );
 
     const nextFilters = {
       ...initialFilters,
@@ -1451,9 +1465,10 @@ const CareExplorer = () => {
           CARE_TYPE_ALIASES,
         )
         : initialFilters.selectedCareTypes,
-      // Keep initial Carrie handoff broad: amenity must-haves already inform discovery payload
-      // and ranking, but forcing them as strict client-side filters can empty the list.
-      selectedAmenities: initialFilters.selectedAmenities,
+      selectedAmenities:
+        mappedAmenitySelections.length > 0
+          ? mappedAmenitySelections
+          : initialFilters.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
           carrieFilters.availability.trim()
