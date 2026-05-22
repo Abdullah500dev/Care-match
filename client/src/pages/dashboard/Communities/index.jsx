@@ -33,6 +33,7 @@ import {
   formatZipInput,
   validateAddressZipPair,
 } from "@/lib/facilityAddressGeo";
+import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
@@ -197,6 +198,7 @@ export default function Communities() {
     name: "",
     email: "",
     phone: "",
+    website: "",
     address: "",
     zip_code: "",
     services: [],
@@ -308,6 +310,7 @@ export default function Communities() {
       name: "",
       email: "",
       phone: "",
+      website: "",
       address: "",
       zip_code: "",
       services: [],
@@ -337,6 +340,7 @@ export default function Communities() {
       name: facility.name || "",
       email: facility.email || "",
       phone: facility.phone || "",
+      website: facility.website || "",
       address: facility.address || "",
       zip_code: getFacilityZipCode(facility),
       services: Array.isArray(facility.services) ? [...facility.services] : [],
@@ -458,6 +462,14 @@ export default function Communities() {
       return;
     }
 
+    const normalizedWebsite = normalizeFacilityWebsite(form.website);
+    if (String(form.website || "").trim() && !normalizedWebsite) {
+      toast.error("Invalid website", {
+        description: "Enter a valid URL (e.g. https://www.yourfacility.com or yourfacility.com).",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -465,6 +477,7 @@ export default function Communities() {
       payload.append("name", form.name);
       payload.append("email", form.email);
       payload.append("phone", form.phone);
+      payload.append("website", normalizedWebsite);
       payload.append("address", form.address);
       payload.append("zip_code", zipDigits);
       payload.append("pricing", form.pricing);
@@ -806,6 +819,23 @@ export default function Communities() {
                   placeholder="4500 or 4500 - 6800 (numbers only)"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                Website
+              </label>
+              <Input
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                value={form.website}
+                onChange={(e) => handleInput("website", e.target.value)}
+                placeholder="https://www.yourfacility.com"
+              />
+              <p className="text-xs text-slate-500">
+                Optional. Shown when families click Explore on Care Explorer.
+              </p>
             </div>
 
             <FacilityAddressZipFields

@@ -31,6 +31,11 @@ import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
+import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
+import {
+  isAggregatorListingUrl,
+  resolveOperatorWebsite,
+} from "../utils/isAggregatorListingUrl.js";
 import {
   APIFY_DISABLED_RESULT,
   isApifyIntegrationEnabled,
@@ -233,9 +238,10 @@ const tryParseExternalRowToAiFacility = (row, source, fallbackContext = {}) => {
     ) || normalizeFiveDigitZip(fallbackContext.zipCode);
 
   const fullAddress = buildFullAddress(streetAddress, city, state, zipCode);
-  const website = toOptionalString(
+  const websiteRaw = toOptionalString(
     pickFirstNonEmpty(row, ["website", "url", "link", "profileUrl", "canonicalUrl"])
   );
+  const website = isAggregatorListingUrl(websiteRaw) ? "" : websiteRaw;
   const phone = toOptionalString(
     pickFirstNonEmpty(row, ["phone", "phoneNumber", "telephone", "formattedPhoneNumber"])
   );
@@ -305,7 +311,7 @@ const tryParseExternalRowToAiFacility = (row, source, fallbackContext = {}) => {
       zip_code: zipCode,
       country: "US",
     },
-    provider_url: website || mapsUrl,
+    provider_url: websiteRaw || website || mapsUrl,
     google_places: {
       place_id: placeId,
       maps_url: mapsUrl,
@@ -427,7 +433,7 @@ const mapCaringPayloadToMatchRows = (payload, fallbackContext = {}) => {
         name: toOptionalString(row.name),
         email: syntheticExternalEmail("Caring", row.id || row.slug || row.name),
         phone: toOptionalString(row.phoneNumber),
-        website: row.url ? `https://www.caring.com${String(row.url).trim()}` : "",
+        website: "",
         description,
         services: careLevels,
         amenities: caringAmenities,
@@ -1360,7 +1366,11 @@ const toExternalFacilityDoc = (normalizedRow, actorId = APIFY_DEFAULT_ACTOR_ID) 
     name: providerName || "Unknown Provider",
     phone: phoneNumber || "N/A",
     address,
-    website: providerUrl || googlePlaces?.website || googlePlaces?.maps_url || "",
+    website: resolveOperatorWebsite(
+      googlePlaces?.website,
+      providerUrl,
+      googlePlaces?.maps_url,
+    ),
     specialty:
       actorId.includes("google-places") && Array.isArray(googlePlaces?.additional_info)
         ? [...new Set((googlePlaces.additional_info || []).slice(0, 6))]
@@ -1704,7 +1714,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     phone,
     address,
     zip_code: normalizedZip,
-    website: toOptionalString(website),
+    website: normalizeFacilityWebsite(website),
     specialty: normalizedSpecialty,
     description: toOptionalString(description),
     services: normalizedServices,
@@ -1911,7 +1921,7 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
   }
 
   if (website != null) {
-    facility.website = toOptionalString(website);
+    facility.website = normalizeFacilityWebsite(website);
   }
   if (specialty != null) {
     facility.specialty = toArray(specialty);
@@ -2072,7 +2082,7 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   facility.phone = phone;
   facility.address = address;
   facility.zip_code = normalizedZip;
-  facility.website = toOptionalString(website);
+  facility.website = normalizeFacilityWebsite(website);
   facility.specialty = normalizedSpecialty;
   facility.description = toOptionalString(description);
   facility.services = normalizedServices;
