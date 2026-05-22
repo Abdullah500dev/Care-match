@@ -30,6 +30,7 @@ import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
+import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
 import {
   APIFY_DISABLED_RESULT,
   isApifyIntegrationEnabled,
@@ -484,7 +485,32 @@ const distanceMilesBetweenPoints = (aLat, aLng, bLat, bLng) => {
   return 2 * earthRadiusMiles * Math.asin(Math.sqrt(h));
 };
 
-const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles) => {
+const ownedRowMatchesLocationWithoutCoords = (row, searchZip, locationText) => {
+  if (row?.is_external !== false) return false;
+
+  const fz = normalizeFiveDigitZip(row?.zip_code || row?.external_data?.zip_code);
+  if (searchZip && fz && searchZip === fz) return true;
+
+  const addr = String(row?.address || "").toLowerCase();
+  const loc = String(locationText || "").toLowerCase().trim();
+  if (!addr || !loc) return false;
+
+  const cityHint = loc.split(",")[0]?.trim();
+  if (cityHint && cityHint.length >= 3 && addr.includes(cityHint)) return true;
+
+  const stateMatch = loc.match(/\b([a-z]{2})\b/);
+  if (stateMatch && addr.includes(stateMatch[1])) return true;
+
+  return false;
+};
+
+const filterRowsByAnchorDistance = (
+  rows,
+  anchorLat,
+  anchorLng,
+  maxDistanceMiles,
+  { searchZip = "", locationText = "" } = {}
+) => {
   const list = Array.isArray(rows) ? rows : [];
   const maxMiles =
     Number.isFinite(Number(maxDistanceMiles)) && Number(maxDistanceMiles) > 0
@@ -494,13 +520,19 @@ const filterRowsByAnchorDistance = (rows, anchorLat, anchorLng, maxDistanceMiles
   if (maxMiles == null) return list;
 
   if (!Number.isFinite(anchorLat) || !Number.isFinite(anchorLng)) {
-    return [];
+    return list.filter((row) =>
+      ownedRowMatchesLocationWithoutCoords(row, searchZip, locationText)
+    );
   }
+
+  const normalizedSearchZip = normalizeFiveDigitZip(searchZip);
 
   return list.filter((row) => {
     const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
     const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return ownedRowMatchesLocationWithoutCoords(row, normalizedSearchZip, locationText);
+    }
     const miles = distanceMilesBetweenPoints(anchorLat, anchorLng, lat, lng);
     return Number.isFinite(miles) && miles <= maxMiles;
   });
@@ -1612,6 +1644,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    zip_code,
     website,
     specialty,
     description,
@@ -1626,6 +1659,11 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
 
   if (!validator.validate(email)) {
     return next(new ErrorHandler("Invalid facility email", 400));
+  }
+
+  const normalizedZip = normalizeFiveDigitZip(zip_code);
+  if (normalizedZip.length !== 5) {
+    return next(new ErrorHandler("A valid 5-digit ZIP code is required", 400));
   }
 
   const existingUser = await User.findOne({ email });
@@ -1665,6 +1703,7 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    zip_code: normalizedZip,
     website: toOptionalString(website),
     specialty: normalizedSpecialty,
     description: toOptionalString(description),
@@ -1783,6 +1822,17 @@ const assertFacilityUser = async (userId) => {
   return user;
 };
 
+export const resolveAddressZip = catchAsyncError(async (req, res) => {
+  const { resolveZipForAddressQuery } = await import("../services/addressZipResolver.js");
+  const address = String(req.query.address || req.body?.address || "").trim();
+  const resolved = await resolveZipForAddressQuery(address);
+
+  res.status(200).json({
+    success: true,
+    ...resolved,
+  });
+});
+
 export const getMyFacility = catchAsyncError(async (req, res, next) => {
   const facilityUser = await assertFacilityUser(req.user?.id);
   if (!facilityUser) {
@@ -1815,6 +1865,7 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
     name,
     phone,
     address,
+    zip_code,
     pricing,
     website,
     specialty,
@@ -1845,6 +1896,14 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
     const trimmed = String(address).trim();
     if (!trimmed) return next(new ErrorHandler("Address cannot be empty", 400));
     facility.address = trimmed;
+  }
+
+  if (zip_code != null) {
+    const normalizedZip = normalizeFiveDigitZip(zip_code);
+    if (normalizedZip.length !== 5) {
+      return next(new ErrorHandler("A valid 5-digit ZIP code is required", 400));
+    }
+    facility.zip_code = normalizedZip;
   }
 
   if (pricing != null) {
@@ -1925,6 +1984,7 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
     email,
     phone,
     address,
+    zip_code,
     website,
     specialty,
     description,
@@ -1939,6 +1999,11 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
 
   if (!validator.validate(email)) {
     return next(new ErrorHandler("Invalid facility email", 400));
+  }
+
+  const normalizedZip = normalizeFiveDigitZip(zip_code);
+  if (normalizedZip.length !== 5) {
+    return next(new ErrorHandler("A valid 5-digit ZIP code is required", 400));
   }
 
   const normalizedEmail = email.toLowerCase().trim();
@@ -2006,6 +2071,7 @@ export const updateFacility = catchAsyncError(async (req, res, next) => {
   facility.email = normalizedEmail;
   facility.phone = phone;
   facility.address = address;
+  facility.zip_code = normalizedZip;
   facility.website = toOptionalString(website);
   facility.specialty = normalizedSpecialty;
   facility.description = toOptionalString(description);
@@ -2246,66 +2312,146 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   }
 
   let externalRows = [];
+  let ownedRows = [];
   try {
-    externalRows = await fetchExternalZipSearchMatches(
-      {
+    [externalRows, ownedRows] = await Promise.all([
+      fetchExternalZipSearchMatches(
+        {
+          zipCode,
+          location,
+          maxDistanceMiles: payload.max_distance_miles,
+          latitude,
+          longitude,
+        },
+        fetchSignal
+      ),
+      findOwnedFacilitiesForDiscover({
         zipCode,
         location,
-        maxDistanceMiles: payload.max_distance_miles,
-        latitude,
-        longitude,
-      },
-      fetchSignal
-    );
+        careLevels,
+      }),
+    ]);
+  } catch (error) {
+    console.warn("[discover] external fetch error:", error?.message || error);
+    if (!ownedRows.length) {
+      ownedRows = await findOwnedFacilitiesForDiscover({
+        zipCode,
+        location,
+        careLevels,
+      });
+    }
   } finally {
     fetchController.abort();
   }
 
-  const deduped = dedupeMatchRows(externalRows);
-  let constrainedRows = filterRowsByAnchorDistance(
-    deduped,
+  if (ownedRows.length > 0) {
+    await hydrateMissingRowCoordinates(ownedRows, undefined, 30);
+  }
+
+  const deduped = dedupeMatchRows([...ownedRows, ...externalRows]);
+  const distanceFilterCtx = {
+    searchZip: normalizeFiveDigitZip(zipCode),
+    locationText: location,
+  };
+
+  const partnerRows = deduped.filter((row) => row?.is_external === false);
+  const externalOnlyRows = deduped.filter((row) => row?.is_external !== false);
+
+  const filterPartnerRow = (row) => {
+    const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
+    const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
+    const maxMiles =
+      Number.isFinite(Number(payload.max_distance_miles)) && Number(payload.max_distance_miles) > 0
+        ? Number(payload.max_distance_miles)
+        : null;
+
+    if (ownedRowMatchesLocationWithoutCoords(row, distanceFilterCtx.searchZip, distanceFilterCtx.locationText)) {
+      return true;
+    }
+
+    if (
+      maxMiles != null &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude)
+    ) {
+      const miles = distanceMilesBetweenPoints(latitude, longitude, lat, lng);
+      return Number.isFinite(miles) && miles <= maxMiles;
+    }
+
+    return maxMiles == null;
+  };
+
+  let constrainedPartners = partnerRows.filter(filterPartnerRow);
+  let constrainedExternal = filterRowsByAnchorDistance(
+    externalOnlyRows,
     latitude,
     longitude,
-    payload.max_distance_miles
+    payload.max_distance_miles,
+    distanceFilterCtx
   );
 
   if (
-    constrainedRows.length === 0 &&
-    deduped.length > 0 &&
+    constrainedExternal.length === 0 &&
+    externalOnlyRows.length > 0 &&
     Number.isFinite(latitude) &&
     Number.isFinite(longitude) &&
     payload.max_distance_miles
   ) {
-    await hydrateMissingRowCoordinates(deduped, fetchSignal, 40);
-    constrainedRows = filterRowsByAnchorDistance(
-      deduped,
+    await hydrateMissingRowCoordinates(externalOnlyRows, undefined, 40);
+    constrainedExternal = filterRowsByAnchorDistance(
+      externalOnlyRows,
       latitude,
       longitude,
-      payload.max_distance_miles
+      payload.max_distance_miles,
+      distanceFilterCtx
     );
   }
 
+  let constrainedRows = dedupeMatchRows([...constrainedPartners, ...constrainedExternal]);
+
   const effectiveRows = constrainedRows;
-  const facilities = await enrichDiscoveryFacilitiesWithPersonalizedScores(
+  const enrichCtx = {
+    searchZip: normalizeFiveDigitZip(zipCode),
+    locationText: location,
+    maxDistanceMiles: payload.max_distance_miles ?? null,
+    careLevels,
+    seedLat: latitude,
+    seedLng: longitude,
+    budgetMinMonthly: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
+    budgetMaxMonthly: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
+  };
+
+  let facilities = await enrichDiscoveryFacilitiesWithPersonalizedScores(
     effectiveRows,
-    {
-      searchZip: normalizeFiveDigitZip(zipCode),
-      locationText: location,
-      maxDistanceMiles: payload.max_distance_miles ?? null,
-      careLevels,
-      seedLat: latitude,
-      seedLng: longitude,
-      budgetMinMonthly: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
-      budgetMaxMonthly: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,
-    },
-    fetchSignal
+    enrichCtx,
+    undefined
   );
+
+  const scoredIds = new Set((facilities || []).map((f) => String(f.facilityId || "")));
+  const missingPartners = constrainedPartners.filter(
+    (row) => !scoredIds.has(String(row.facilityId || ""))
+  );
+  if (missingPartners.length > 0) {
+    const partnerScored = await enrichDiscoveryFacilitiesWithPersonalizedScores(
+      missingPartners,
+      enrichCtx,
+      undefined
+    );
+    facilities = dedupeMatchRows([...partnerScored, ...facilities]);
+  }
   console.log("[discover] pipeline counts:", {
+    ownedRows: ownedRows.length,
     externalRows: Array.isArray(externalRows) ? externalRows.length : 0,
     deduped: deduped.length,
+    constrainedPartners: constrainedPartners.length,
+    constrainedExternal: constrainedExternal.length,
     constrainedByDistance: constrainedRows.length,
     candidatesForEnrichment: effectiveRows.length,
     finalScored: facilities.length,
+    partnersInResponse: facilities.filter((f) => String(f.facilityId || "").startsWith("owned-"))
+      .length,
     enrichBudgetHintMonthly: {
       min: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
       max: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,

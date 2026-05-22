@@ -41,6 +41,19 @@ const facilitySchema = new mongoose.Schema(
       required: [true, "Facility address is required"],
       trim: true,
     },
+    zip_code: {
+      type: String,
+      default: "",
+      trim: true,
+      validate: {
+        validator(value) {
+          if (this.is_external) return true;
+          const zip = String(value || "").replace(/\D/g, "").slice(0, 5);
+          return !zip || zip.length === 5;
+        },
+        message: "ZIP code must be a 5-digit US postal code",
+      },
+    },
     website: {
       type: String,
       default: "",

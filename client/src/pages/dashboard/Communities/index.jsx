@@ -28,7 +28,11 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
-import GooglePlacesAddressInput from "@/components/dashboard/facilities/GooglePlacesAddressInput";
+import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import {
+  formatZipInput,
+  validateAddressZipPair,
+} from "@/lib/facilityAddressGeo";
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
@@ -101,6 +105,13 @@ function formatPricingInput(value) {
   const suffix = monthly ? "/month" : "";
   if (!out && !suffix) return "";
   return out + suffix;
+}
+
+function getFacilityZipCode(facility) {
+  if (!facility || typeof facility !== "object") return "";
+  const direct = formatZipInput(facility.zip_code);
+  if (direct) return direct;
+  return formatZipInput(facility.external_data?.zip_code);
 }
 
 function getFacilityPricingValue(facility) {
@@ -187,6 +198,7 @@ export default function Communities() {
     email: "",
     phone: "",
     address: "",
+    zip_code: "",
     services: [],
     amenities: [],
     careLevels: [],
@@ -297,6 +309,7 @@ export default function Communities() {
       email: "",
       phone: "",
       address: "",
+      zip_code: "",
       services: [],
       amenities: [],
       careLevels: [],
@@ -325,6 +338,7 @@ export default function Communities() {
       email: facility.email || "",
       phone: facility.phone || "",
       address: facility.address || "",
+      zip_code: getFacilityZipCode(facility),
       services: Array.isArray(facility.services) ? [...facility.services] : [],
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
@@ -428,6 +442,22 @@ export default function Communities() {
 
   const handleSubmitFacility = async (e) => {
     e.preventDefault();
+    const zipDigits = formatZipInput(form.zip_code);
+    if (zipDigits.length !== 5) {
+      toast.error("ZIP code required", {
+        description: "Enter a valid 5-digit US ZIP code (e.g. 98101).",
+      });
+      return;
+    }
+
+    const geoCheck = await validateAddressZipPair(form.address, zipDigits);
+    if (geoCheck.state === "mismatch") {
+      toast.error("Address and ZIP do not match", {
+        description: geoCheck.message,
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -436,6 +466,7 @@ export default function Communities() {
       payload.append("email", form.email);
       payload.append("phone", form.phone);
       payload.append("address", form.address);
+      payload.append("zip_code", zipDigits);
       payload.append("pricing", form.pricing);
       form.services.forEach((service) => payload.append("services", service));
       form.amenities.forEach((amenity) => payload.append("amenities", amenity));
@@ -777,18 +808,13 @@ export default function Communities() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                Address
-              </label>
-              <GooglePlacesAddressInput
-                enabled={modalOpen}
-                value={form.address}
-                onChange={(e) => handleInput("address", e.target.value)}
-                placeholder="Start typing street or city — select from suggestions"
-                required
-              />
-            </div>
+            <FacilityAddressZipFields
+              enabled={modalOpen}
+              address={form.address}
+              zipCode={form.zip_code}
+              onAddressChange={(e) => handleInput("address", e.target.value)}
+              onZipCodeChange={(zip) => handleInput("zip_code", zip)}
+            />
 
             <div className="mt-8 space-y-3">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
