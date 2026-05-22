@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { normalizeFacilityWebsite } from "../normalizeFacilityWebsite.js";
 
 const stringOrArray = Joi.alternatives().try(
   Joi.array().items(Joi.string().trim()),
@@ -23,13 +24,29 @@ const joiZipCode = Joi.string()
     "string.empty": "ZIP code is required",
   });
 
+const joiWebsite = Joi.string()
+  .trim()
+  .optional()
+  .allow("")
+  .custom((value, helpers) => {
+    if (!value) return "";
+    const normalized = normalizeFacilityWebsite(value);
+    if (!normalized) {
+      return helpers.error("any.invalid");
+    }
+    return normalized;
+  })
+  .messages({
+    "any.invalid": "Website must be a valid URL (e.g. https://example.com)",
+  });
+
 const joiCreateFacilitySchema = Joi.object({
   name: Joi.string().trim().required(),
   email: Joi.string().email().required(),
   phone: Joi.string().trim().required(),
   address: Joi.string().trim().required(),
   zip_code: joiZipCode,
-  website: Joi.string().uri().optional().allow(""),
+  website: joiWebsite,
   specialty: stringOrArray.optional(),
   description: Joi.string().trim().optional().allow(""),
   services: stringOrArray.optional(),
@@ -48,7 +65,7 @@ const joiUpdateFacilitySchema = Joi.object({
   phone: Joi.string().trim().required(),
   address: Joi.string().trim().required(),
   zip_code: joiZipCode,
-  website: Joi.string().uri().optional().allow(""),
+  website: joiWebsite,
   specialty: stringOrArray.optional(),
   description: Joi.string().trim().optional().allow(""),
   services: stringOrArray.optional(),

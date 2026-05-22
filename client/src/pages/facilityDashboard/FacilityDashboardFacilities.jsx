@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/api";
 import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
 import { formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
+import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
 
 const EMPTY_FORM = {
   name: "",
   email: "",
   phone: "",
+  website: "",
   address: "",
   zip_code: "",
   pricing: "",
@@ -44,6 +46,7 @@ export default function FacilityDashboardFacilities() {
       name: doc?.name || "",
       email: doc?.email || "",
       phone: doc?.phone || "",
+      website: doc?.website || "",
       address: doc?.address || "",
       zip_code: formatZipInput(doc?.zip_code || doc?.external_data?.zip_code),
       pricing: doc?.pricing || "",
@@ -115,9 +118,18 @@ export default function FacilityDashboardFacilities() {
       return;
     }
 
+    const normalizedWebsite = normalizeFacilityWebsite(form.website);
+    if (String(form.website || "").trim() && !normalizedWebsite) {
+      toast.error("Invalid website", {
+        description: "Enter a valid URL (e.g. https://www.yourfacility.com).",
+      });
+      return;
+    }
+
     const payload = {
       name: String(form.name).trim(),
       phone: String(form.phone).trim(),
+      website: normalizedWebsite,
       address: String(form.address).trim(),
       zip_code: zipDigits,
       pricing: String(form.pricing || "").trim(),
@@ -205,6 +217,20 @@ export default function FacilityDashboardFacilities() {
                   value={form.pricing}
                   onChange={(e) => setForm((p) => ({ ...p, pricing: e.target.value }))}
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Website</label>
+                <Input
+                  type="url"
+                  inputMode="url"
+                  autoComplete="url"
+                  value={form.website}
+                  onChange={(e) => setForm((p) => ({ ...p, website: e.target.value }))}
+                  placeholder="https://www.yourfacility.com"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Optional. Opens when families click Explore on Care Explorer.
+                </p>
               </div>
             </div>
 

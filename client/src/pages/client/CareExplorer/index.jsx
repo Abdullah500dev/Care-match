@@ -27,6 +27,10 @@ import {
   loadGoogleMapsScript,
 } from "../../../lib/loadGoogleMaps";
 import { scrollToCarrieHeroThenOpenChat } from "../../../utils/scrollToCarrieHeroTagline";
+import {
+  isAggregatorListingUrl,
+  normalizeFacilityWebsite,
+} from "../../../lib/facilityWebsite";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -424,6 +428,7 @@ function normalizeFacilityForCard(m) {
       ? Number(reviewCountRaw)
       : null;
   const providerUrl = String(externalData.provider_url || "").trim();
+  const googlePlacesWebsite = String(externalData?.google_places?.website || "").trim();
   const phone =
     String(
       m.phone ||
@@ -460,7 +465,12 @@ function normalizeFacilityForCard(m) {
     address: m.address || "",
     zipCode,
     phone,
-    website: m.website || "",
+    website: (() => {
+      const top = String(m.website || "").trim();
+      const gpSite = String(googlePlacesWebsite || "").trim();
+      const candidate = top && !isAggregatorListingUrl(top) ? top : gpSite;
+      return normalizeFacilityWebsite(candidate);
+    })(),
     rating: overallRating != null ? overallRating : 4.8,
     reviewCount: reviewCountValue,
     ratingLabel: overallRating != null ? "CMS rating" : "family reviews",
@@ -1457,11 +1467,11 @@ const CareExplorer = () => {
     const effectiveMaxBudget = shouldPrefillBudget
       ? parsedMaxBudget ?? parsedMinBudget ?? 15000
       : 15000;
-    const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
+    const safeMax = Math.min(15000, Math.max(500, Math.round(effectiveMaxBudget)));
     const effectiveMinBudget = shouldPrefillBudget
-      ? parsedMinBudget ?? Math.min(1000, safeMax)
+      ? parsedMinBudget ?? Math.min(500, safeMax)
       : 1000;
-    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(effectiveMinBudget)));
+    const safeMin = Math.min(safeMax, Math.max(500, Math.round(effectiveMinBudget)));
     const intakeAmenitySelections = [
       ...(Array.isArray(carrieFilters?.displayCriteria?.mustHaveNeeds)
         ? carrieFilters.displayCriteria.mustHaveNeeds
@@ -1941,7 +1951,7 @@ const CareExplorer = () => {
     );
     const budgetMin = Number(filters.budgetMin) || 1000;
     const budgetMax = Number(filters.budgetMax) || 15000;
-    const budgetFilterActive = budgetMin > 1000 || budgetMax < 15000;
+    const budgetFilterActive = budgetMin !== 1000 || budgetMax < 15000;
     const selectedCare = new Set(
       (activeFilters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
     );

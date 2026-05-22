@@ -33,7 +33,7 @@ import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps"
 import { getUser } from "@/store/auth/authSlice";
 import { toast } from "sonner";
 
-const BUDGET_SLIDER_MIN = 2000;
+const BUDGET_SLIDER_MIN = 500;
 const BUDGET_SLIDER_MAX = 15000;
 const BUDGET_SLIDER_STEP = 500;
 

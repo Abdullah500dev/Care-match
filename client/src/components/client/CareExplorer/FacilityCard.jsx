@@ -2,6 +2,10 @@ import React from "react";
 import { Heart, Star, ArrowRight, MapPin, Hash, PhoneCall, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import {
+  isAggregatorListingUrl,
+  normalizeFacilityWebsite,
+} from "@/lib/facilityWebsite";
 
 const CAREMATCH_PLACEHOLDER_IMAGE = "/assets/images/footer-logo.svg";
 const DEFAULT_IMAGE = CAREMATCH_PLACEHOLDER_IMAGE;
@@ -82,9 +86,14 @@ const FacilityCard = ({
     setActiveImageIndex((idx) => (idx + 1) % safeImageUrls.length);
   };
 
-  const hasWebsite = typeof website === "string" && /^https?:\/\//i.test(website);
-  const hasExternalSourceUrl =
-    typeof externalSourceUrl === "string" && /^https?:\/\//i.test(externalSourceUrl);
+  const normalizedWebsite = normalizeFacilityWebsite(website);
+  const hasOperatorWebsite = Boolean(normalizedWebsite);
+  const listingUrl =
+    typeof externalSourceUrl === "string" && /^https?:\/\//i.test(externalSourceUrl.trim())
+      ? externalSourceUrl.trim()
+      : "";
+  const hasListingUrl = Boolean(listingUrl);
+  const listingIsAggregator = hasListingUrl && isAggregatorListingUrl(listingUrl);
   const navigate = useNavigate();
   const location = useLocation();
   const isLoggedIn = Boolean(localStorage.getItem("access_token"));
@@ -134,16 +143,18 @@ const FacilityCard = ({
   };
   const openExploreDestination = () => {
     if (!requireLoginForFacilityAction()) return;
-    if (hasWebsite) {
-      window.open(website, "_blank", "noopener,noreferrer");
+    if (hasOperatorWebsite) {
+      window.open(normalizedWebsite, "_blank", "noopener,noreferrer");
       return;
     }
-    if (hasExternalSourceUrl) {
-      window.open(externalSourceUrl, "_blank", "noopener,noreferrer");
+    if (!isExternal && hasListingUrl && !listingIsAggregator) {
+      window.open(listingUrl, "_blank", "noopener,noreferrer");
       return;
     }
-    const query = [name, sourcePlatform, distance].filter(Boolean).join(" ").trim();
-    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(query || `${name} senior living`)}`;
+    const query = [name, address, zipCode].filter(Boolean).join(" ").trim();
+    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(
+      query || `${name} senior living official website`,
+    )}`;
     window.open(googleUrl, "_blank", "noopener,noreferrer");
   };
   const handleRequestTourClick = () => {

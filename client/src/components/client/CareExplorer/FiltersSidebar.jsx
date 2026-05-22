@@ -620,7 +620,7 @@ const FiltersSidebar = ({
         <BudgetRangeSlider
           budgetMin={budgetMin}
           budgetMax={budgetMax}
-          min={1000}
+          min={500}
           max={15000}
           step={100}
           onRangeChange={(minVal, maxVal) => {

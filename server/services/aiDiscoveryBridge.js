@@ -136,6 +136,11 @@ export function intakePreferencesToAiSearchParams(prefs) {
   return payload;
 }
 
+import {
+  isAggregatorListingUrl,
+  resolveOperatorWebsite,
+} from "../utils/isAggregatorListingUrl.js";
+
 /**
  * @param {object} f - one facility object from getCareMatchResults().results
  * @param {number} index
@@ -178,6 +183,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     google_places: {
       place_id: gp.place_id || "",
       maps_url: gp.maps_url || f.maps_url || "",
+      website: gp.website || "",
       latitude: lat,
       longitude: lng,
       review_count: reviewCount,
@@ -195,6 +201,16 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
   if (f.pricing) reasons.push(String(f.pricing).trim());
   if (!reasons.length) reasons.push("AI-suggested community — verify details before touring.");
 
+  const providerUrl = String(f.provider_url || "").trim();
+  const operatorWebsite = resolveOperatorWebsite(
+    f.website,
+    gp.website,
+    f.maps_url,
+  );
+  const listingUrl =
+    providerUrl ||
+    (isAggregatorListingUrl(f.website) ? String(f.website || "").trim() : "");
+
   return {
     facilityId,
     name: f.name || "Community",
@@ -210,7 +226,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
         : null,
     care_levels: Array.isArray(f.care_levels) ? f.care_levels : [],
     images: Array.isArray(f.images) ? f.images : [],
-    website: f.website || "",
+    website: operatorWebsite,
     phone: f.phone || "",
     zip_code: loc.zip_code || "",
     specialty: [],
@@ -220,6 +236,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     amenities: Array.isArray(f.amenities) ? f.amenities : [],
     services: Array.isArray(f.services) ? f.services : [],
     external_data,
+    external_source_url: listingUrl,
     latitude: lat,
     longitude: lng,
     score,
