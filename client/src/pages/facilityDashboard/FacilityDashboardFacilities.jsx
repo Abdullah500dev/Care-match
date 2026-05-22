@@ -4,12 +4,15 @@ import SEO from "@/components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/api";
+import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import { formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
 
 const EMPTY_FORM = {
   name: "",
   email: "",
   phone: "",
   address: "",
+  zip_code: "",
   pricing: "",
   services: "",
   amenities: "",
@@ -42,6 +45,7 @@ export default function FacilityDashboardFacilities() {
       email: doc?.email || "",
       phone: doc?.phone || "",
       address: doc?.address || "",
+      zip_code: formatZipInput(doc?.zip_code || doc?.external_data?.zip_code),
       pricing: doc?.pricing || "",
       services: toCsv(doc?.services),
       amenities: toCsv(doc?.amenities),
@@ -95,10 +99,27 @@ export default function FacilityDashboardFacilities() {
       return;
     }
 
+    const zipDigits = formatZipInput(form.zip_code);
+    if (zipDigits.length !== 5) {
+      toast.error("ZIP code required", {
+        description: "Enter a valid 5-digit US ZIP code (e.g. 98101).",
+      });
+      return;
+    }
+
+    const geoCheck = await validateAddressZipPair(form.address, zipDigits);
+    if (geoCheck.state === "mismatch") {
+      toast.error("Address and ZIP do not match", {
+        description: geoCheck.message,
+      });
+      return;
+    }
+
     const payload = {
       name: String(form.name).trim(),
       phone: String(form.phone).trim(),
       address: String(form.address).trim(),
+      zip_code: zipDigits,
       pricing: String(form.pricing || "").trim(),
       services: parseCsv(form.services),
       amenities: parseCsv(form.amenities),
@@ -188,10 +209,13 @@ export default function FacilityDashboardFacilities() {
             </div>
 
             <div className="mt-4">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Address</label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+              <FacilityAddressZipFields
+                address={form.address}
+                zipCode={form.zip_code}
+                onAddressChange={(e) =>
+                  setForm((p) => ({ ...p, address: e.target.value }))
+                }
+                onZipCodeChange={(zip) => setForm((p) => ({ ...p, zip_code: zip }))}
               />
             </div>
 

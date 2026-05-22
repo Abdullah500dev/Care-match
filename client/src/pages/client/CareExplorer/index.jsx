@@ -124,6 +124,26 @@ function averagePriceFromText(rawPricing) {
   return null;
 }
 
+/** Admin/provider listings created in CareMatch (not external API scrapes). */
+function isCareMatchPartnerListing(facility) {
+  if (!facility || typeof facility !== "object") return false;
+  if (facility.isExternal === false) return true;
+  const platform = String(facility.sourcePlatform || "").toLowerCase();
+  if (platform === "carematch") return true;
+  const key = String(facility.key || facility.facilityId || "");
+  return key.startsWith("owned-");
+}
+
+function partnerMatchesSearchArea(facility, { zipCode = "", locationQuery = "" } = {}) {
+  if (!isCareMatchPartnerListing(facility)) return false;
+  const searchZip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+  const facilityZip = String(facility.zipCode || "").replace(/\D/g, "").slice(0, 5);
+  if (searchZip && facilityZip && searchZip === facilityZip) return true;
+  const loc = String(locationQuery || "").trim();
+  if (loc && addressMatchesLocation(facility.address, loc.toLowerCase())) return true;
+  return false;
+}
+
 function distanceMiles(a, b) {
   const toRad = (n) => (n * Math.PI) / 180;
   const earthRadiusMiles = 3958.8;
@@ -705,11 +725,13 @@ function computeFacilityMiles(facility, locationCenterCoords) {
       lng: Number(facility.lng),
     });
   }
-  if (
-    Number.isFinite(Number(facility?.distanceMiles)) &&
-    Number(facility.distanceMiles) >= 0
-  ) {
-    return Number(facility.distanceMiles);
+  const apiMiles = Number(facility?.distanceMiles);
+  const apiMilesTrusted =
+    Number.isFinite(apiMiles) &&
+    apiMiles >= 0 &&
+    (!isCareMatchPartnerListing(facility) || apiMiles <= 500);
+  if (apiMilesTrusted) {
+    return apiMiles;
   }
   const parsed = Number.parseFloat(
     String(facility?.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1],
@@ -1935,6 +1957,7 @@ const CareExplorer = () => {
         ...(facility.careLevels || []).map((x) => normMatchToken(x)),
         normMatchToken(facility.category),
       ].filter(Boolean);
+      const isPartner = isCareMatchPartnerListing(facility);
       const hasAssistedLiving = assistedOnlyLevels.some(
         (level) =>
           level.includes("assisted living") ||
@@ -1946,14 +1969,25 @@ const CareExplorer = () => {
         const isCarrieResult =
           fromCarrie ||
           String(facility.sourcePlatform || "").toLowerCase().includes("ai discovery");
-        if (!isCarrieResult) return false;
+        if (!isCarrieResult && !isPartner) return false;
       }
 
       // Strict radius: only show communities with a verified distance <= max miles from search center.
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
         if (!locationCenterCoords) return false;
         const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
-        if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) return false;
+        if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) {
+          if (
+            partnerMatchesSearchArea(facility, {
+              zipCode: activeFilters.zipCode,
+              locationQuery: effectiveLocation || locationQuery,
+            })
+          ) {
+            // Partner listing in the searched ZIP/city — keep even without map miles.
+          } else {
+            return false;
+          }
+        }
       } else if (effectiveLocation) {
         if (!addressMatchesLocation(facility.address, effectiveLocation)) return false;
       } else if (locationQuery && !isZipOnlyLocationQuery) {

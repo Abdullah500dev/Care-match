@@ -294,6 +294,18 @@ export async function enrichDiscoveryFacilitiesWithPersonalizedScores(rows, ctx,
     return scored;
   }
 
+  const ownedPassesDistanceWithoutMiles = (row) => {
+    if (row?.is_external !== false) return false;
+    const fz = normalizeZip(row.zip_code || row?.external_data?.zip_code);
+    if (searchZip && fz && searchZip === fz) return true;
+    const addr = String(row.address || "").toLowerCase();
+    const loc = locationText.toLowerCase();
+    if (!addr || !loc) return false;
+    const cityHint = loc.split(",")[0]?.trim();
+    if (cityHint && cityHint.length >= 3 && addr.includes(cityHint)) return true;
+    return false;
+  };
+
   return scored
     .map((row) => {
       const lat = toFinite(row.latitude ?? row?.external_data?.google_places?.latitude);
@@ -309,6 +321,7 @@ export async function enrichDiscoveryFacilitiesWithPersonalizedScores(rows, ctx,
     })
     .filter((row) => {
       const miles = Number(row.distance_miles);
-      return Number.isFinite(miles) && miles <= maxDist;
+      if (Number.isFinite(miles) && miles <= maxDist) return true;
+      return ownedPassesDistanceWithoutMiles(row);
     });
 }
