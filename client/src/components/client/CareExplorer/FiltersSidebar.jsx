@@ -592,15 +592,20 @@ const FiltersSidebar = ({
         </div>
 
         <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
-        <Input
-          id="maxDistance"
-          type="text"
-          inputMode="numeric"
-          placeholder="Max distance (miles)"
-          value={maxMiles}
-          onChange={(e) => setFilters({ maxMiles: e.target.value })}
-          className="h-10 rounded-lg border-[#E2E8F0] mb-4"
-        />
+        <div className="relative mb-4">
+          <Input
+            id="maxDistance"
+            type="text"
+            inputMode="numeric"
+            placeholder="Max distance"
+            value={maxMiles}
+            onChange={(e) => setFilters({ maxMiles: e.target.value })}
+            className="h-10 rounded-lg border-[#E2E8F0] pr-14"
+          />
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-[#000000] pointer-events-none">
+            miles
+          </span>
+        </div>
 
         <div className="mb-4">
           <p className="text-xs text-[#20252c] font-bold mb-2">Rank Results By</p>

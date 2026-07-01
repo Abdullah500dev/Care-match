@@ -297,6 +297,15 @@
   pointer-events: auto !important;
 }
 
+/* Inline badge Google injects on autocomplete inputs (e.g. City or state field) */
+.pac-logo {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+}
+
 /* Facility modal — image upload zone & thumbnails (CareMatch cyan accent) */
 @keyframes facilityThumbIn {
   0% {
