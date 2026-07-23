@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import {
@@ -23,8 +23,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, ChevronDown, X, MoreHorizontal } from "lucide-react";
+import { Search, Filter, ChevronDown, X, MoreHorizontal, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "@/services/api";
 
 const STATUS_STYLES = {
   New: "bg-amber-500 text-white",
@@ -35,69 +36,6 @@ const STATUS_STYLES = {
 };
 
 const ALL_STATUSES = ["New", "Tour Scheduled", "Contacted", "Waitlist", "Closed"];
-
-const INITIAL_LEADS = [
-  {
-    id: 1,
-    initials: "SJ",
-    name: "Sarah Johnson",
-    email: "sarah.j@email.com",
-    facility: "Sunrise Villa",
-    careType: "Assisted Living",
-    status: "New",
-    score: "96%",
-  },
-  {
-    id: 2,
-    initials: "RM",
-    name: "Robert Miller",
-    email: "robert.m@email.com",
-    facility: "Sunrise Villa",
-    careType: "Memory Care",
-    status: "Tour Scheduled",
-    score: "88%",
-  },
-  {
-    id: 3,
-    initials: "ED",
-    name: "Emily Davis",
-    email: "emily.d@email.com",
-    facility: "Golden Years",
-    careType: "Independent Living",
-    status: "Contacted",
-    score: "92%",
-  },
-  {
-    id: 4,
-    initials: "MC",
-    name: "Michael Chen",
-    email: "michael.c@email.com",
-    facility: "Sunrise Villa",
-    careType: "Skilled Nursing",
-    status: "Waitlist",
-    score: "85%",
-  },
-  {
-    id: 5,
-    initials: "JW",
-    name: "Jennifer Wilson",
-    email: "jennifer.w@email.com",
-    facility: "Golden Years",
-    careType: "Assisted Living",
-    status: "Closed",
-    score: "78%",
-  },
-  {
-    id: 6,
-    initials: "DB",
-    name: "David Brown",
-    email: "david.b@email.com",
-    facility: "Sunrise Villa",
-    careType: "Memory Care",
-    status: "New",
-    score: "94%",
-  },
-];
 
 const HEAD_STYLE = {
   fontFamily: "Rethink Sans, sans-serif",
@@ -110,20 +48,41 @@ const HEAD_STYLE = {
 
 export default function Residents() {
   const navigate = useNavigate();
-  const [leads, setLeads] = useState(INITIAL_LEADS);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
 
-  /* ── derived filtered list ───────────────────────────────── */
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/email/leads", {
+        params: { limit: 200 },
+      });
+      setLeads(Array.isArray(data?.leads) ? data.leads : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load leads", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     return leads.filter((lead) => {
       const matchSearch =
         !q ||
-        lead.name.toLowerCase().includes(q) ||
-        lead.email.toLowerCase().includes(q) ||
-        lead.facility.toLowerCase().includes(q);
+        String(lead.name || "").toLowerCase().includes(q) ||
+        String(lead.email || "").toLowerCase().includes(q) ||
+        String(lead.facility || "").toLowerCase().includes(q);
       const matchStatus = !statusFilter || lead.status === statusFilter;
       return matchSearch && matchStatus;
     });
@@ -135,22 +94,42 @@ export default function Residents() {
     setStatusFilter("");
   };
 
-  /* ── action handlers ─────────────────────────────────────── */
-  const updateLeadStatus = (id, newStatus) => {
-    setLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l))
+  const updateLeadStatus = async (id, newStatus) => {
+    const prev = leads;
+    setLeads((list) =>
+      list.map((l) => (l.id === id ? { ...l, status: newStatus } : l)),
     );
-    toast.success("Status updated", { description: `Lead moved to "${newStatus}".` });
+    try {
+      await apiClient.patch(`/api/email/leads/${id}`, { status: newStatus });
+      toast.success("Status updated", { description: `Lead moved to "${newStatus}".` });
+    } catch (err) {
+      setLeads(prev);
+      toast.error("Could not update status", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+    }
   };
 
-  const removeLead = (id, name) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
-    toast.success("Lead removed", { description: `${name} has been removed.` });
+  const removeLead = async (id, name) => {
+    const prev = leads;
+    setLeads((list) => list.filter((l) => l.id !== id));
+    try {
+      await apiClient.delete(`/api/email/leads/${id}`);
+      toast.success("Lead removed", { description: `${name} has been removed.` });
+    } catch (err) {
+      setLeads(prev);
+      toast.error("Could not remove lead", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+    }
   };
 
   const handleViewDetails = (lead) => {
+    const opened = lead.emailOpenedAt
+      ? new Date(lead.emailOpenedAt).toLocaleString()
+      : "—";
     toast.info(`Viewing ${lead.name}`, {
-      description: `${lead.facility} · ${lead.careType} · Score ${lead.score}`,
+      description: `${lead.facility} · ${lead.careType} · Email opened ${opened}`,
     });
   };
 
@@ -160,7 +139,6 @@ export default function Residents() {
       style={{ fontFamily: "Rethink Sans, sans-serif" }}
     >
       <SEO title="Leads – Admin | CareMatch AI" />
-      {/* Page header */}
       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex flex-col">
           <h1
@@ -173,18 +151,16 @@ export default function Residents() {
             className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
             style={{ maxWidth: "100%" }}
           >
-            Manage your leads and track performance.
+            Leads appear here when an explore-notify email is opened.
           </p>
         </div>
       </div>
 
-      {/* Search + Filter bar */}
       <div
         className="min-w-0 overflow-visible rounded-[1.25rem] bg-white px-4 py-3 sm:px-5 sm:py-4"
         style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
       >
         <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          {/* Search */}
           <div className="relative min-w-0 flex-1 sm:max-w-[42%]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -205,9 +181,7 @@ export default function Residents() {
             )}
           </div>
 
-          {/* Filters */}
           <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:ml-auto">
-            {/* Status filter */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -250,7 +224,6 @@ export default function Residents() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            {/* Clear filters */}
             {hasActiveFilter && (
               <button
                 type="button"
@@ -265,15 +238,13 @@ export default function Residents() {
         </div>
       </div>
 
-      {/* Result count when filtering */}
-      {(search || hasActiveFilter) && (
+      {(search || hasActiveFilter) && !loading && (
         <p className="text-sm text-slate-500">
           Showing <span className="font-semibold text-slate-700">{filtered.length}</span> of{" "}
           {leads.length} leads
         </p>
       )}
 
-      {/* Leads table */}
       <Card className="min-w-0 overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm">
         <CardContent className="min-w-0 overflow-x-auto p-0">
           <Table className="min-w-0">
@@ -291,19 +262,27 @@ export default function Residents() {
                 <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
                   Status
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
-                  Score
-                </TableHead>
                 <TableHead className="h-11 w-12 rounded-tr-3xl uppercase last:pr-5" style={HEAD_STYLE}>
                   Actions
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                    No leads match your search or filters.
+                  <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading leads…
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
+                    {leads.length === 0
+                      ? "No leads yet. They appear when an explore-notify email is opened."
+                      : "No leads match your search or filters."}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -342,9 +321,6 @@ export default function Residents() {
                         {lead.status}
                       </span>
                     </TableCell>
-                    <TableCell className="py-3 font-semibold text-[#00B8DB]">
-                      {lead.score}
-                    </TableCell>
                     <TableCell className="py-3 last:pr-5">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -373,9 +349,7 @@ export default function Residents() {
                           >
                             Mark as Contacted
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => navigate("/admin/messages")}
-                          >
+                          <DropdownMenuItem onClick={() => navigate("/admin/messages")}>
                             Send message
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />

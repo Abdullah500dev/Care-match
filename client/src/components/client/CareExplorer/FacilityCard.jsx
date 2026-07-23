@@ -168,6 +168,8 @@ const FacilityCard = ({
         website: normalizedWebsite || website || "",
         destinationUrl,
         sourcePlatform,
+        careType: category,
+        category,
       })
       .catch(() => {
         // Ignore notify failures so Explore still works offline / if mail is down.

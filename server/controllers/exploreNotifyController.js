@@ -6,6 +6,7 @@ import sendMail from "../utils/sendMail.js";
 import { resolveEmailTrackingBaseUrl } from "../utils/resolveApiBaseUrl.js";
 import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
+import Lead from "../models/leadModel.js";
 
 const DEFAULT_NOTIFY_EMAILS = [
   "abdullah.bugmonks@gmail.com",
@@ -36,6 +37,7 @@ const parseNotifyEmails = () => {
 
 /**
  * Notify admins when a logged-in user clicks Explore on a facility card.
+ * Also creates a Lead (shown in admin Leads after the notify email is opened).
  * POST /api/facilities/explore-click
  */
 export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
@@ -59,15 +61,31 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     website = "",
     destinationUrl = "",
     sourcePlatform = "",
+    careType = "",
+    category = "",
   } = req.body || {};
 
   const resolvedName = String(facilityName || name || "").trim() || "Unknown facility";
   const resolvedDestination = String(destinationUrl || website || "").trim();
+  const resolvedCareType = String(careType || category || "").trim();
   const recipients = parseNotifyEmails();
 
   if (recipients.length === 0) {
     return res.status(200).json({ success: true, sent: 0, message: "No notify emails configured" });
   }
+
+  const lead = await Lead.create({
+    userId: user._id,
+    userName: user.name || "",
+    userEmail: user.email || "",
+    facilityId: String(facilityId || "").trim(),
+    facilityName: resolvedName,
+    careType: resolvedCareType,
+    destinationUrl: resolvedDestination,
+    sourcePlatform: String(sourcePlatform || "").trim(),
+    status: "New",
+    emailOpened: false,
+  });
 
   const apiBase = resolveEmailTrackingBaseUrl(req);
   if (isLocalHostUrl(apiBase)) {
@@ -91,6 +109,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
         facilityId: String(facilityId || "").trim(),
         facilityName: resolvedName,
         destinationUrl: resolvedDestination,
+        leadId: lead._id,
       });
 
       const trackingPixelUrl = `${apiBase}/api/email/track/${token}.gif`;
@@ -115,6 +134,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           website: String(website || "").trim(),
           destinationUrl: resolvedDestination,
           sourcePlatform: String(sourcePlatform || "").trim(),
+          careType: resolvedCareType,
           sentAt,
           trackingPixelUrl,
           trackingOpenUrl,
@@ -134,10 +154,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     console.error("[explore-click] some emails failed:", failed);
   }
 
-  // Never block the user’s Explore navigation on mail issues.
   return res.status(200).json({
     success: true,
     sent,
     failed: failed.length,
+    leadId: lead._id,
   });
 });

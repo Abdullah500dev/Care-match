@@ -1,5 +1,6 @@
 import catchAsyncError from "../middleware/catchAsyncErrors.js";
 import EmailTrack from "../models/emailTrackModel.js";
+import Lead from "../models/leadModel.js";
 import User from "../models/userModel.js";
 
 /** 1×1 transparent GIF */
@@ -7,6 +8,23 @@ const TRANSPARENT_GIF = Buffer.from(
   "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
   "base64",
 );
+
+const markLeadOpened = async (leadId) => {
+  if (!leadId) return;
+  const now = new Date();
+  const lead = await Lead.findById(leadId);
+  if (!lead || lead.isRemoved) return;
+
+  lead.emailOpenCount = (lead.emailOpenCount || 0) + 1;
+  if (!lead.emailOpened) {
+    lead.emailOpened = true;
+    lead.emailOpenedAt = now;
+    console.log(
+      `[email-track] lead visible user=${lead.userEmail} facility="${lead.facilityName}"`,
+    );
+  }
+  await lead.save();
+};
 
 const recordOpen = async (token) => {
   if (!token) return null;
@@ -18,6 +36,8 @@ const recordOpen = async (token) => {
   if (!track.firstOpenedAt) track.firstOpenedAt = now;
   track.lastOpenedAt = now;
   await track.save();
+
+  await markLeadOpened(track.leadId);
 
   console.log(
     `[email-track] opened type=${track.type} recipient=${track.recipientEmail} facility="${track.facilityName}" opens=${track.openCount}`,

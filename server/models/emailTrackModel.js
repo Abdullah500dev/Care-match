@@ -49,6 +49,12 @@ const emailTrackSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    leadId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Lead",
+      default: null,
+      index: true,
+    },
     openCount: {
       type: Number,
       default: 0,
