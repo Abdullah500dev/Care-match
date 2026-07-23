@@ -29,13 +29,21 @@ import { apiClient } from "@/services/api";
 
 const STATUS_STYLES = {
   New: "bg-amber-500 text-white",
+  "Email Opened": "bg-emerald-500 text-white",
   "Tour Scheduled": "bg-violet-500 text-white",
   Contacted: "bg-[#00B8DB] text-white",
   Waitlist: "bg-slate-200 text-slate-700",
   Closed: "bg-slate-700 text-white",
 };
 
-const ALL_STATUSES = ["New", "Tour Scheduled", "Contacted", "Waitlist", "Closed"];
+const ALL_STATUSES = [
+  "New",
+  "Email Opened",
+  "Tour Scheduled",
+  "Contacted",
+  "Waitlist",
+  "Closed",
+];
 
 const HEAD_STYLE = {
   fontFamily: "Rethink Sans, sans-serif",

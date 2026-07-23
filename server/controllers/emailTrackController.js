@@ -23,6 +23,11 @@ const markLeadOpened = async (leadId) => {
       `[email-track] lead visible user=${lead.userEmail} facility="${lead.facilityName}"`,
     );
   }
+  // Opening the notify email advances status from New → Email Opened
+  // (do not overwrite later pipeline statuses).
+  if (lead.status === "New") {
+    lead.status = "Email Opened";
+  }
   await lead.save();
 };
 

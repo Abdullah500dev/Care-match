@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 const LEAD_STATUSES = [
   "New",
+  "Email Opened",
   "Tour Scheduled",
   "Contacted",
   "Waitlist",
