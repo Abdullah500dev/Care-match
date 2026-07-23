@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facility Explore Click</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f6f8;
+        font-family: Arial, sans-serif;
+        color: #1f2937;
+      }
+      .wrap {
+        width: 100%;
+        padding: 28px 14px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+      }
+      .header {
+        background: #132329;
+        color: #ffffff;
+        text-align: center;
+        padding: 20px;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .content {
+        padding: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+        margin: 16px 0;
+      }
+      .label {
+        color: #6b7280;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 4px;
+      }
+      .value {
+        margin: 0 0 12px;
+        word-break: break-word;
+      }
+      .value:last-child {
+        margin-bottom: 0;
+      }
+      a {
+        color: #00b8d9;
+      }
+      .muted {
+        color: #6b7280;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="header">CareMatch AI — Explore Click</div>
+        <div class="content">
+          <p>A user clicked <strong>Explore</strong> on a facility listing.</p>
+
+          <div class="box">
+            <p class="label">User</p>
+            <p class="value"><%= userName %> &lt;<%= userEmail %>&gt;</p>
+
+            <p class="label">Facility</p>
+            <p class="value"><%= facilityName %></p>
+
+            <% if (facilityId) { %>
+            <p class="label">Facility ID</p>
+            <p class="value"><%= facilityId %></p>
+            <% } %>
+
+            <% if (address) { %>
+            <p class="label">Address</p>
+            <p class="value"><%= address %><% if (zipCode) { %>, <%= zipCode %><% } %></p>
+            <% } %>
+
+            <% if (phone) { %>
+            <p class="label">Phone</p>
+            <p class="value"><%= phone %></p>
+            <% } %>
+
+            <% if (sourcePlatform) { %>
+            <p class="label">Source</p>
+            <p class="value"><%= sourcePlatform %></p>
+            <% } %>
+
+            <% if (destinationUrl) { %>
+            <p class="label">Opened URL</p>
+            <p class="value"><a href="<%= destinationUrl %>"><%= destinationUrl %></a></p>
+            <% } %>
+
+            <p class="label">Time</p>
+            <p class="value"><%= sentAt %></p>
+          </div>
+
+          <p class="muted">
+            This notification was sent because a signed-in user explored a community on CareMatch AI.
+          </p>
+
+          <p style="margin-top: 18px;">
+            <a
+              href="<%= trackingOpenUrl %>"
+              style="display:inline-block;background:#132329;color:#ffffff !important;text-decoration:none;padding:10px 16px;border-radius:8px;font-weight:700;font-size:13px;"
+            >Confirm email opened</a>
+          </p>
+          <p class="muted" style="margin-top: 8px;">
+            Tap the button above if images are blocked — that also records the open.
+          </p>
+        </div>
+      </div>
+    </div>
+    <img
+      src="<%= trackingPixelUrl %>"
+      width="1"
+      height="1"
+      alt=""
+      style="display: block; width: 1px; height: 1px; border: 0;"
+    />
+  </body>
+</html>

@@ -6,6 +6,7 @@ import {
   isAggregatorListingUrl,
   normalizeFacilityWebsite,
 } from "@/lib/facilityWebsite";
+import { apiClient } from "@/services/api";
 
 const CAREMATCH_PLACEHOLDER_IMAGE = "/assets/images/footer-logo.svg";
 const DEFAULT_IMAGE = CAREMATCH_PLACEHOLDER_IMAGE;
@@ -143,19 +144,36 @@ const FacilityCard = ({
   };
   const openExploreDestination = () => {
     if (!requireLoginForFacilityAction()) return;
+
+    let destinationUrl = "";
     if (hasOperatorWebsite) {
-      window.open(normalizedWebsite, "_blank", "noopener,noreferrer");
-      return;
+      destinationUrl = normalizedWebsite;
+    } else if (!isExternal && hasListingUrl && !listingIsAggregator) {
+      destinationUrl = listingUrl;
+    } else {
+      const query = [name, address, zipCode].filter(Boolean).join(" ").trim();
+      destinationUrl = `https://www.google.com/search?q=${encodeURIComponent(
+        query || `${name} senior living official website`,
+      )}`;
     }
-    if (!isExternal && hasListingUrl && !listingIsAggregator) {
-      window.open(listingUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const query = [name, address, zipCode].filter(Boolean).join(" ").trim();
-    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(
-      query || `${name} senior living official website`,
-    )}`;
-    window.open(googleUrl, "_blank", "noopener,noreferrer");
+
+    // Fire-and-forget admin notify; do not block opening the destination.
+    apiClient
+      .post("/api/facilities/explore-click", {
+        facilityId: facilityId || "",
+        facilityName: name,
+        address,
+        zipCode,
+        phone,
+        website: normalizedWebsite || website || "",
+        destinationUrl,
+        sourcePlatform,
+      })
+      .catch(() => {
+        // Ignore notify failures so Explore still works offline / if mail is down.
+      });
+
+    window.open(destinationUrl, "_blank", "noopener,noreferrer");
   };
   const handleRequestTourClick = () => {
     if (isExternal) return;

@@ -22,6 +22,7 @@ import {
   updateMyFacility,
   resolveAddressZip,
 } from "../controllers/facilityController.js";
+import { notifyExploreClick } from "../controllers/exploreNotifyController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
 import { getApifySchedulerStatus } from "../controllers/apifySyncController.js";
 
@@ -133,6 +134,7 @@ router.post("/enrich-gpt", isAutheticated, enrichFacilitiesWithGpt);
 router.get("/resolve-zip", isAutheticated, resolveAddressZip);
 router.get("/me", isAutheticated, getMyFacility);
 router.put("/me", isAutheticated, updateMyFacility);
+router.post("/explore-click", isAutheticated, notifyExploreClick);
 
 /**
  * @swagger

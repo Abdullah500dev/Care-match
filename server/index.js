@@ -14,6 +14,7 @@ import authRouter from "./routes/authRouter.js";
 import chatRouter from "./routes/chatRouter.js";
 import facilityRouter from "./routes/facilityRouter.js";
 import matchRouter from "./routes/matchRouter.js";
+import emailRouter from "./routes/emailRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
@@ -63,6 +64,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/match", matchRouter);
 app.use("/api/facilities", facilityRouter);
+app.use("/api/email", emailRouter);
 
 // Serve client build if it exists, otherwise show API info
 const clientDistPath = path.join(__dirname, "../client/dist");
