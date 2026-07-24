@@ -159,7 +159,7 @@ export default function Residents() {
             className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
             style={{ maxWidth: "100%" }}
           >
-            Leads appear here when an explore-notify email is opened.
+            Leads appear here only after the explore-notify email is opened.
           </p>
         </div>
       </div>

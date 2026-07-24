@@ -58,7 +58,7 @@ const leadSchema = new mongoose.Schema(
       enum: LEAD_STATUSES,
       default: "New",
     },
-    /** Becomes true when any linked explore-notify email is opened */
+    /** Becomes true only when recipient taps Confirm in the email (not the tracking pixel). */
     emailOpened: {
       type: Boolean,
       default: false,
@@ -71,6 +71,12 @@ const leadSchema = new mongoose.Schema(
     emailOpenCount: {
       type: Number,
       default: 0,
+    },
+    /** True only after intentional confirm-link open — pixels do not set this. */
+    confirmedOpen: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
     isRemoved: {
       type: Boolean,

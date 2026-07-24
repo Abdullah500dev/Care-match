@@ -113,7 +113,6 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
       });
 
       const trackingPixelUrl = `${apiBase}/api/email/track/${token}.gif`;
-      const trackingOpenUrl = `${apiBase}/api/email/track/${token}?view=1`;
 
       console.log(
         `[explore-click] sending to ${recipientEmail} track=${trackingPixelUrl}`,
@@ -137,7 +136,6 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           careType: resolvedCareType,
           sentAt,
           trackingPixelUrl,
-          trackingOpenUrl,
         },
       });
 

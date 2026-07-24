@@ -40,7 +40,7 @@ const mapLead = (lead) => ({
 });
 
 /**
- * Admin leads list — only leads whose explore-notify email was opened.
+ * Admin leads list — only after the explore-notify email is really opened.
  * GET /api/email/leads
  */
 export const listLeads = catchAsyncError(async (req, res, next) => {
@@ -66,22 +66,12 @@ export const listLeads = catchAsyncError(async (req, res, next) => {
     filter.$or = [{ userName: rx }, { userEmail: rx }, { facilityName: rx }];
   }
 
-  const leads = await Lead.find(filter).sort({ emailOpenedAt: -1, createdAt: -1 }).limit(limit);
-
-  // Backfill: older rows were left as "New" after open — bump them once.
-  await Promise.all(
-    leads.map(async (lead) => {
-      if (lead.emailOpened && lead.status === "New") {
-        lead.status = "Email Opened";
-        await lead.save();
-      }
-    }),
-  );
+  const leads = await Lead.find(filter).sort({ emailOpenedAt: -1, createdAt: -1 }).limit(limit).lean();
 
   return res.status(200).json({
     success: true,
     count: leads.length,
-    leads: leads.map((lead) => mapLead(lead.toObject ? lead.toObject() : lead)),
+    leads: leads.map(mapLead),
   });
 });
 

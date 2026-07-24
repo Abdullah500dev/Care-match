@@ -9,6 +9,15 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64",
 );
 
+/**
+ * Ignore pixel hits that arrive too soon after send.
+ * Gmail/Outlook scanners often fetch images on delivery (false "opens").
+ */
+const OPEN_GRACE_MS = Math.max(
+  15_000,
+  Number.parseInt(String(process.env.EMAIL_OPEN_GRACE_MS || "60000"), 10) || 60_000,
+);
+
 const markLeadOpened = async (leadId) => {
   if (!leadId) return;
   const now = new Date();
@@ -16,38 +25,18 @@ const markLeadOpened = async (leadId) => {
   if (!lead || lead.isRemoved) return;
 
   lead.emailOpenCount = (lead.emailOpenCount || 0) + 1;
+  lead.confirmedOpen = true;
   if (!lead.emailOpened) {
     lead.emailOpened = true;
     lead.emailOpenedAt = now;
-    console.log(
-      `[email-track] lead visible user=${lead.userEmail} facility="${lead.facilityName}"`,
-    );
   }
-  // Opening the notify email advances status from New → Email Opened
-  // (do not overwrite later pipeline statuses).
   if (lead.status === "New") {
     lead.status = "Email Opened";
   }
   await lead.save();
-};
-
-const recordOpen = async (token) => {
-  if (!token) return null;
-  const now = new Date();
-  const track = await EmailTrack.findOne({ token });
-  if (!track) return null;
-
-  track.openCount = (track.openCount || 0) + 1;
-  if (!track.firstOpenedAt) track.firstOpenedAt = now;
-  track.lastOpenedAt = now;
-  await track.save();
-
-  await markLeadOpened(track.leadId);
-
   console.log(
-    `[email-track] opened type=${track.type} recipient=${track.recipientEmail} facility="${track.facilityName}" opens=${track.openCount}`,
+    `[email-track] email opened user=${lead.userEmail} facility="${lead.facilityName}"`,
   );
-  return track;
 };
 
 const sendPixel = (res) => {
@@ -61,44 +50,41 @@ const sendPixel = (res) => {
   return res.status(200).end(TRANSPARENT_GIF);
 };
 
-const wantsHtml = (req) => {
-  const accept = String(req.headers.accept || "").toLowerCase();
-  // Image requests / Gmail proxy usually ask for image/* or */*
-  if (/\.gif$/i.test(String(req.params.token || ""))) return false;
-  if (accept.includes("text/html")) return true;
-  if (String(req.query.view || "") === "1") return true;
-  return false;
-};
-
 /**
- * Public tracking pixel / open confirmation.
- * GET /api/email/track/:token   (optional .gif suffix)
- * GET /api/email/track/:token?view=1  → HTML confirmation (tap link in email)
+ * Public tracking pixel.
+ * GET /api/email/track/:token  (optional .gif)
+ * Lead status becomes Email Opened only after the grace window (real open).
  */
 export const trackEmailOpen = catchAsyncError(async (req, res) => {
   const raw = String(req.params.token || "").trim();
   const token = raw.replace(/\.gif$/i, "");
 
-  const track = await recordOpen(token);
+  if (token) {
+    const now = new Date();
+    const track = await EmailTrack.findOne({ token });
+    if (track) {
+      track.openCount = (track.openCount || 0) + 1;
+      if (!track.firstOpenedAt) track.firstOpenedAt = now;
+      track.lastOpenedAt = now;
+      await track.save();
 
-  if (wantsHtml(req)) {
-    const opened = Boolean(track);
-    res.set("Cache-Control", "no-store");
-    return res.status(200).send(`<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Open recorded</title>
-<style>
-  body{font-family:Arial,sans-serif;background:#f4f6f8;color:#1f2937;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
-  .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:28px;max-width:420px;text-align:center}
-  h1{font-size:20px;margin:0 0 8px} p{margin:0;color:#6b7280;font-size:14px;line-height:1.5}
-</style></head><body><div class="card">
-  <h1>${opened ? "Open recorded" : "Link not found"}</h1>
-  <p>${
-    opened
-      ? "Thanks — we logged that this email was opened."
-      : "This tracking link is invalid or expired."
-  }</p>
-</div></body></html>`);
+      const ageMs = now.getTime() - new Date(track.createdAt).getTime();
+      // Ignore instant delivery scanners; count real opens after grace,
+      // or a 2nd hit (prefetch + later view) once a short delay has passed.
+      const afterGrace = ageMs >= OPEN_GRACE_MS;
+      const secondHitLater = track.openCount >= 2 && ageMs >= 20_000;
+
+      if (afterGrace || secondHitLater) {
+        await markLeadOpened(track.leadId);
+        console.log(
+          `[email-track] opened recipient=${track.recipientEmail} facility="${track.facilityName}" opens=${track.openCount}`,
+        );
+      } else {
+        console.log(
+          `[email-track] early pixel ignored (${Math.round(ageMs / 1000)}s, hits=${track.openCount}) facility="${track.facilityName}"`,
+        );
+      }
+    }
   }
 
   return sendPixel(res);
