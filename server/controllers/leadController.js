@@ -40,7 +40,33 @@ const mapLead = (lead) => ({
 });
 
 /**
- * Admin leads list — only after the explore-notify email is really opened.
+ * Clear false "Email Opened" rows (manual repair helper; not run automatically).
+ */
+export const repairFalseEmailOpenedLeads = async () => {
+  const result = await Lead.updateMany(
+    {
+      isRemoved: false,
+      $or: [{ status: "Email Opened" }, { emailOpened: true }],
+    },
+    {
+      $set: {
+        status: "New",
+        emailOpened: false,
+        emailOpenedAt: null,
+        confirmedOpen: false,
+        emailOpenCount: 0,
+      },
+    },
+  );
+  const n = result?.modifiedCount || result?.nModified || 0;
+  if (n > 0) {
+    console.log(`[leads] reset ${n} Email Opened lead(s) → New`);
+  }
+  return n;
+};
+
+/**
+ * Admin leads list — Explore creates New; opening the notify email sets Email Opened.
  * GET /api/email/leads
  */
 export const listLeads = catchAsyncError(async (req, res, next) => {
@@ -54,7 +80,6 @@ export const listLeads = catchAsyncError(async (req, res, next) => {
 
   const filter = {
     isRemoved: false,
-    emailOpened: true,
   };
 
   if (status && LEAD_STATUS_VALUES.includes(status)) {
@@ -66,7 +91,7 @@ export const listLeads = catchAsyncError(async (req, res, next) => {
     filter.$or = [{ userName: rx }, { userEmail: rx }, { facilityName: rx }];
   }
 
-  const leads = await Lead.find(filter).sort({ emailOpenedAt: -1, createdAt: -1 }).limit(limit).lean();
+  const leads = await Lead.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
 
   return res.status(200).json({
     success: true,
@@ -95,6 +120,11 @@ export const updateLead = catchAsyncError(async (req, res, next) => {
   }
 
   lead.status = nextStatus;
+  if (nextStatus === "Email Opened") {
+    lead.emailOpened = true;
+    lead.emailOpenedAt = lead.emailOpenedAt || new Date();
+    lead.confirmedOpen = true;
+  }
   await lead.save();
 
   return res.status(200).json({ success: true, lead: mapLead(lead) });

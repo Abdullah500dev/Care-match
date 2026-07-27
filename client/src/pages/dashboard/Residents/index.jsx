@@ -159,7 +159,7 @@ export default function Residents() {
             className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
             style={{ maxWidth: "100%" }}
           >
-            Leads appear here only after the explore-notify email is opened.
+            Leads appear when a user clicks Explore. Status becomes Email Opened when the notify email is opened.
           </p>
         </div>
       </div>
@@ -289,7 +289,7 @@ export default function Residents() {
                 <TableRow>
                   <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
                     {leads.length === 0
-                      ? "No leads yet. They appear when an explore-notify email is opened."
+                      ? "No leads yet. They appear when a user clicks Explore."
                       : "No leads match your search or filters."}
                   </TableCell>
                 </TableRow>

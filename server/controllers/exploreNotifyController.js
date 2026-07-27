@@ -37,7 +37,7 @@ const parseNotifyEmails = () => {
 
 /**
  * Notify admins when a logged-in user clicks Explore on a facility card.
- * Also creates a Lead (shown in admin Leads after the notify email is opened).
+ * Also creates a Lead (shown in admin Leads as New).
  * POST /api/facilities/explore-click
  */
 export const notifyExploreClick = catchAsyncError(async (req, res, next) => {

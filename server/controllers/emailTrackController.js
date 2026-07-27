@@ -9,15 +9,6 @@ const TRANSPARENT_GIF = Buffer.from(
   "base64",
 );
 
-/**
- * Ignore pixel hits that arrive too soon after send.
- * Gmail/Outlook scanners often fetch images on delivery (false "opens").
- */
-const OPEN_GRACE_MS = Math.max(
-  15_000,
-  Number.parseInt(String(process.env.EMAIL_OPEN_GRACE_MS || "60000"), 10) || 60_000,
-);
-
 const markLeadOpened = async (leadId) => {
   if (!leadId) return;
   const now = new Date();
@@ -35,7 +26,7 @@ const markLeadOpened = async (leadId) => {
   }
   await lead.save();
   console.log(
-    `[email-track] email opened user=${lead.userEmail} facility="${lead.facilityName}"`,
+    `[email-track] Email Opened user=${lead.userEmail} facility="${lead.facilityName}"`,
   );
 };
 
@@ -51,9 +42,8 @@ const sendPixel = (res) => {
 };
 
 /**
- * Public tracking pixel.
+ * Tracking pixel — when the email loads images, mark lead Email Opened immediately.
  * GET /api/email/track/:token  (optional .gif)
- * Lead status becomes Email Opened only after the grace window (real open).
  */
 export const trackEmailOpen = catchAsyncError(async (req, res) => {
   const raw = String(req.params.token || "").trim();
@@ -67,23 +57,10 @@ export const trackEmailOpen = catchAsyncError(async (req, res) => {
       if (!track.firstOpenedAt) track.firstOpenedAt = now;
       track.lastOpenedAt = now;
       await track.save();
-
-      const ageMs = now.getTime() - new Date(track.createdAt).getTime();
-      // Ignore instant delivery scanners; count real opens after grace,
-      // or a 2nd hit (prefetch + later view) once a short delay has passed.
-      const afterGrace = ageMs >= OPEN_GRACE_MS;
-      const secondHitLater = track.openCount >= 2 && ageMs >= 20_000;
-
-      if (afterGrace || secondHitLater) {
-        await markLeadOpened(track.leadId);
-        console.log(
-          `[email-track] opened recipient=${track.recipientEmail} facility="${track.facilityName}" opens=${track.openCount}`,
-        );
-      } else {
-        console.log(
-          `[email-track] early pixel ignored (${Math.round(ageMs / 1000)}s, hits=${track.openCount}) facility="${track.facilityName}"`,
-        );
-      }
+      await markLeadOpened(track.leadId);
+      console.log(
+        `[email-track] opened recipient=${track.recipientEmail} facility="${track.facilityName}" opens=${track.openCount}`,
+      );
     }
   }
 
