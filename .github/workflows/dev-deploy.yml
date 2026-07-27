@@ -20,6 +20,7 @@ jobs:
         source: "server/*"
         target: "/home/ubuntu/care-match-ai/server"
         strip_components: 1
+        overwrite: true
 
     - name: Deploy Client to Server
       uses: appleboy/scp-action@v0.1.7
@@ -30,59 +31,75 @@ jobs:
         source: "client/*"
         target: "/home/ubuntu/care-match-ai/client"
         strip_components: 1
+        overwrite: true
 
-    - name: Install Dependencies and Restart Services
+    # Split SSH steps so each prints logs when it finishes (ssh-action buffers until the script ends)
+    - name: Install Server Dependencies
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
+        command_timeout: 20m
+        request_pty: true
         script: |
-          cd /home/ubuntu/care-match-ai
-
-          # Server setup
-          cd server
-          rm -f package-lock.json
-          yarn install --frozen-lockfile
-
-          pm2 delete care-match-server || true
-          pm2 flush care-match-server || true
-          sleep 5
-
+          set -e
+          echo "==> Installing server dependencies..."
           cd /home/ubuntu/care-match-ai/server
-          if ! NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server; then
-            echo "❌ Failed to start server"
-            exit 1
-          fi
+          rm -f package-lock.json
+          yarn install --production --frozen-lockfile
+          echo "==> Server dependencies done"
 
-          sleep 5
+    - name: Restart Server (PM2)
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        command_timeout: 5m
+        request_pty: true
+        script: |
+          set -e
+          echo "==> Restarting care-match-server..."
+          pm2 delete care-match-server || true
+          cd /home/ubuntu/care-match-ai/server
+          NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server
+          pm2 save
+          sleep 2
+          pm2 list
+          curl -sf http://localhost:3002/ > /dev/null
+          echo "==> Server is up on :3002"
 
-          # Client setup
-          cd ../client
+    - name: Install Client Dependencies and Build
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        command_timeout: 30m
+        request_pty: true
+        script: |
+          set -e
+          echo "==> Installing client dependencies..."
+          cd /home/ubuntu/care-match-ai/client
           rm -f package-lock.json
           yarn install --frozen-lockfile
+          echo "==> Building client..."
           rm -rf dist
           yarn build
+          echo "==> Client build done"
+          ls -la dist | head -20
 
-          pm2 save
-
-          # Verify deployment
-          pm2 list
-
-          if ! pm2 list | grep -q "care-match-server"; then
-            echo "❌ Server is not running"
-            exit 1
-          fi
-
-          if ! curl -s http://localhost:3002/ > /dev/null; then
-            echo "❌ Server health check failed on port 3002"
-            exit 1
-          fi
-
-          if [ ! -d "/home/ubuntu/care-match-ai/client/dist" ]; then
-            echo "❌ Client dist folder not found"
-            exit 1
-          fi
-
-          echo "✅ Server is running and healthy"
-          echo "🎉 Deployment completed successfully!"
+    - name: Verify Deployment
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        command_timeout: 2m
+        script: |
+          set -e
+          pm2 list | grep -q "care-match-server"
+          curl -sf http://localhost:3002/ > /dev/null
+          test -d /home/ubuntu/care-match-ai/client/dist
+          echo "✅ Deployment completed successfully!"
