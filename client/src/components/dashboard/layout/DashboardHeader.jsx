@@ -35,6 +35,12 @@ export default function DashboardHeader({ onMenuClick }) {
   const visibleItems = hideLeadsAndAnalytics
     ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
     : NAV_ITEMS;
+  const finalItems = visibleItems.map((item) => {
+    if (isFacilityDashboard && item.label === "My Facilities") {
+      return { ...item, label: "My Facility" };
+    }
+    return item;
+  });
 
   return (
     <header className="border-b border-slate-200 bg-white" style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}>
@@ -67,7 +73,7 @@ export default function DashboardHeader({ onMenuClick }) {
         <div className="flex min-w-0 shrink items-center gap-4 sm:gap-6 min-[1280px]:gap-8">
           {/* Center nav (desktop) */}
           <nav className="hidden items-center gap-4 text-xs text-[#45556C] font-bold sm:flex sm:text-sm">
-            {visibleItems.map((item) => (
+            {finalItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to.replace("/admin", basePath)}

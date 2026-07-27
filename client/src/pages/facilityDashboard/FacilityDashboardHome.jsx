@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import SEO from "@/components/common/SEO";
 import { apiClient } from "@/services/api";
 import { toast } from "sonner";
+import FacilityImagesManager from "@/components/facilityDashboard/FacilityImagesManager";
 
 export default function FacilityDashboardHome() {
   const [facility, setFacility] = useState(null);
@@ -74,7 +75,13 @@ export default function FacilityDashboardHome() {
           </CardHeader>
         </Card>
       </div>
+
+      {!loading && facility ? (
+        <FacilityImagesManager
+          facility={facility}
+          onFacilityUpdated={setFacility}
+        />
+      ) : null}
     </div>
   );
 }
-

@@ -133,7 +133,12 @@ router.post("/enrich-gpt", isAutheticated, enrichFacilitiesWithGpt);
 
 router.get("/resolve-zip", isAutheticated, resolveAddressZip);
 router.get("/me", isAutheticated, getMyFacility);
-router.put("/me", isAutheticated, updateMyFacility);
+router.put(
+  "/me",
+  isAutheticated,
+  uploadFacilityImages.array("images", 8),
+  updateMyFacility
+);
 router.post("/explore-click", isAutheticated, notifyExploreClick);
 
 /**

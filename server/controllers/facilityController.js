@@ -1952,6 +1952,35 @@ export const updateMyFacility = catchAsyncError(async (req, res, next) => {
     facility.active_leads = Math.max(0, Number(active_leads) || 0);
   }
 
+  let keepPaths = facility.images || [];
+  try {
+    if (req.body.keep_image_paths != null && req.body.keep_image_paths !== "") {
+      const parsed = JSON.parse(req.body.keep_image_paths);
+      if (Array.isArray(parsed)) {
+        keepPaths = parsed.filter(
+          (p) => typeof p === "string" && (facility.images || []).includes(p),
+        );
+      }
+    }
+  } catch {
+    keepPaths = facility.images || [];
+  }
+
+  const newUploads = Array.isArray(req.files)
+    ? req.files.map((file) => `/uploads/facilities/${file.filename}`)
+    : [];
+
+  const previousImages = facility.images || [];
+  const mergedImages = [...keepPaths, ...newUploads].slice(0, 8);
+
+  previousImages.forEach((oldPath) => {
+    if (!mergedImages.includes(oldPath)) {
+      safeRemoveFacilityImageFile(oldPath);
+    }
+  });
+
+  facility.images = mergedImages;
+
   await Promise.all([facility.save(), facilityUser.save()]);
 
   res.status(200).json({

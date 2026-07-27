@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/api";
 import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import FacilityImagesManager from "@/components/facilityDashboard/FacilityImagesManager";
 import { formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
 import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
 
@@ -313,6 +314,14 @@ export default function FacilityDashboardFacilities() {
               {saving ? "Saving..." : isPristine ? "Saved" : "Save facility profile"}
             </Button>
           </form>
+
+          <FacilityImagesManager
+            facility={facility}
+            onFacilityUpdated={(updated) => {
+              setFacility(updated);
+              fillForm(updated);
+            }}
+          />
         </>
       )}
     </div>
