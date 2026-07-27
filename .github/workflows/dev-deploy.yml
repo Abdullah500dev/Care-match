@@ -11,6 +11,21 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: "22"
+        cache: npm
+        cache-dependency-path: client/package-lock.json
+
+    - name: Install and Build Client
+      working-directory: client
+      run: |
+        npm ci --legacy-peer-deps
+        npm run build
+        test -f dist/index.html
+        ls -la dist
+
     - name: Setup SSH
       run: |
         mkdir -p ~/.ssh
@@ -18,37 +33,37 @@ jobs:
         chmod 600 ~/.ssh/deploy_key
         ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-    - name: Sync code to EC2
+    - name: Sync Server to EC2
       run: |
-        RSYNC='rsync -az --exclude node_modules --exclude dist --exclude .git'
-        SSH='ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes'
-        $RSYNC -e "$SSH" server/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/server/
-        $RSYNC -e "$SSH" client/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/client/
+        rsync -az --exclude node_modules --exclude .git \
+          -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+          server/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/server/
 
-    - name: Install, build, and restart on EC2
+    - name: Sync Client Dist to EC2
+      run: |
+        rsync -az --delete \
+          -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+          client/dist/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/client/dist/
+
+    - name: Install Server Deps and Restart PM2
       run: |
         ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes ubuntu@"${{ secrets.EC2_HOST }}" bash -s << 'EOF'
           set -e
 
-          echo "==> [1/3] Server yarn install"
+          echo "==> Server yarn install"
           cd /home/ubuntu/care-match-ai/server
           yarn install --production --frozen-lockfile
 
-          echo "==> [2/3] Restart PM2"
+          echo "==> Restart PM2"
           pm2 delete care-match-server || true
           NODE_ENV=production PORT=3002 pm2 start index.js \
             --name care-match-server \
             --cwd /home/ubuntu/care-match-ai/server
           pm2 save
 
-          echo "==> [3/3] Client npm install + build"
-          cd /home/ubuntu/care-match-ai/client
-          npm ci --legacy-peer-deps
-          npm run build
-
           echo "==> Verify"
           pm2 list
           curl -sf http://localhost:3002/ > /dev/null
-          test -d /home/ubuntu/care-match-ai/client/dist
-          echo "✅ Done"
+          test -f /home/ubuntu/care-match-ai/client/dist/index.html
+          echo "✅ Deployment completed successfully!"
         EOF
