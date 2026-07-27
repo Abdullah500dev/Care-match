@@ -11,7 +11,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Deploy Server to Server
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20.11.1"
+        cache: npm
+        cache-dependency-path: client/package-lock.json
+
+    # Build on GitHub so logs stream live (appleboy/ssh-action buffers until remote script ends)
+    - name: Install and Build Client
+      working-directory: client
+      run: |
+        npm ci --legacy-peer-deps
+        npm run build
+        ls -la dist
+
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+        chmod 600 ~/.ssh/deploy_key
+        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+    - name: Deploy Server Code
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -22,84 +44,33 @@ jobs:
         strip_components: 1
         overwrite: true
 
-    - name: Deploy Client to Server
+    - name: Deploy Client Build
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
-        source: "client/*"
+        source: "client/dist"
         target: "/home/ubuntu/care-match-ai/client"
         strip_components: 1
         overwrite: true
 
-    # Split SSH steps so each prints logs when it finishes (ssh-action buffers until the script ends)
-    - name: Install Server Dependencies
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        command_timeout: 20m
-        request_pty: true
-        script: |
+    # Native SSH streams logs live (unlike appleboy/ssh-action)
+    - name: Install Server Deps and Restart
+      run: |
+        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes ubuntu@"${{ secrets.EC2_HOST }}" << 'EOF'
           set -e
           echo "==> Installing server dependencies..."
           cd /home/ubuntu/care-match-ai/server
           rm -f package-lock.json
           yarn install --production --frozen-lockfile
-          echo "==> Server dependencies done"
-
-    - name: Restart Server (PM2)
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        command_timeout: 5m
-        request_pty: true
-        script: |
-          set -e
-          echo "==> Restarting care-match-server..."
+          echo "==> Restarting PM2..."
           pm2 delete care-match-server || true
-          cd /home/ubuntu/care-match-ai/server
           NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server
           pm2 save
           sleep 2
           pm2 list
           curl -sf http://localhost:3002/ > /dev/null
-          echo "==> Server is up on :3002"
-
-    - name: Install Client Dependencies and Build
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        command_timeout: 30m
-        request_pty: true
-        script: |
-          set -e
-          echo "==> Installing client dependencies..."
-          cd /home/ubuntu/care-match-ai/client
-          rm -f package-lock.json
-          yarn install --frozen-lockfile
-          echo "==> Building client..."
-          rm -rf dist
-          yarn build
-          echo "==> Client build done"
-          ls -la dist | head -20
-
-    - name: Verify Deployment
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ubuntu
-        key: ${{ secrets.EC2_SSH_KEY }}
-        command_timeout: 2m
-        script: |
-          set -e
-          pm2 list | grep -q "care-match-server"
-          curl -sf http://localhost:3002/ > /dev/null
           test -d /home/ubuntu/care-match-ai/client/dist
           echo "✅ Deployment completed successfully!"
+        EOF
