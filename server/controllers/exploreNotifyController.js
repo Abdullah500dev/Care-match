@@ -8,8 +8,8 @@ import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
 import Lead from "../models/leadModel.js";
 
-const DEFAULT_ADMIN_EMAIL = "abdullah.bugmonks@gmail.com";
-const DEFAULT_TRACKED_FACILITY_EMAIL = "abdullah400dev@gmail.com";
+const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
+const DEFAULT_TRACKED_FACILITY_EMAIL = "smith12@yopmail.com";
 
 const isLocalHostUrl = (value) => {
   try {
