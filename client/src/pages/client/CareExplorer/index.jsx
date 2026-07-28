@@ -45,7 +45,7 @@ function resolveFacilityImageUrl(path) {
 }
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
-const DEFAULT_PRICE_RANGE = "Price on call";
+const DEFAULT_PRICE_RANGE = "";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
 const AUTO_APPLY_FILTERS = false;
@@ -112,10 +112,10 @@ function parsePriceRangeNumbers(rawPricing) {
   return { min: Math.min(...nums), max: Math.max(...nums) };
 }
 
-/** Cards like "Price on call" / contact-for-quote — no monthly $ to compare to the budget slider. */
+/** Cards with no numeric monthly price — skip strict budget range matching. */
 function facilityHasCallForPricingDisplay(facility) {
   const display = String(facility?.priceRange || "").trim();
-  if (!display) return false;
+  if (!display || /^price\s+on\s+call$/i.test(display)) return true;
   const { min, max } = parsePriceRangeNumbers(display);
   return min == null && max == null;
 }

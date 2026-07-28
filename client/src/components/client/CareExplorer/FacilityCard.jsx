@@ -20,7 +20,7 @@ const FacilityCard = ({
   rating = 4.8,
   reviewCount = 127,
   ratingLabel = "family reviews",
-  priceRange = "Price on call",
+  priceRange = "",
   distance = "2.3 MILES AWAY",
   address = "",
   zipCode = "",
@@ -50,10 +50,14 @@ const FacilityCard = ({
   }, [normalizedImageUrls, failedImageUrls]);
   const hasReviewCount = Number.isFinite(Number(reviewCount)) && Number(reviewCount) > 0;
   const ratingMetaText = hasReviewCount ? `${reviewCount} ${ratingLabel}` : ratingLabel;
+  const rawPrice = String(priceRange || "").trim();
   const displayPriceRange =
-    String(priceRange || "").trim() && String(priceRange || "").trim().toUpperCase() !== "N/A"
-      ? String(priceRange).trim()
-      : "Price on call";
+    rawPrice &&
+    rawPrice.toUpperCase() !== "N/A" &&
+    !/^price\s+on\s+call$/i.test(rawPrice)
+      ? rawPrice
+      : "";
+  const hasDisplayPrice = Boolean(displayPriceRange);
   const displayPhone = String(phone || "").trim();
   const dialablePhone = displayPhone.replace(/[^\d+]/g, "");
 
@@ -142,20 +146,19 @@ const FacilityCard = ({
       isExternal,
     });
   };
+  const resolveFacilitySiteUrl = () => {
+    if (hasOperatorWebsite) return normalizedWebsite;
+    if (!isExternal && hasListingUrl && !listingIsAggregator) return listingUrl;
+    const query = [name, address, zipCode].filter(Boolean).join(" ").trim();
+    return `https://www.google.com/search?q=${encodeURIComponent(
+      query || `${name} senior living official website`,
+    )}`;
+  };
+
   const openExploreDestination = () => {
     if (!requireLoginForFacilityAction()) return;
 
-    let destinationUrl = "";
-    if (hasOperatorWebsite) {
-      destinationUrl = normalizedWebsite;
-    } else if (!isExternal && hasListingUrl && !listingIsAggregator) {
-      destinationUrl = listingUrl;
-    } else {
-      const query = [name, address, zipCode].filter(Boolean).join(" ").trim();
-      destinationUrl = `https://www.google.com/search?q=${encodeURIComponent(
-        query || `${name} senior living official website`,
-      )}`;
-    }
+    const destinationUrl = resolveFacilitySiteUrl();
 
     // Fire-and-forget admin notify; do not block opening the destination.
     apiClient
@@ -177,12 +180,9 @@ const FacilityCard = ({
 
     window.open(destinationUrl, "_blank", "noopener,noreferrer");
   };
-  const handleRequestTourClick = () => {
-    if (isExternal) return;
+  const handleMoreInformationClick = () => {
     if (!requireLoginForFacilityAction()) return;
-    navigate("/portal/messages", {
-      state: { facilityId: facilityId || name, facilityName: name },
-    });
+    window.open(resolveFacilitySiteUrl(), "_blank", "noopener,noreferrer");
   };
   // Dedicated, simplified card for grid view (4-per-row) – matches provided design
   if (gridView) {
@@ -261,12 +261,16 @@ const FacilityCard = ({
             {name}
           </h3>
 
-          <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
-            Monthly Investment
-          </p>
-          <p className="truncate text-[13px] font-semibold text-[#132329] tabular-nums sm:text-sm" title={displayPriceRange}>
-            {displayPriceRange}
-          </p>
+          {hasDisplayPrice ? (
+            <>
+              <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
+                Monthly Investment
+              </p>
+              <p className="truncate text-[13px] font-semibold text-[#132329] tabular-nums sm:text-sm" title={displayPriceRange}>
+                {displayPriceRange}
+              </p>
+            </>
+          ) : null}
 
           {/* Buttons */}
           <div className="mt-auto flex gap-2 pt-2 sm:gap-2.5 sm:pt-2.5">
@@ -279,16 +283,11 @@ const FacilityCard = ({
             </button>
             <button
               type="button"
-              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleRequestTourClick}
-              disabled={isExternal}
-              title={
-                isExternal
-                  ? "Messaging is available only for facilities added in admin panel."
-                  : "Request a tour / message this facility"
-              }
+              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
+              onClick={handleMoreInformationClick}
+              title="Open facility website for more information"
             >
-              Request a Tour
+              More Information
             </button>
           </div>
         </div>
@@ -401,17 +400,19 @@ const FacilityCard = ({
               <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{ratingMetaText}</span>
             </div>
           </div>
-          {/* Monthly Investment - grid view: full width so it doesn't steal space from name */}
-          <div
-            className={`rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] ${gridView ? "w-full shrink-0 text-left" : "flex-shrink-0 text-left sm:text-right w-fit sm:w-auto"} ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}
-          >
-            <p className="text-[10px] font-bold tracking-wider text-[#64748b] uppercase">
-              MONTHLY INVESTMENT
-            </p>
-            <p className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}>
-              {displayPriceRange}
-            </p>
-          </div>
+          {/* Monthly Investment — only when a real price is available */}
+          {hasDisplayPrice ? (
+            <div
+              className={`rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] ${gridView ? "w-full shrink-0 text-left" : "flex-shrink-0 text-left sm:text-right w-fit sm:w-auto"} ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}
+            >
+              <p className="text-[10px] font-bold tracking-wider text-[#64748b] uppercase">
+                MONTHLY INVESTMENT
+              </p>
+              <p className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}>
+                {displayPriceRange}
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* Contact details – hide in grid view so compact cards match the simpler design */}
@@ -484,17 +485,12 @@ const FacilityCard = ({
           </button>
           <button
             type="button"
-            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
             style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
-            onClick={handleRequestTourClick}
-            disabled={isExternal}
-            title={
-              isExternal
-                ? "Messaging is available only for facilities added in admin panel."
-                : "Request a tour / message this facility"
-            }
+            onClick={handleMoreInformationClick}
+            title="Open facility website for more information"
           >
-            Request a Tour
+            More Information
           </button>
         </div>
       </div>
