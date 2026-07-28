@@ -116,6 +116,7 @@
         </div>
       </div>
     </div>
+    <% if (trackingPixelUrl) { %>
     <img
       src="<%= trackingPixelUrl %>"
       width="1"
@@ -123,5 +124,6 @@
       alt=""
       style="display:block;width:1px;height:1px;border:0;"
     />
+    <% } %>
   </body>
 </html>

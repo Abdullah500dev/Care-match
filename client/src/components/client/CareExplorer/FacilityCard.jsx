@@ -160,7 +160,7 @@ const FacilityCard = ({
 
     const destinationUrl = resolveFacilitySiteUrl();
 
-    // Fire-and-forget admin notify; do not block opening the destination.
+    // Fire-and-forget email notify. Do not navigate to facility URL on Explore.
     apiClient
       .post("/api/facilities/explore-click", {
         facilityId: facilityId || "",
@@ -175,10 +175,11 @@ const FacilityCard = ({
         category,
       })
       .catch(() => {
-        // Ignore notify failures so Explore still works offline / if mail is down.
+        // Ignore notify failures so UX is not blocked.
       });
-
-    window.open(destinationUrl, "_blank", "noopener,noreferrer");
+    toast.success("Request sent", {
+      description: "We emailed the facility contacts for more information.",
+    });
   };
   const handleMoreInformationClick = () => {
     if (!requireLoginForFacilityAction()) return;

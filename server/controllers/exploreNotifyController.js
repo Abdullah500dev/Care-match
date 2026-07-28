@@ -8,10 +8,8 @@ import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
 import Lead from "../models/leadModel.js";
 
-const DEFAULT_NOTIFY_EMAILS = [
-  "abdullah.bugmonks@gmail.com",
-  "abdullah400dev@gmail.com",
-];
+const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
+const DEFAULT_TRACKED_FACILITY_EMAIL = "smith12@yopmail.com";
 
 const isLocalHostUrl = (value) => {
   try {
@@ -22,17 +20,22 @@ const isLocalHostUrl = (value) => {
   }
 };
 
-const parseNotifyEmails = () => {
-  const raw = String(process.env.EXPLORE_NOTIFY_EMAILS || "").trim();
-  if (!raw) return DEFAULT_NOTIFY_EMAILS;
+const resolveExploreRecipients = () => {
+  const adminEmail = String(
+    process.env.EXPLORE_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL,
+  )
+    .trim()
+    .toLowerCase();
+  const trackedFacilityEmail = String(
+    process.env.EXPLORE_TRACK_EMAIL || DEFAULT_TRACKED_FACILITY_EMAIL,
+  )
+    .trim()
+    .toLowerCase();
+
   return [
-    ...new Set(
-      raw
-        .split(/[,;]+/)
-        .map((e) => e.trim().toLowerCase())
-        .filter(Boolean),
-    ),
-  ];
+    { email: adminEmail, shouldTrackOpen: false },
+    { email: trackedFacilityEmail, shouldTrackOpen: true },
+  ].filter((r) => Boolean(r.email));
 };
 
 /**
@@ -68,7 +71,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const resolvedName = String(facilityName || name || "").trim() || "Unknown facility";
   const resolvedDestination = String(destinationUrl || website || "").trim();
   const resolvedCareType = String(careType || category || "").trim();
-  const recipients = parseNotifyEmails();
+  const recipients = resolveExploreRecipients();
 
   if (recipients.length === 0) {
     return res.status(200).json({ success: true, sent: 0, message: "No notify emails configured" });
@@ -97,25 +100,27 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const sentAt = new Date().toLocaleString("en-US", { timeZone: "UTC" }) + " UTC";
 
   const results = await Promise.allSettled(
-    recipients.map(async (recipientEmail) => {
-      const token = crypto.randomBytes(24).toString("hex");
-      await EmailTrack.create({
-        token,
-        type: "explore_click",
-        recipientEmail,
-        userId: user._id,
-        userName: user.name || "",
-        userEmail: user.email || "",
-        facilityId: String(facilityId || "").trim(),
-        facilityName: resolvedName,
-        destinationUrl: resolvedDestination,
-        leadId: lead._id,
-      });
-
-      const trackingPixelUrl = `${apiBase}/api/email/track/${token}.gif`;
+    recipients.map(async ({ email: recipientEmail, shouldTrackOpen }) => {
+      let trackingPixelUrl = "";
+      if (shouldTrackOpen) {
+        const token = crypto.randomBytes(24).toString("hex");
+        await EmailTrack.create({
+          token,
+          type: "explore_click",
+          recipientEmail,
+          userId: user._id,
+          userName: user.name || "",
+          userEmail: user.email || "",
+          facilityId: String(facilityId || "").trim(),
+          facilityName: resolvedName,
+          destinationUrl: resolvedDestination,
+          leadId: lead._id,
+        });
+        trackingPixelUrl = `${apiBase}/api/email/track/${token}.gif`;
+      }
 
       console.log(
-        `[explore-click] sending to ${recipientEmail} track=${trackingPixelUrl}`,
+        `[explore-click] sending to ${recipientEmail}${trackingPixelUrl ? ` track=${trackingPixelUrl}` : ""}`,
       );
 
       await sendMail({
@@ -158,5 +163,6 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     failed: failed.length,
     errors: failed,
     leadId: lead._id,
+    trackedEmail: recipients.find((r) => r.shouldTrackOpen)?.email || null,
   });
 });
