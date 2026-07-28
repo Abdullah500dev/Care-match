@@ -3,67 +3,125 @@ name: Care Match AI Deployment
 on:
   push:
     branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/dev'
 
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v5
+      uses: actions/setup-node@v4
       with:
-        node-version: "22"
-        cache: npm
-        cache-dependency-path: client/package-lock.json
+        node-version: '20.11.1'
 
-    - name: Install and Build Client
-      working-directory: client
+    - name: Install Server Dependencies
       run: |
-        npm ci --legacy-peer-deps
+        cd server
+        rm -f package-lock.json
+        yarn install
+
+    - name: Install Client Dependencies and Build
+      run: |
+        cd client
+        rm -f package-lock.json
+        npm install patch-package --legacy-peer-deps --no-save || true
+        npm install --legacy-peer-deps
+        rm -rf dist
         npm run build
-        test -f dist/index.html
-        ls -la dist
 
-    - name: Setup SSH
-      run: |
-        mkdir -p ~/.ssh
-        printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
-        chmod 600 ~/.ssh/deploy_key
-        ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+    - name: Deploy Server to Server
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "server/*"
+        target: "/home/ubuntu/care-match-ai/server"
+        strip_components: 1
 
-    - name: Sync Server to EC2
-      run: |
-        rsync -az --exclude node_modules --exclude .git \
-          -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
-          server/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/server/
+    - name: Deploy Client to Server
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "client/*"
+        target: "/home/ubuntu/care-match-ai/client"
+        strip_components: 1
 
-    - name: Sync Client Dist to EC2
-      run: |
-        rsync -az --delete \
-          -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
-          client/dist/ ubuntu@"${{ secrets.EC2_HOST }}":/home/ubuntu/care-match-ai/client/dist/
+    - name: Install Dependencies and Restart Services
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Navigate to project directory
+          cd /home/ubuntu/care-match-ai
 
-    - name: Install Server Deps and Restart PM2
-      run: |
-        ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes ubuntu@"${{ secrets.EC2_HOST }}" bash -s << 'EOF'
-          set -e
+          # Server setup
+          cd server
+          rm -f package-lock.json
+          yarn install --frozen-lockfile
 
-          echo "==> Server yarn install"
-          cd /home/ubuntu/care-match-ai/server
-          yarn install --production --frozen-lockfile
-
-          echo "==> Restart PM2"
+          # Restart PM2 app (server listens on PORT from env, default 3002 in start script)
           pm2 delete care-match-server || true
-          NODE_ENV=production PORT=3002 pm2 start index.js \
-            --name care-match-server \
-            --cwd /home/ubuntu/care-match-ai/server
+          pm2 flush care-match-server || true
+          sleep 5
+
+          # Start server with Node (PM2 defaults to node; do not use `yarn`/`npm` as the script — they are shell, not JS)
+          cd /home/ubuntu/care-match-ai/server
+          if ! NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server; then
+            echo "❌ Failed to start server"
+            exit 1
+          fi
+          
+          # Wait for server to start
+          sleep 5
+
+          # Client setup
+          cd ../client
+          rm -f package-lock.json
+          yarn install --frozen-lockfile
+          rm -rf dist
+          yarn build
+
+          # Save PM2 configuration
           pm2 save
 
-          echo "==> Verify"
+    - name: Verify Deployment
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          # Check PM2 status
           pm2 list
-          curl -sf http://localhost:3002/ > /dev/null
-          test -f /home/ubuntu/care-match-ai/client/dist/index.html
-          echo "✅ Deployment completed successfully!"
-        EOF
+
+          # Verify server is running
+          if ! pm2 list | grep -q "care-match-server"; then
+            echo "❌ Server is not running"
+            exit 1
+          fi
+
+          # Check server health (matches server package.json: PORT=3002)
+          if ! curl -s http://localhost:3002/ > /dev/null; then
+            echo "❌ Server health check failed on port 3002"
+            exit 1
+          fi
+
+          # Verify client build
+          if [ ! -d "/home/ubuntu/care-match-ai/client/dist" ]; then
+            echo "❌ Client dist folder not found"
+            exit 1
+          fi
+
+          echo "✅ Server is running and healthy"
+          echo "🎉 Deployment completed successfully!"
+          exit 0
