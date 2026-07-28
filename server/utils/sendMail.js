@@ -46,7 +46,10 @@ const sendMail = async (options) => {
   const html = await ejs.renderFile(templatePath, data);
 
   const mailOptions = {
-    from: process.env.SMTP_MAIL,
+    from: {
+      name: process.env.SMTP_FROM_NAME || process.env.PROJECT_NAME || "CareMatch AI",
+      address: process.env.SMTP_MAIL,
+    },
     to: email,
     subject,
     html,

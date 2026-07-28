@@ -156,6 +156,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     success: true,
     sent,
     failed: failed.length,
+    errors: failed,
     leadId: lead._id,
   });
 });
