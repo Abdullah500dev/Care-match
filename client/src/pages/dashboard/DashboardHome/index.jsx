@@ -35,14 +35,16 @@ const SUMMARY_CARDS = [
     icon: Users,
     iconBg: "bg-sky-100",
     iconColor: "text-sky-600",
+    to: "/admin/residents",
   },
   {
-    label: "Tour Requests",
+    label: "Contact Requests",
     value: "12",
     change: "+5%",
     icon: CalendarDays,
     iconBg: "bg-violet-100",
     iconColor: "text-violet-600",
+    to: "/admin/messages",
   },
   {
     label: "Profile Views",
@@ -51,6 +53,7 @@ const SUMMARY_CARDS = [
     icon: Eye,
     iconBg: "bg-amber-100",
     iconColor: "text-amber-600",
+    to: "/admin/communities",
   },
   {
     label: "Conversion Rate",
@@ -60,6 +63,7 @@ const SUMMARY_CARDS = [
     icon: TrendingUp,
     iconBg: "bg-teal-100",
     iconColor: "text-[#00B8DB]",
+    to: "/admin/analytics",
   },
 ];
 
@@ -180,29 +184,36 @@ export default function DashboardHome() {
         {SUMMARY_CARDS.map((item) => {
           const Icon = item.icon;
           return (
-            <Card key={item.label} className="min-w-0 border-slate-200 bg-white shadow-sm">
-              <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                <div
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg ${item.iconBg} ${item.iconColor}`}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                  <AnimatedNumber value={item.change} durationMs={1200} startOnView />
-                </span>
-              </CardHeader>
-              <CardContent>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                  {item.label}
-                </p>
-                <p className="mt-1 text-2xl font-bold text-slate-900">
-                  <AnimatedNumber value={item.value} durationMs={1500} startOnView />
-                </p>
-                {item.sub && (
-                  <p className="mt-0.5 text-xs text-slate-400">{item.sub}</p>
-                )}
-              </CardContent>
-            </Card>
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => navigate(item.to)}
+              className="min-w-0 rounded-xl text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00B8DB]/40"
+            >
+              <Card className="h-full min-w-0 cursor-pointer border-slate-200 bg-white shadow-sm transition hover:border-[#00B8DB]/40">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+                  <div
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${item.iconBg} ${item.iconColor}`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                    <AnimatedNumber value={item.change} durationMs={1200} startOnView />
+                  </span>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">
+                    <AnimatedNumber value={item.value} durationMs={1500} startOnView />
+                  </p>
+                  {item.sub && (
+                    <p className="mt-0.5 text-xs text-slate-400">{item.sub}</p>
+                  )}
+                </CardContent>
+              </Card>
+            </button>
           );
         })}
       </div>

@@ -4,11 +4,8 @@ import { useSelector } from "react-redux";
 import { Bell, Menu, User } from "lucide-react";
 import { getUser } from "../../../store/auth/authSlice";
 
-const NAV_ITEMS = [
-  { to: "/admin", label: "Dashboard", exact: true },
-  { to: "/admin/residents", label: "Leads" },
-  { to: "/admin/communities", label: "My Facilities" },
-];
+/** Top bar keeps Dashboard only — Leads / Facilities live in the sidebar. */
+const NAV_ITEMS = [{ to: "/admin", label: "Dashboard", exact: true }];
 
 function headerAccountLabel(userData) {
   const name = userData?.name?.trim();
@@ -29,23 +26,15 @@ export default function DashboardHeader({ onMenuClick }) {
   const basePath = isUserDashboard
     ? "/portal"
     : isFacilityDashboard
-    ? "/facility"
-    : "/admin";
-  const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard;
-  const visibleItems = hideLeadsAndAnalytics
-    ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
-    : NAV_ITEMS;
-  const finalItems = visibleItems.map((item) => {
-    if (isFacilityDashboard && item.label === "My Facilities") {
-      return { ...item, label: "My Facility" };
-    }
-    return item;
-  });
+      ? "/facility"
+      : "/admin";
 
   return (
-    <header className="border-b border-slate-200 bg-white" style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}>
+    <header
+      className="border-b border-slate-200 bg-white"
+      style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}
+    >
       <div className="mx-auto flex h-14 min-w-0 max-w-[1800px] items-center justify-between gap-4 px-2 sm:h-16 sm:px-4 min-[1280px]:gap-6">
-        {/* Burger (mobile) + Logo + brand */}
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             type="button"
@@ -57,7 +46,7 @@ export default function DashboardHeader({ onMenuClick }) {
           </button>
           <Link
             to="/"
-            className="flex items-center gap-2 text-slate-900 hover:opacity-90 transition-opacity"
+            className="flex items-center gap-2 text-slate-900 transition-opacity hover:opacity-90"
             aria-label="CareMatch AI – go to main website"
           >
             <img
@@ -65,15 +54,12 @@ export default function DashboardHeader({ onMenuClick }) {
               alt="CareMatch AI"
               className="h-7 w-7 sm:h-8 sm:w-8"
             />
-            <span className="text-sm font-semibold sm:text-base">
-              CareMatch AI
-            </span>
+            <span className="text-sm font-semibold sm:text-base">CareMatch AI</span>
           </Link>
         </div>
         <div className="flex min-w-0 shrink items-center gap-4 sm:gap-6 min-[1280px]:gap-8">
-          {/* Center nav (desktop) */}
-          <nav className="hidden items-center gap-4 text-xs text-[#45556C] font-bold sm:flex sm:text-sm">
-            {finalItems.map((item) => (
+          <nav className="hidden items-center gap-4 text-xs font-bold text-[#45556C] sm:flex sm:text-sm">
+            {NAV_ITEMS.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to.replace("/admin", basePath)}
@@ -90,7 +76,6 @@ export default function DashboardHeader({ onMenuClick }) {
             ))}
           </nav>
 
-          {/* Right-side actions */}
           <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
             <button
               type="button"
@@ -104,9 +89,9 @@ export default function DashboardHeader({ onMenuClick }) {
               className="flex min-w-[6.5rem] items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:min-w-0 sm:px-2"
             >
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#00B8DB] text-xs font-semibold text-white">
-              <User className="hidden h-3.5 w-3.5 text-white sm:inline" />
+                <User className="hidden h-3.5 w-3.5 text-white sm:inline" />
               </span>
-              <span className="max-w-[10rem] truncate text-[#45556C] font-bold sm:max-w-[14rem]">
+              <span className="max-w-[10rem] truncate font-bold text-[#45556C] sm:max-w-[14rem]">
                 {headerAccountLabel(userData)}
               </span>
             </Link>
@@ -116,4 +101,3 @@ export default function DashboardHeader({ onMenuClick }) {
     </header>
   );
 }
-

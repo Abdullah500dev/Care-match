@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ImagePlus, MapPin, Plus, Star, X } from "lucide-react";
+import { ImagePlus, MapPin, Plus, Star, X, Phone, Mail, Globe, Hash } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
 import {
@@ -651,6 +651,96 @@ export default function Communities() {
                 </div>
 
                 <CardContent className="space-y-4 p-4 sm:p-5">
+                  <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Facility details
+                    </p>
+                    <div className="space-y-1.5 text-slate-700">
+                      <p className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Address: </span>
+                          {facility.address || "—"}
+                          {facility.zip_code ? `, ${facility.zip_code}` : ""}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Phone: </span>
+                          {facility.phone || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Email: </span>
+                          {facility.email || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Hash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">ZIP: </span>
+                          {facility.zip_code || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Website: </span>
+                          {facility.website ? (
+                            <a
+                              href={
+                                /^https?:\/\//i.test(facility.website)
+                                  ? facility.website
+                                  : `https://${facility.website}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00B8DB] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {facility.website}
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </span>
+                      </p>
+                      {(facility.care_levels?.length > 0 ||
+                        facility.services?.length > 0 ||
+                        facility.pricing) && (
+                        <div className="border-t border-slate-200 pt-2 text-xs text-slate-600">
+                          {facility.care_levels?.length > 0 && (
+                            <p>
+                              <span className="font-semibold text-slate-500">Care levels: </span>
+                              {facility.care_levels.join(", ")}
+                            </p>
+                          )}
+                          {facility.services?.length > 0 && (
+                            <p className="mt-1">
+                              <span className="font-semibold text-slate-500">Services: </span>
+                              {facility.services.join(", ")}
+                            </p>
+                          )}
+                          {facility.amenities?.length > 0 && (
+                            <p className="mt-1">
+                              <span className="font-semibold text-slate-500">Amenities: </span>
+                              {facility.amenities.join(", ")}
+                            </p>
+                          )}
+                          {facility.pricing && (
+                            <p className="mt-1">
+                              <span className="font-semibold text-slate-500">Pricing: </span>
+                              {facility.pricing}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-2">
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
