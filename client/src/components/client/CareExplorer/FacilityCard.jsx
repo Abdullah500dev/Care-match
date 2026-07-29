@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, ArrowRight, MapPin, Hash, PhoneCall, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, Star, ArrowRight, MapPin, Hash, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -59,9 +59,6 @@ const FacilityCard = ({
       ? rawPrice
       : "";
   const hasDisplayPrice = Boolean(displayPriceRange);
-  const displayPhone = String(phone || "").trim();
-  const dialablePhone = displayPhone.replace(/[^\d+]/g, "");
-
   React.useEffect(() => {
     setFailedImageUrls(new Set());
     setActiveImageIndex(0);
@@ -433,7 +430,7 @@ const FacilityCard = ({
               Contact Details
             </p>
 
-            <div className={`grid grid-cols-1 min-[390px]:grid-cols-3 gap-2 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}>
+            <div className={`grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}>
               <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
                 <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
                   <MapPin className="h-3.5 w-3.5 text-[#155DFC]" />
@@ -451,25 +448,6 @@ const FacilityCard = ({
                 </p>
                 <p className="mt-1 break-words font-medium text-[#132329]">
                   {String(zipCode || "").trim() || "N/A"}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
-                <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
-                  <PhoneCall className="h-3.5 w-3.5 text-[#155DFC]" />
-                  Phone
-                </p>
-                <p className="mt-1 break-words font-medium text-[#132329]">
-                  {displayPhone && dialablePhone ? (
-                    <a
-                      href={`tel:${dialablePhone}`}
-                      className="text-[#132329] hover:text-[#155DFC] hover:underline"
-                    >
-                      {displayPhone}
-                    </a>
-                  ) : (
-                    "N/A"
-                  )}
                 </p>
               </div>
             </div>
