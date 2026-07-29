@@ -1777,10 +1777,17 @@ export const listFacilities = catchAsyncError(async (req, res, next) => {
   const page = Number.isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
   const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 10 : Math.min(parsedLimit, 100);
   const skip = (page - 1) * limit;
+  const q = String(req.query.q || req.query.search || "").trim();
+
+  const filter = {};
+  if (q) {
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    filter.name = rx;
+  }
 
   const [facilities, total] = await Promise.all([
-    Facility.find().sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    Facility.countDocuments(),
+    Facility.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Facility.countDocuments(filter),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / limit));
 

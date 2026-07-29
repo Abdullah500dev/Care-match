@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,7 +20,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, ChevronDown, X, MoreHorizontal, Loader2 } from "lucide-react";
+import {
+  Search,
+  Filter,
+  ChevronDown,
+  X,
+  MoreHorizontal,
+  Loader2,
+  MapPin,
+  Phone,
+  Mail,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
 
@@ -54,18 +61,65 @@ const HEAD_STYLE = {
   color: "#90A1B9",
 };
 
+const areaKeyFromLead = (lead) => {
+  const zip = String(lead.facilityZip || "").trim();
+  if (zip) return zip;
+  const address = String(lead.facilityAddress || "").trim();
+  if (!address) return "";
+  // Prefer city-ish segment before last comma, else full address
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 2] || parts[0];
+  return parts[0] || "";
+};
+
+const toDateInputValue = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+};
+
+const FilterButton = ({ active, label, children }) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button
+        variant="outline"
+        size="default"
+        className="flex shrink-0 items-center gap-2 bg-white"
+        style={{
+          height: "40px",
+          borderRadius: "12px",
+          border: active ? "1.5px solid #00B8DB" : "1px solid rgba(0,0,0,0.08)",
+          color: active ? "#00B8DB" : "#000",
+        }}
+      >
+        <Filter className="h-4 w-4 shrink-0" />
+        <span className="max-w-[9rem] truncate text-sm font-bold">{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="max-h-64 w-52 overflow-y-auto">
+      {children}
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
+
 export default function Residents() {
   const navigate = useNavigate();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [careTypeFilter, setCareTypeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await apiClient.get("/api/email/leads", {
-        params: { limit: 200 },
+        params: { limit: 300 },
       });
       setLeads(Array.isArray(data?.leads) ? data.leads : []);
     } catch (err) {
@@ -83,23 +137,67 @@ export default function Residents() {
     fetchLeads();
   }, [fetchLeads]);
 
+  const areaOptions = useMemo(() => {
+    const set = new Set();
+    leads.forEach((lead) => {
+      const key = areaKeyFromLead(lead);
+      if (key) set.add(key);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [leads]);
+
+  const careTypeOptions = useMemo(() => {
+    const set = new Set();
+    leads.forEach((lead) => {
+      const ct = String(lead.careType || "").trim();
+      if (ct && ct !== "—") set.add(ct);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [leads]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return leads.filter((lead) => {
-      const matchSearch =
-        !q ||
-        String(lead.name || "").toLowerCase().includes(q) ||
-        String(lead.email || "").toLowerCase().includes(q) ||
-        String(lead.facility || "").toLowerCase().includes(q);
-      const matchStatus = !statusFilter || lead.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [leads, search, statusFilter]);
+    const fromTs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTs = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
 
-  const hasActiveFilter = Boolean(statusFilter);
+    return leads.filter((lead) => {
+      const name = String(lead.name || "").toLowerCase();
+      const email = String(lead.email || "").toLowerCase();
+      const facility = String(lead.facility || "").toLowerCase();
+
+      const matchSearch =
+        !q || name.includes(q) || email.includes(q) || facility.includes(q);
+      const matchStatus = !statusFilter || lead.status === statusFilter;
+      const matchArea = !areaFilter || areaKeyFromLead(lead) === areaFilter;
+      const matchCare =
+        !careTypeFilter || String(lead.careType || "") === careTypeFilter;
+
+      const created = lead.createdAt ? new Date(lead.createdAt).getTime() : null;
+      const matchFrom = fromTs == null || (created != null && created >= fromTs);
+      const matchTo = toTs == null || (created != null && created <= toTs);
+
+      return matchSearch && matchStatus && matchArea && matchCare && matchFrom && matchTo;
+    });
+  }, [
+    leads,
+    search,
+    statusFilter,
+    areaFilter,
+    careTypeFilter,
+    dateFrom,
+    dateTo,
+  ]);
+
+  const hasActiveFilter = Boolean(
+    statusFilter || areaFilter || careTypeFilter || dateFrom || dateTo,
+  );
 
   const clearFilters = () => {
     setStatusFilter("");
+    setAreaFilter("");
+    setCareTypeFilter("");
+    setDateFrom("");
+    setDateTo("");
   };
 
   const updateLeadStatus = async (id, newStatus) => {
@@ -159,7 +257,7 @@ export default function Residents() {
             className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
             style={{ maxWidth: "100%" }}
           >
-            Leads appear when a user clicks Explore. Status becomes Email Opened when the notify email is opened.
+            Search by name, email, or facility. Filter by area, status, care type, and date.
           </p>
         </div>
       </div>
@@ -168,8 +266,8 @@ export default function Residents() {
         className="min-w-0 overflow-visible rounded-[1.25rem] bg-white px-4 py-3 sm:px-5 sm:py-4"
         style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
       >
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          <div className="relative min-w-0 flex-1 sm:max-w-[42%]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="relative min-w-0 w-full sm:max-w-[420px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               placeholder="Search by name, email, or facility…"
@@ -189,48 +287,103 @@ export default function Residents() {
             )}
           </div>
 
-          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:ml-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="default"
-                  className="flex shrink-0 items-center gap-2 bg-white"
-                  style={{
-                    height: "40px",
-                    borderRadius: "12px",
-                    border: statusFilter
-                      ? "1.5px solid #00B8DB"
-                      : "1px solid rgba(0,0,0,0.08)",
-                    color: statusFilter ? "#00B8DB" : "#000",
-                  }}
-                >
-                  <Filter className="h-4 w-4 shrink-0" />
-                  <span className="text-sm font-bold">
-                    {statusFilter ? statusFilter : "Status"}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem
-                  onClick={() => setStatusFilter("")}
-                  className={!statusFilter ? "font-semibold text-[#00B8DB]" : ""}
-                >
-                  All statuses
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {ALL_STATUSES.map((s) => (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <FilterButton
+              active={Boolean(areaFilter)}
+              label={areaFilter ? `Area: ${areaFilter}` : "Area"}
+            >
+              <DropdownMenuItem
+                onClick={() => setAreaFilter("")}
+                className={!areaFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All areas
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {areaOptions.length === 0 ? (
+                <DropdownMenuItem disabled>No areas yet</DropdownMenuItem>
+              ) : (
+                areaOptions.map((area) => (
                   <DropdownMenuItem
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={statusFilter === s ? "font-semibold text-[#00B8DB]" : ""}
+                    key={area}
+                    onClick={() => setAreaFilter(area)}
+                    className={areaFilter === area ? "font-semibold text-[#00B8DB]" : ""}
                   >
-                    {s}
+                    {area}
                   </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                ))
+              )}
+            </FilterButton>
+
+            <FilterButton
+              active={Boolean(statusFilter)}
+              label={statusFilter || "Status"}
+            >
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("")}
+                className={!statusFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All statuses
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {ALL_STATUSES.map((s) => (
+                <DropdownMenuItem
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={statusFilter === s ? "font-semibold text-[#00B8DB]" : ""}
+                >
+                  {s}
+                </DropdownMenuItem>
+              ))}
+            </FilterButton>
+
+            <FilterButton
+              active={Boolean(careTypeFilter)}
+              label={careTypeFilter || "Care type"}
+            >
+              <DropdownMenuItem
+                onClick={() => setCareTypeFilter("")}
+                className={!careTypeFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All care types
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {careTypeOptions.length === 0 ? (
+                <DropdownMenuItem disabled>No care types yet</DropdownMenuItem>
+              ) : (
+                careTypeOptions.map((ct) => (
+                  <DropdownMenuItem
+                    key={ct}
+                    onClick={() => setCareTypeFilter(ct)}
+                    className={
+                      careTypeFilter === ct ? "font-semibold text-[#00B8DB]" : ""
+                    }
+                  >
+                    {ct}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </FilterButton>
+
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+              <span className="px-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+                Date
+              </span>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-8 w-[9.5rem] rounded-lg border-slate-200 bg-white text-sm"
+                aria-label="From date"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-8 w-[9.5rem] rounded-lg border-slate-200 bg-white text-sm"
+                aria-label="To date"
+              />
+            </div>
 
             {hasActiveFilter && (
               <button
@@ -311,11 +464,33 @@ export default function Residents() {
                           <p className="truncate text-xs" style={{ color: "#90A1B9" }}>
                             {lead.email}
                           </p>
+                          {lead.createdAt && (
+                            <p className="mt-0.5 text-[11px] text-slate-400">
+                              {toDateInputValue(lead.createdAt)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-3 font-bold" style={{ color: "#45556C" }}>
-                      {lead.facility}
+                    <TableCell className="py-3" style={{ color: "#45556C" }}>
+                      <div className="min-w-[12rem] max-w-[18rem] space-y-1">
+                        <p className="font-bold text-slate-800">{lead.facility}</p>
+                        <p className="flex items-start gap-1.5 text-xs text-slate-500">
+                          <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-[#00B8DB]" />
+                          <span className="min-w-0 break-words">
+                            {lead.facilityAddress || "—"}
+                            {lead.facilityZip ? ` · ${lead.facilityZip}` : ""}
+                          </span>
+                        </p>
+                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Phone className="h-3 w-3 shrink-0 text-[#00B8DB]" />
+                          <span className="truncate">{lead.facilityPhone || "—"}</span>
+                        </p>
+                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
+                          <Mail className="h-3 w-3 shrink-0 text-[#00B8DB]" />
+                          <span className="truncate">{lead.facilityEmail || "—"}</span>
+                        </p>
+                      </div>
                     </TableCell>
                     <TableCell className="py-3 font-bold" style={{ color: "#45556C" }}>
                       {lead.careType}

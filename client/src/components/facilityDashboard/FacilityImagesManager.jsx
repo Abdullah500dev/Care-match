@@ -115,9 +115,9 @@ export default function FacilityImagesManager({
     <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Facility images</h2>
+          <h2 className="text-base font-bold text-slate-900">Change facility images</h2>
           <p className="text-sm text-slate-500">
-            Add photos for your community (max {MAX_IMAGES}).
+            Upload, replace, or remove photos for your community (max {MAX_IMAGES}).
           </p>
         </div>
         <Button

@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ImagePlus, MapPin, Plus, Star, X, Phone, Mail, Globe, Hash } from "lucide-react";
+import {
+  ImagePlus,
+  MapPin,
+  Plus,
+  Star,
+  X,
+  Phone,
+  Mail,
+  Globe,
+  Hash,
+  Search,
+  Eye,
+  MessageSquare,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
 import {
@@ -185,7 +198,6 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
-  const navigate = useNavigate();
   const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -218,6 +230,12 @@ export default function Communities() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsFacility, setAnalyticsFacility] = useState(null);
+  const [facilityAnalytics, setFacilityAnalytics] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: PAGE_SIZE,
@@ -226,6 +244,15 @@ export default function Communities() {
     hasNextPage: false,
     hasPrevPage: false,
   });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(facilitySearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [facilitySearch]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const selectedImagePreviewUrls = useMemo(
     () => selectedImages.map((file) => URL.createObjectURL(file)),
@@ -246,7 +273,11 @@ export default function Communities() {
     setListError("");
     try {
       const { data } = await apiClient.get("/api/facilities", {
-        params: { page: currentPage, limit: PAGE_SIZE },
+        params: {
+          page: currentPage,
+          limit: PAGE_SIZE,
+          ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        },
       });
       const nextFacilities = data?.facilities || [];
       const nextPagination = data?.pagination || {
@@ -278,11 +309,34 @@ export default function Communities() {
     } finally {
       setListLoading(false);
     }
-  }, [currentPage, PAGE_SIZE]);
+  }, [currentPage, PAGE_SIZE, debouncedSearch]);
 
   useEffect(() => {
     fetchFacilities();
   }, [fetchFacilities]);
+
+  const openFacilityAnalytics = async (facility) => {
+    setAnalyticsFacility(facility);
+    setFacilityAnalytics(null);
+    setAnalyticsOpen(true);
+    setAnalyticsLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/email/analytics/facility", {
+        params: {
+          facilityId: facility._id,
+          facilityName: facility.name,
+        },
+      });
+      setFacilityAnalytics(data);
+    } catch (err) {
+      toast.error("Could not load facility analytics", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+      setFacilityAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   const handleInput = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -582,7 +636,26 @@ export default function Communities() {
             Manage your facilities and track performance.
           </p>
         </div>
-        <div className="mt-3 sm:mt-0">
+        <div className="mt-3 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 sm:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search facilities by name…"
+              value={facilitySearch}
+              onChange={(e) => setFacilitySearch(e.target.value)}
+              className="rounded-xl border-slate-200 bg-white pl-9 pr-8"
+            />
+            {facilitySearch && (
+              <button
+                type="button"
+                onClick={() => setFacilitySearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                aria-label="Clear facility search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <Button
             type="button"
             onClick={openCreateModal}
@@ -604,7 +677,17 @@ export default function Communities() {
         <p className="text-center text-sm text-slate-500">Loading facilities…</p>
       ) : facilities.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-500">
-          No facilities yet. Click <span className="font-semibold text-slate-700">New Facility</span> to add one.
+          {debouncedSearch
+            ? (
+              <>
+                No facilities match <span className="font-semibold text-slate-700">“{debouncedSearch}”</span>.
+              </>
+            )
+            : (
+              <>
+                No facilities yet. Click <span className="font-semibold text-slate-700">New Facility</span> to add one.
+              </>
+            )}
         </p>
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
@@ -708,26 +791,12 @@ export default function Communities() {
                           )}
                         </span>
                       </p>
-                      {(facility.care_levels?.length > 0 ||
-                        facility.services?.length > 0 ||
-                        facility.pricing) && (
+                      {(facility.care_levels?.length > 0 || facility.pricing) && (
                         <div className="border-t border-slate-200 pt-2 text-xs text-slate-600">
                           {facility.care_levels?.length > 0 && (
                             <p>
                               <span className="font-semibold text-slate-500">Care levels: </span>
                               {facility.care_levels.join(", ")}
-                            </p>
-                          )}
-                          {facility.services?.length > 0 && (
-                            <p className="mt-1">
-                              <span className="font-semibold text-slate-500">Services: </span>
-                              {facility.services.join(", ")}
-                            </p>
-                          )}
-                          {facility.amenities?.length > 0 && (
-                            <p className="mt-1">
-                              <span className="font-semibold text-slate-500">Amenities: </span>
-                              {facility.amenities.join(", ")}
                             </p>
                           )}
                           {facility.pricing && (
@@ -738,6 +807,48 @@ export default function Communities() {
                           )}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-2xl border border-slate-100 bg-white px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Services &amp; amenities
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-slate-500">Services</p>
+                        {facility.services?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {facility.services.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded-full bg-[#00B8DB]/10 px-2.5 py-0.5 text-xs font-medium text-[#0891b2]"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">No services listed</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-slate-500">Amenities</p>
+                        {facility.amenities?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {facility.amenities.map((a) => (
+                              <span
+                                key={a}
+                                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                              >
+                                {a}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">No amenities listed</p>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -791,7 +902,7 @@ export default function Communities() {
                       variant="outline"
                       size="default"
                       className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
-                      onClick={() => navigate("/admin/analytics")}
+                      onClick={() => openFacilityAnalytics(facility)}
                     >
                       View Analytics
                     </Button>
@@ -938,7 +1049,7 @@ export default function Communities() {
 
             <div className="mt-8 space-y-3">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                Facility images (max 8 total)
+                Facility images (max 8 total) — change / upload here
               </label>
               {editingId && keptImagePaths.length > 0 && (
                 <p className="facility-copy-fade text-xs text-slate-500">
@@ -1237,6 +1348,91 @@ export default function Communities() {
 
             
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900">
+              {analyticsFacility?.name || "Facility"} analytics
+            </DialogTitle>
+          </DialogHeader>
+          {analyticsLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading analytics…
+            </div>
+          ) : !facilityAnalytics ? (
+            <p className="py-8 text-center text-sm text-slate-500">
+              No analytics available for this facility yet.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Eye className="h-4 w-4 text-[#00B8DB]" />
+                    <span className="text-xs font-bold uppercase tracking-wide">User visited</span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">
+                    {facilityAnalytics.summary?.userVisited ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Explore / interest clicks from Care Explorer
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <MessageSquare className="h-4 w-4 text-[#00B8DB]" />
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      Sent inquiries
+                    </span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">
+                    {facilityAnalytics.summary?.inquiriesSent ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Inquiry emails sent to facility contacts
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-100 px-3 py-3 text-center">
+                  <p className="text-xs font-medium uppercase text-slate-400">Emails opened</p>
+                  <p className="mt-1 text-xl font-bold text-emerald-600">
+                    {facilityAnalytics.summary?.emailsOpened ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-100 px-3 py-3 text-center">
+                  <p className="text-xs font-medium uppercase text-slate-400">Contacted</p>
+                  <p className="mt-1 text-xl font-bold text-[#00B8DB]">
+                    {facilityAnalytics.summary?.contacted ?? 0}
+                  </p>
+                </div>
+              </div>
+              {Array.isArray(facilityAnalytics.recent) && facilityAnalytics.recent.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Recent inquiries
+                  </p>
+                  <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+                    {facilityAnalytics.recent.map((row) => (
+                      <li key={row.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
+                          <p className="truncate text-xs text-slate-500">{row.email}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          {row.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

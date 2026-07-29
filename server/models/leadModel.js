@@ -38,6 +38,26 @@ const leadSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    facilityAddress: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    facilityPhone: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    facilityEmail: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    facilityZip: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     careType: {
       type: String,
       default: "",

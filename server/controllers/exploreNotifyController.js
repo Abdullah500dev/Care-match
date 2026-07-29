@@ -61,6 +61,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     address = "",
     zipCode = "",
     phone = "",
+    email: facilityEmailBody = "",
     website = "",
     destinationUrl = "",
     sourcePlatform = "",
@@ -71,6 +72,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const resolvedName = String(facilityName || name || "").trim() || "Unknown facility";
   const resolvedDestination = String(destinationUrl || website || "").trim();
   const resolvedCareType = String(careType || category || "").trim();
+  const resolvedAddress = String(address || "").trim();
+  const resolvedZip = String(zipCode || "").trim();
+  const resolvedPhone = String(phone || "").trim();
+  const resolvedFacilityEmail = String(facilityEmailBody || "").trim().toLowerCase();
   const recipients = resolveExploreRecipients();
 
   if (recipients.length === 0) {
@@ -83,6 +88,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     userEmail: user.email || "",
     facilityId: String(facilityId || "").trim(),
     facilityName: resolvedName,
+    facilityAddress: resolvedAddress,
+    facilityPhone: resolvedPhone,
+    facilityEmail: resolvedFacilityEmail,
+    facilityZip: resolvedZip,
     careType: resolvedCareType,
     destinationUrl: resolvedDestination,
     sourcePlatform: String(sourcePlatform || "").trim(),
