@@ -222,10 +222,16 @@ export default function Register() {
         })
       );
       setPendingEmail(form.email);
+      const codeFromApi = String(response?.data?.verificationCode || "").trim();
+      if (codeFromApi) {
+        setActivationCode(codeFromApi);
+      }
       toastAuthSuccess(
         "Account created",
-        response?.data?.message ||
-          "We sent a 6-digit verification code to your email. Enter it below to activate your account."
+        codeFromApi
+          ? `Verification code ready: ${codeFromApi}. Enter it below (also check email / spam).`
+          : response?.data?.message ||
+              "We sent a 6-digit verification code to your email. Enter it below to activate your account."
       );
     } catch (error) {
       toastAuthError(error, {
@@ -285,9 +291,15 @@ export default function Register() {
     if (!pendingEmail) return;
     try {
       const response = await authServices.resendVerificationCode({ email: pendingEmail });
+      const codeFromApi = String(response?.data?.verificationCode || "").trim();
+      if (codeFromApi) {
+        setActivationCode(codeFromApi);
+      }
       toastAuthSuccess(
         "Code resent",
-        response?.data?.message || "We sent a new verification code to your email."
+        codeFromApi
+          ? `New code: ${codeFromApi}. Check email/spam as well.`
+          : response?.data?.message || "We sent a new verification code to your email."
       );
     } catch (error) {
       toastAuthError(error, {

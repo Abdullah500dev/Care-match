@@ -72,6 +72,13 @@ export const register = catchAsyncError(async (req, res, next) => {
     const verificationCode = user.getVerificationCode(15);
     await user.save({ validateBeforeSave: false });
 
+    // Helps local debugging when SMTP is flaky / emails land in spam.
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[register] verification code for ${user.email}: ${verificationCode}`,
+      );
+    }
+
     try {
       const clientBaseUrl = resolveClientBaseUrl(req);
       const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
@@ -89,18 +96,34 @@ export const register = catchAsyncError(async (req, res, next) => {
         },
       });
 
-      res.status(201).json({
+      const payload = {
         success: true,
         message: `Please check your email: ${user.email} for your 6-digit verification code to activate your account!`,
         role,
-      });
+      };
+      // Only expose the code outside production so signup can continue during SMTP issues.
+      if (process.env.NODE_ENV !== "production") {
+        payload.verificationCode = verificationCode;
+        payload.activationUrl = activationUrl;
+      }
+      res.status(201).json(payload);
     } catch (error) {
+      console.error("[register] verification email failed:", error?.message || error);
       // Rollback user (+ facility stub) if email fails
       if (role === "facility") {
         await Facility.deleteOne({ user_id: user._id });
       }
       await User.deleteOne({ _id: user._id });
-      return next(new ErrorHandler("Unable to send verification email", 400));
+      const detail =
+        process.env.NODE_ENV !== "production"
+          ? ` ${error?.message || ""}`.trim()
+          : "";
+      return next(
+        new ErrorHandler(
+          `Unable to send verification email.${detail ? ` ${detail}` : ""}`.trim(),
+          400,
+        ),
+      );
     }
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));
@@ -456,6 +479,12 @@ export const resendVerificationToken = catchAsyncError(
       const verificationCode = user.getVerificationCode(15);
       await user.save({ validateBeforeSave: false });
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          `[resend] verification code for ${user.email}: ${verificationCode}`,
+        );
+      }
+
       try {
         const clientBaseUrl = resolveClientBaseUrl(req);
         const activationUrl = `${clientBaseUrl}/register?activate=1&copy=1&email=${encodeURIComponent(
@@ -473,16 +502,30 @@ export const resendVerificationToken = catchAsyncError(
           },
         });
 
-        res.status(200).json({
+        const payload = {
           success: true,
           message: "Verification code sent to your email!",
-        });
+        };
+        if (process.env.NODE_ENV !== "production") {
+          payload.verificationCode = verificationCode;
+        }
+        res.status(200).json(payload);
       } catch (error) {
+        console.error("[resend] verification email failed:", error?.message || error);
         user.token = undefined;
         user.tokenExpire = undefined;
         user.tokenValidityInMinutes = undefined;
         await user.save({ validateBeforeSave: false });
-        return next(new ErrorHandler("Failed to send verification email", 500));
+        const detail =
+          process.env.NODE_ENV !== "production"
+            ? ` ${error?.message || ""}`.trim()
+            : "";
+        return next(
+          new ErrorHandler(
+            `Failed to send verification email.${detail ? ` ${detail}` : ""}`.trim(),
+            500,
+          ),
+        );
       }
     } catch (error) {
       return next(new ErrorHandler(error.message, 400));
