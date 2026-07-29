@@ -1706,11 +1706,13 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
   const clientBaseUrl = resolveClientBaseUrl(req);
   const resetLink = `${clientBaseUrl}/reset-password?token=${resetToken}`;
   const loginUrl = `${clientBaseUrl}/signin`;
+  const dashboardUrl = `${clientBaseUrl}/facility`;
+  const signupUrl = `${clientBaseUrl}/register`;
 
   try {
     await sendMail({
       email: facilityUser.email,
-      subject: "Your CareMatch AI facility account is ready",
+      subject: `Welcome to CareMatch AI – ${facility.name} account is ready`,
       template: "facility-onboarding.ejs",
       data: {
         user: { name: greetingNameForEmail(facilityUser) },
@@ -1719,6 +1721,8 @@ export const createFacility = catchAsyncError(async (req, res, next) => {
         temporaryPassword,
         loginUrl,
         resetLink,
+        dashboardUrl,
+        signupUrl,
       },
     });
   } catch (error) {
