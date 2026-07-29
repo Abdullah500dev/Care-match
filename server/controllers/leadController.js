@@ -59,7 +59,7 @@ const mapLead = (lead, facilityLookup = {}) => {
       normalizeFacilityValue(lead.facilityZip) ||
       normalizeFacilityValue(linked?.zip_code) ||
       "",
-    careType: lead.careType || "—",
+    careType: "Assisted Living",
     status: lead.status || "New",
     destinationUrl: lead.destinationUrl || "",
     sourcePlatform: lead.sourcePlatform || "",
@@ -272,11 +272,7 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
   ).length;
   const visits = inquiries; // Explore click = facility interest / visit signal
 
-  const careTypeMap = {};
-  for (const lead of allLeads) {
-    const ct = String(lead.careType || "Other").trim() || "Other";
-    careTypeMap[ct] = (careTypeMap[ct] || 0) + 1;
-  }
+  const careTypeMap = { "Assisted Living": allLeads.length };
   const byCareType = Object.entries(careTypeMap)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);

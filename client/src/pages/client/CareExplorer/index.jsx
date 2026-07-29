@@ -364,10 +364,7 @@ function normalizeFacilityForCard(m) {
     imageSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${latForMap},${lngForMap}&zoom=16&size=600x360&scale=2&maptype=roadmap&markers=color:0x14b8a6%7C${latForMap},${lngForMap}&key=${encodeURIComponent(mapsKey)}`;
   }
   if (!imageSrc) imageSrc = DEFAULT_CARD_IMAGE;
-  const category =
-    Array.isArray(m.care_levels) && m.care_levels.length
-      ? m.care_levels.join(" · ").toUpperCase()
-      : "SENIOR LIVING";
+  const category = "ASSISTED LIVING";
   const features =
     Array.isArray(m.reasons) && m.reasons.length
       ? m.reasons.map((r) =>
@@ -513,7 +510,7 @@ function normalizeSavedFacilityDetail(detail) {
     matchPercent: Number.isFinite(Number(src.matchPercent)) ? Number(src.matchPercent) : 0,
     imageSrc,
     imageUrls: normalizedImageUrls,
-    category: String(src.category || "SENIOR LIVING"),
+    category: "ASSISTED LIVING",
     name: String(src.name || "Community"),
     priceRange: formatPriceRange(pricingText),
     priceMin: numericPrice.min,

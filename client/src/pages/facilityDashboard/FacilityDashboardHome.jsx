@@ -17,9 +17,12 @@ export default function FacilityDashboardHome() {
         setFacility(data?.facility || null);
       } catch (error) {
         setFacility(null);
-        toast.error("Unable to load facility dashboard", {
-          description: error?.response?.data?.message || "Please contact admin support.",
-        });
+        // New facility accounts may still be finishing profile setup.
+        if (error?.response?.status !== 404) {
+          toast.error("Unable to load facility dashboard", {
+            description: error?.response?.data?.message || "Please contact admin support.",
+          });
+        }
       } finally {
         setLoading(false);
       }

@@ -9,12 +9,14 @@ import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
+import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 
 // Register user
 export const register = catchAsyncError(async (req, res, next) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { name, email, password, confirmPassword, role: roleRaw } = req.body;
+    const role = roleRaw === "facility" ? "facility" : "user";
 
     if (!validator.validate(email)) {
       return next(new ErrorHandler("Invalid email", 400));
@@ -32,14 +34,39 @@ export const register = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("Email already exists", 400));
     }
 
-    // Create user directly
+    // Create user with selected account role (user or facility)
     const user = new User({
       name,
       email,
       password,
+      user_type: "user",
+      role,
     });
 
     await user.save();
+
+    // Facility accounts get a starter profile so /facility dashboard can load.
+    if (role === "facility") {
+      try {
+        await Facility.create({
+          name: String(name || "").trim() || "My Facility",
+          email: String(email || "").trim().toLowerCase(),
+          phone: "0000000000",
+          address: "To be updated",
+          care_levels: ["Assisted Living"],
+          user_id: user._id,
+          created_by: user._id,
+        });
+      } catch (facilityError) {
+        await User.deleteOne({ _id: user._id });
+        return next(
+          new ErrorHandler(
+            facilityError?.message || "Unable to create facility profile",
+            400,
+          ),
+        );
+      }
+    }
 
     // Generate 6-digit verification code
     const verificationCode = user.getVerificationCode(15);
@@ -65,9 +92,13 @@ export const register = catchAsyncError(async (req, res, next) => {
       res.status(201).json({
         success: true,
         message: `Please check your email: ${user.email} for your 6-digit verification code to activate your account!`,
+        role,
       });
     } catch (error) {
-      // Rollback user creation if email fails
+      // Rollback user (+ facility stub) if email fails
+      if (role === "facility") {
+        await Facility.deleteOne({ user_id: user._id });
+      }
       await User.deleteOne({ _id: user._id });
       return next(new ErrorHandler("Unable to send verification email", 400));
     }

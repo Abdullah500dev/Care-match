@@ -79,7 +79,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
 
   const resolvedName = String(facilityName || name || "").trim() || "Unknown facility";
   const resolvedDestination = String(destinationUrl || website || "").trim();
-  const resolvedCareType = String(careType || category || "").trim();
+  const resolvedCareType = "Assisted Living";
   let resolvedAddress = cleanFacilityField(address);
   let resolvedZip = cleanFacilityField(zipCode);
   let resolvedPhone = cleanFacilityField(phone);

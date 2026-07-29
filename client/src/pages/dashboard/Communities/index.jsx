@@ -692,10 +692,7 @@ export default function Communities() {
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
           {facilities.map((facility) => {
-            const typeLabel =
-              (facility.care_levels && facility.care_levels[0]) ||
-              (facility.services && facility.services[0]) ||
-              "Facility";
+              const typeLabel = "Assisted Living";
             return (
               <Card
                 key={facility._id}
@@ -796,7 +793,7 @@ export default function Communities() {
                           {facility.care_levels?.length > 0 && (
                             <p>
                               <span className="font-semibold text-slate-500">Care levels: </span>
-                              {facility.care_levels.join(", ")}
+                              Assisted Living
                             </p>
                           )}
                           {facility.pricing && (

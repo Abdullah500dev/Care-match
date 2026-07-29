@@ -15,7 +15,7 @@ const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
 const FacilityCard = ({
   facilityId,
   matchPercent = 96,
-  category = "ASSISTED LIVING & MEMORY CARE",
+  category = "ASSISTED LIVING",
   name = "Sunrise Senior Living",
   rating = 4.8,
   reviewCount = 127,
@@ -170,8 +170,8 @@ const FacilityCard = ({
         website: normalizedWebsite || website || "",
         destinationUrl,
         sourcePlatform,
-        careType: category,
-        category,
+        careType: "Assisted Living",
+        category: "Assisted Living",
       })
       .catch(() => {
         // Ignore notify failures so UX is not blocked.

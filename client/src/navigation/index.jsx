@@ -139,7 +139,7 @@ const getHomeByRole = (userData) => {
   if (["admin", "authenticator", "moderator"].includes(userType))
     return "/admin";
   if (role === "facility") return "/facility";
-  if (role === "user") return "/";
+  if (role === "user") return "/portal";
   // Default unknown/non-staff users to website home to avoid accidental admin redirects.
   return "/";
 };

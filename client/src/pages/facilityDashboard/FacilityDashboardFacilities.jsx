@@ -71,11 +71,13 @@ export default function FacilityDashboardFacilities() {
       if (doc) fillForm(doc);
     } catch (error) {
       setFacility(null);
-      toast.error("Could not load facility profile", {
-        description:
-          error?.response?.data?.message ||
-          "Ask an admin to create/link your facility account first.",
-      });
+      if (error?.response?.status !== 404) {
+        toast.error("Could not load facility profile", {
+          description:
+            error?.response?.data?.message ||
+            "Ask an admin to create/link your facility account first.",
+        });
+      }
     } finally {
       setLoading(false);
     }

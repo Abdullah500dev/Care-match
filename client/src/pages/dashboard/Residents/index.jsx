@@ -28,7 +28,6 @@ import {
   MoreHorizontal,
   Loader2,
   MapPin,
-  Phone,
   Mail,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,6 +50,16 @@ const ALL_STATUSES = [
   "Waitlist",
   "Closed",
 ];
+
+/** Product only supports Assisted Living — never show other care-type chips. */
+const ASSISTED_LIVING_LABEL = "Assisted Living";
+
+const normalizeCareTypeDisplay = (careType) => {
+  const raw = String(careType || "").trim();
+  if (!raw || raw === "—") return ASSISTED_LIVING_LABEL;
+  if (/assisted\s*living/i.test(raw)) return ASSISTED_LIVING_LABEL;
+  return ASSISTED_LIVING_LABEL;
+};
 
 const HEAD_STYLE = {
   fontFamily: "Rethink Sans, sans-serif",
@@ -78,12 +87,6 @@ const toDateInputValue = (iso) => {
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
 };
-
-const splitCareTypes = (careType) =>
-  String(careType || "")
-    .split(/\s*[•·|,/&]+\s*|\s+-\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
 
 const PAGE_SIZE = 8;
 
@@ -155,14 +158,7 @@ export default function Residents() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [leads]);
 
-  const careTypeOptions = useMemo(() => {
-    const set = new Set();
-    leads.forEach((lead) => {
-      const ct = String(lead.careType || "").trim();
-      if (ct && ct !== "—") set.add(ct);
-    });
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [leads]);
+  const careTypeOptions = useMemo(() => [ASSISTED_LIVING_LABEL], []);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -179,7 +175,8 @@ export default function Residents() {
       const matchStatus = !statusFilter || lead.status === statusFilter;
       const matchArea = !areaFilter || areaKeyFromLead(lead) === areaFilter;
       const matchCare =
-        !careTypeFilter || String(lead.careType || "") === careTypeFilter;
+        !careTypeFilter ||
+        normalizeCareTypeDisplay(lead.careType) === careTypeFilter;
 
       const created = lead.createdAt ? new Date(lead.createdAt).getTime() : null;
       const matchFrom = fromTs == null || (created != null && created >= fromTs);
@@ -255,7 +252,7 @@ export default function Residents() {
       ? new Date(lead.emailOpenedAt).toLocaleString()
       : "—";
     toast.info(`Viewing ${lead.name}`, {
-      description: `${lead.facility} · ${lead.careType} · Email opened ${opened}`,
+      description: `${lead.facility} · ${normalizeCareTypeDisplay(lead.careType)} · Email opened ${opened}`,
     });
   };
 
@@ -474,7 +471,7 @@ export default function Residents() {
                 </TableRow>
               ) : (
                 pagedLeads.map((lead) => {
-                  const careParts = splitCareTypes(lead.careType);
+                  const careLabel = normalizeCareTypeDisplay(lead.careType);
                   return (
                   <TableRow
                     key={lead.id}
@@ -516,12 +513,6 @@ export default function Residents() {
                             </span>
                           </p>
                           <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
-                            <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
-                            <span className="min-w-0 break-words">
-                              {lead.facilityPhone || "Phone not available"}
-                            </span>
-                          </p>
-                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
                             <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                             <span className="min-w-0 break-all">
                               {lead.facilityEmail || "Email not available"}
@@ -531,16 +522,9 @@ export default function Residents() {
                       </div>
                     </TableCell>
                     <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
-                      <div className="flex max-w-[14rem] flex-wrap gap-1.5">
-                        {(careParts.length ? careParts : ["—"]).map((part) => (
-                          <span
-                            key={`${lead.id}-${part}`}
-                            className="inline-flex max-w-full break-words rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold leading-snug text-slate-700"
-                          >
-                            {part}
-                          </span>
-                        ))}
-                      </div>
+                      <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold leading-snug text-slate-700">
+                        {careLabel}
+                      </span>
                     </TableCell>
                     <TableCell className="align-top py-4">
                       <span

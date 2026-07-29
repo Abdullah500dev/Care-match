@@ -25,6 +25,7 @@ const joiRegisterSchema = Joi.object({
       "string.empty": "Confirm password is required",
       "any.required": "Confirm password is required",
     }),
+  role: Joi.string().valid("user", "facility").default("user"),
 });
 
 const joiLoginSchema = Joi.object({

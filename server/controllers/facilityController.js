@@ -414,10 +414,7 @@ const mapCaringPayloadToMatchRows = (payload, fallbackContext = {}) => {
         buildFullAddress(address.street, city, state, zipCode);
       const lat = toFiniteNumber(address.latitude) ?? fallbackContext.latitude ?? null;
       const lng = toFiniteNumber(address.longitude) ?? fallbackContext.longitude ?? null;
-      const careTypes = Array.isArray(row.careTypes) ? row.careTypes : [];
-      const careLevels = careTypes.length
-        ? [...new Set(careTypes.map((t) => String(t || "").trim()).filter(Boolean))]
-        : ["Assisted Living"];
+      const careLevels = ["Assisted Living"];
       const caringAmenities = [
         ...toStringArray(row.amenities),
         ...toStringArray(row.highlights),
@@ -917,24 +914,9 @@ const toStringArray = (value) => {
   return single ? [single] : [];
 };
 
-const inferCareLevelsFromText = (...values) => {
-  const text = values
-    .map((v) => String(v || "").toLowerCase())
-    .join(" ");
-  const levels = [];
-  if (/skilled nursing|nursing home|snf|rehab center/i.test(text)) {
-    levels.push("Skilled Nursing");
-  }
-  if (/assisted living|assisted/i.test(text)) {
-    levels.push("Assisted Living");
-  }
-  if (/memory care|dementia|alzheimer/i.test(text)) {
-    levels.push("Memory Care");
-  }
-  if (/independent living/i.test(text)) {
-    levels.push("Independent Living");
-  }
-  return [...new Set(levels)];
+const inferCareLevelsFromText = (..._values) => {
+  // Product currently supports Assisted Living only.
+  return ["Assisted Living"];
 };
 
 const parseJsonEnvObject = (envName) => {
@@ -997,14 +979,7 @@ const enrichFacilityListsWithGpt = async (rawRecord, fallback = {}) => {
   const userPrompt = JSON.stringify({
     task: "Extract practical fields for a senior-care directory.",
     rules: {
-      care_levels_allowed: [
-        "Skilled Nursing",
-        "Assisted Living",
-        "Memory Care",
-        "Independent Living",
-        "Continuing Care",
-        "Rehabilitation",
-      ],
+      care_levels_allowed: ["Assisted Living"],
       max_items_each: 12,
     },
     listing: rawRecord,
@@ -1217,12 +1192,8 @@ const normalizeApifyFacilityRow = (row = {}) => {
   const categories = toStringArray(
     pickFirstNonEmpty(row, ["categories", "categoryName", "category"])
   );
-  const careLevels = inferCareLevelsFromText(
-    providerName,
-    categories.join(" "),
-    placeTypes.join(" ")
-  );
-  if (continuingCareBeds > 0) careLevels.push("Continuing Care");
+  const careLevels = ["Assisted Living"];
+  // Product supports Assisted Living only — do not append other care levels.
 
   const mapsUrl = toOptionalString(pickFirstNonEmpty(row, ["googleMapsUrl", "mapsUrl", "url"]));
   const placeId = toOptionalString(

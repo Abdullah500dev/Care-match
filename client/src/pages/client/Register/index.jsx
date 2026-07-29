@@ -19,6 +19,7 @@ export default function Register() {
     email: "",
     password: "",
     confirmPassword: "",
+    role: "user",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -157,6 +158,16 @@ export default function Register() {
     });
   };
 
+  const handleRoleChange = (role) => {
+    setForm((prev) => ({ ...prev, role }));
+    setErrors((prev) => {
+      if (!prev.role) return prev;
+      const next = { ...prev };
+      delete next.role;
+      return next;
+    });
+  };
+
   const validateForm = () => {
     const nextErrors = {};
 
@@ -165,6 +176,9 @@ export default function Register() {
       nextErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       nextErrors.email = "Enter a valid email address";
+    }
+    if (!["user", "facility"].includes(form.role)) {
+      nextErrors.role = "Please select an account type";
     }
     if (!form.password) nextErrors.password = "Password is required";
     if (!form.confirmPassword) nextErrors.confirmPassword = "Confirm password is required";
@@ -197,12 +211,14 @@ export default function Register() {
         email: form.email,
         password: form.password,
         confirmPassword: form.confirmPassword,
+        role: form.role === "facility" ? "facility" : "user",
       });
       sessionStorage.setItem(
         SIGNUP_PREFILL_KEY,
         JSON.stringify({
           email: form.email,
           password: form.password,
+          role: form.role,
         })
       );
       setPendingEmail(form.email);
@@ -297,7 +313,7 @@ export default function Register() {
                 Create Your Account
               </h1>
               <p className="mt-2 text-sm text-[#64748b] sm:text-base">
-                Join CareMatch AI to save preferences and track your search.
+                Join CareMatch AI as a family member or a facility partner.
               </p>
             </div>
 
@@ -313,6 +329,63 @@ export default function Register() {
                   }}
                 >
                   <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-normal text-[#314158]">
+                        Account Type
+                      </Label>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition ${
+                            form.role === "user"
+                              ? "border-[#00b8db] bg-[#00b8db]/5 ring-1 ring-[#00b8db]/40"
+                              : "border-[#E2E8F0] bg-white hover:border-[#cbd5e1]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="role"
+                            value="user"
+                            checked={form.role === "user"}
+                            onChange={() => handleRoleChange("user")}
+                            className="mt-1 h-4 w-4 accent-[#00b8db]"
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-[#0f172a]">
+                              User
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#64748b]">
+                              Search &amp; save communities
+                            </span>
+                          </span>
+                        </label>
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition ${
+                            form.role === "facility"
+                              ? "border-[#00b8db] bg-[#00b8db]/5 ring-1 ring-[#00b8db]/40"
+                              : "border-[#E2E8F0] bg-white hover:border-[#cbd5e1]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="role"
+                            value="facility"
+                            checked={form.role === "facility"}
+                            onChange={() => handleRoleChange("facility")}
+                            className="mt-1 h-4 w-4 accent-[#00b8db]"
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-[#0f172a]">
+                              Facility
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#64748b]">
+                              Manage your community listing
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                      {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="fullName" className="text-sm font-normal text-[#314158]">
                         Full Name
