@@ -37,8 +37,8 @@ export default function Register() {
   }, []);
 
   useEffect(() => {
-    const emailFromQuery = (searchParams.get("email") || "").trim();
-    const codeFromQuery = (searchParams.get("code") || "").trim();
+    const emailFromQuery = (searchParams.get("email") || "").trim().toLowerCase();
+    const codeFromQuery = (searchParams.get("code") || "").replace(/\D/g, "").trim();
     const activateFromQuery = (searchParams.get("activate") || "").trim();
     const copyFromQuery = (searchParams.get("copy") || "").trim();
     if (!emailFromQuery && !codeFromQuery) return;
@@ -97,7 +97,14 @@ export default function Register() {
 
       copyWithFallback();
     }
-  }, [searchParams]);
+
+    // Remove code from the URL so an old link cannot overwrite a newly resent code.
+    if (codeFromQuery || activateFromQuery || copyFromQuery) {
+      navigate("/register", { replace: true, state: { from: fromState } });
+    }
+    // Run once on mount for the initial query string only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!pendingEmail) return;
@@ -246,7 +253,9 @@ export default function Register() {
 
   const handleActivateAccount = async (e) => {
     e.preventDefault();
-    if (!pendingEmail || !activationCode) {
+    const normalizedCode = String(activationCode || "").replace(/\D/g, "").trim();
+    const normalizedEmail = String(pendingEmail || "").trim().toLowerCase();
+    if (!normalizedEmail || !normalizedCode) {
       setActivationError("Verification code is required");
       toastAuthError(
         { response: { status: 400, data: { message: "Verification code is required." } } },
@@ -254,22 +263,33 @@ export default function Register() {
       );
       return;
     }
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      setActivationError("Enter the latest 6-digit code");
+      toastAuthError(
+        { response: { status: 400, data: { message: "Verification code must be 6 digits." } } },
+        { fallbackTitle: "Invalid verification code" }
+      );
+      return;
+    }
 
     try {
       setActivationError("");
       setIsVerifying(true);
-      const response = await authServices.activate({ email: pendingEmail, code: activationCode });
+      const response = await authServices.activate({
+        email: normalizedEmail,
+        code: normalizedCode,
+      });
       toastAuthSuccess(
         "Account verified",
         response?.data?.message || "Your account is active. You can now sign in."
       );
       const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
-      let nextState = { email: pendingEmail };
+      let nextState = { email: normalizedEmail };
       if (savedPrefill) {
         try {
           const parsed = JSON.parse(savedPrefill);
           nextState = {
-            email: parsed?.email || pendingEmail,
+            email: parsed?.email || normalizedEmail,
             password: parsed?.password || "",
           };
         } catch {
@@ -280,7 +300,8 @@ export default function Register() {
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Verification failed",
-        fallbackDescription: "Please check the 6-digit code and try again.",
+        fallbackDescription:
+          "Use the newest 6-digit code from your latest email. Older codes stop working after you resend.",
       });
     } finally {
       setIsVerifying(false);
@@ -290,16 +311,22 @@ export default function Register() {
   const handleResendCode = async () => {
     if (!pendingEmail) return;
     try {
-      const response = await authServices.resendVerificationCode({ email: pendingEmail });
-      const codeFromApi = String(response?.data?.verificationCode || "").trim();
-      if (codeFromApi) {
-        setActivationCode(codeFromApi);
-      }
+      const response = await authServices.resendVerificationCode({
+        email: String(pendingEmail).trim().toLowerCase(),
+      });
+      const codeFromApi = String(response?.data?.verificationCode || "")
+        .replace(/\D/g, "")
+        .trim();
+      // Clear any stale code so the user enters (or we prefill) the newest one only.
+      setActivationCode(codeFromApi || "");
+      setActivationError("");
+      navigate("/register", { replace: true, state: { from: fromState } });
       toastAuthSuccess(
         "Code resent",
         codeFromApi
-          ? `New code: ${codeFromApi}. Check email/spam as well.`
-          : response?.data?.message || "We sent a new verification code to your email."
+          ? `New code: ${codeFromApi}. Older codes no longer work.`
+          : response?.data?.message ||
+              "We sent a new verification code. Use only the newest email — older codes expire when you resend."
       );
     } catch (error) {
       toastAuthError(error, {
@@ -531,18 +558,24 @@ export default function Register() {
                         id="activationCode"
                         name="activationCode"
                         value={activationCode}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
                         onChange={(e) => {
-                          setActivationCode(e.target.value);
+                          setActivationCode(e.target.value.replace(/\D/g, "").slice(0, 6));
                           if (activationError) setActivationError("");
                         }}
                         placeholder="123456"
-                        className={`h-11 rounded-xl border text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                        className={`h-11 rounded-xl border text-center text-lg tracking-[0.35em] text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
                           activationError ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
                         }`}
                       />
                       {activationError && (
                         <p className="text-red-500 text-sm mt-1 text-left">{activationError}</p>
                       )}
+                      <p className="text-xs text-slate-500">
+                        After resend, only the newest code works. Ignore older emails.
+                      </p>
                     </div>
 
                     <Button

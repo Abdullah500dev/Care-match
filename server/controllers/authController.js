@@ -12,13 +12,21 @@ import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const emailMatchFilter = (email) => ({
+  email: { $regex: `^${escapeRegex(email)}$`, $options: "i" },
+});
+
 // Register user
 export const register = catchAsyncError(async (req, res, next) => {
   try {
     const { name, email, password, confirmPassword, role: roleRaw } = req.body;
     const role = roleRaw === "facility" ? "facility" : "user";
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!validator.validate(email)) {
+    if (!validator.validate(normalizedEmail)) {
       return next(new ErrorHandler("Invalid email", 400));
     }
 
@@ -29,7 +37,7 @@ export const register = catchAsyncError(async (req, res, next) => {
     }
 
     // Check for unique email
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne(emailMatchFilter(normalizedEmail));
     if (existingUser) {
       return next(new ErrorHandler("Email already exists", 400));
     }
@@ -37,7 +45,7 @@ export const register = catchAsyncError(async (req, res, next) => {
     // Create user with selected account role (user or facility)
     const user = new User({
       name,
-      email,
+      email: normalizedEmail,
       password,
       user_type: "user",
       role,
@@ -50,7 +58,7 @@ export const register = catchAsyncError(async (req, res, next) => {
       try {
         await Facility.create({
           name: String(name || "").trim() || "My Facility",
-          email: String(email || "").trim().toLowerCase(),
+          email: normalizedEmail,
           phone: "0000000000",
           address: "To be updated",
           care_levels: ["Assisted Living"],
@@ -133,36 +141,64 @@ export const register = catchAsyncError(async (req, res, next) => {
 // Activate user with 6-digit code
 export const activateUser = catchAsyncError(async (req, res, next) => {
   try {
-    const { email, code } = req.body;
+    const rawEmail = String(req.body?.email || "").trim().toLowerCase();
+    const normalizedCode = String(req.body?.code || "")
+      .replace(/\D/g, "")
+      .trim();
 
-    if (!email || !code) {
+    if (!rawEmail || !normalizedCode) {
       return next(
         new ErrorHandler("Email and verification code are required", 400),
       );
     }
 
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      return next(
+        new ErrorHandler("Verification code must be exactly 6 digits", 400),
+      );
+    }
+
     const hashedCode = crypto
       .createHash("sha256")
-      .update(String(code))
+      .update(normalizedCode)
       .digest("hex");
 
-    const user = await User.findOne({ email });
+    // Case-insensitive email match (Gmail etc. treat address case as identical)
+    const user = await User.findOne(emailMatchFilter(rawEmail));
 
     if (!user) {
       return next(new ErrorHandler("Invalid email or verification code", 400));
     }
 
-    if (
-      user.token !== hashedCode ||
-      !user.tokenExpire ||
-      user.tokenExpire < Date.now()
-    ) {
+    if (!user.token || !user.tokenExpire) {
       return next(
-        new ErrorHandler("Invalid or expired verification code", 400),
+        new ErrorHandler(
+          "No active verification code. Please tap Resend to get a new code.",
+          400,
+        ),
+      );
+    }
+
+    if (new Date(user.tokenExpire).getTime() < Date.now()) {
+      return next(
+        new ErrorHandler(
+          "Verification code has expired. Please tap Resend to get a new code.",
+          400,
+        ),
+      );
+    }
+
+    if (user.token !== hashedCode) {
+      return next(
+        new ErrorHandler(
+          "Incorrect verification code. After you resend, only the newest code works — check the latest email.",
+          400,
+        ),
       );
     }
 
     user.is_verified = true;
+    user.email = rawEmail;
     user.token = undefined;
     user.tokenExpire = undefined;
     user.tokenValidityInMinutes = undefined;
@@ -459,13 +495,13 @@ export const resetPassword = catchAsyncError(async (req, res, next) => {
 export const resendVerificationToken = catchAsyncError(
   async (req, res, next) => {
     try {
-      const { email } = req.body;
+      const normalizedEmail = String(req.body?.email || "").trim().toLowerCase();
 
-      if (!email) {
+      if (!normalizedEmail) {
         return next(new ErrorHandler("Email is required", 400));
       }
 
-      const user = await User.findOne({ email });
+      const user = await User.findOne(emailMatchFilter(normalizedEmail));
 
       if (!user) {
         return next(new ErrorHandler("User not found", 404));
@@ -475,8 +511,9 @@ export const resendVerificationToken = catchAsyncError(
         return next(new ErrorHandler("User is already verified", 400));
       }
 
-      // Generate new 6-digit verification code
+      // Generate new 6-digit verification code (invalidates any previous code)
       const verificationCode = user.getVerificationCode(15);
+      user.email = normalizedEmail;
       await user.save({ validateBeforeSave: false });
 
       if (process.env.NODE_ENV !== "production") {
@@ -504,7 +541,8 @@ export const resendVerificationToken = catchAsyncError(
 
         const payload = {
           success: true,
-          message: "Verification code sent to your email!",
+          message:
+            "Verification code sent to your email! Older codes no longer work — use the newest email.",
         };
         if (process.env.NODE_ENV !== "production") {
           payload.verificationCode = verificationCode;
