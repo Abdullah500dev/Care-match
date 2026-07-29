@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import SEO from "@/components/common/SEO";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,8 +6,6 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   XAxis,
   YAxis,
@@ -29,6 +27,9 @@ const RANGE_OPTIONS = [
   { value: 90, label: "90 days" },
 ];
 
+const CARE_TYPE_PAGE_SIZE = 5;
+const FACILITY_PAGE_SIZE = 5;
+
 const chartConfig = {
   visits: { label: "Visits", color: "#00B8DB" },
   inquiries: { label: "Inquiries", color: "#6366F1" },
@@ -38,6 +39,8 @@ export default function Analytics() {
   const [days, setDays] = useState(30);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
+  const [carePage, setCarePage] = useState(1);
+  const [facilityPage, setFacilityPage] = useState(1);
 
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
@@ -46,6 +49,8 @@ export default function Analytics() {
         params: { days },
       });
       setData(res);
+      setCarePage(1);
+      setFacilityPage(1);
     } catch (err) {
       console.error(err);
       toast.error("Could not load analytics", {
@@ -66,6 +71,21 @@ export default function Analytics() {
   const byCareType = Array.isArray(data?.byCareType) ? data.byCareType : [];
   const topFacilities = Array.isArray(data?.topFacilities) ? data.topFacilities : [];
   const byStatus = data?.byStatus || {};
+
+  const careTotalPages = Math.max(1, Math.ceil(byCareType.length / CARE_TYPE_PAGE_SIZE));
+  const careSafePage = Math.min(carePage, careTotalPages);
+  const pagedCareTypes = useMemo(() => {
+    const start = (careSafePage - 1) * CARE_TYPE_PAGE_SIZE;
+    return byCareType.slice(start, start + CARE_TYPE_PAGE_SIZE);
+  }, [byCareType, careSafePage]);
+  const careMax = Math.max(1, ...byCareType.map((c) => Number(c.count) || 0));
+
+  const facilityTotalPages = Math.max(1, Math.ceil(topFacilities.length / FACILITY_PAGE_SIZE));
+  const facilitySafePage = Math.min(facilityPage, facilityTotalPages);
+  const pagedFacilities = useMemo(() => {
+    const start = (facilitySafePage - 1) * FACILITY_PAGE_SIZE;
+    return topFacilities.slice(start, start + FACILITY_PAGE_SIZE);
+  }, [topFacilities, facilitySafePage]);
 
   const cards = [
     {
@@ -261,25 +281,65 @@ export default function Analytics() {
                 {byCareType.length === 0 ? (
                   <p className="py-8 text-center text-sm text-slate-400">No care-type data yet.</p>
                 ) : (
-                  <ChartContainer
-                    config={{ count: { label: "Leads", color: "#00B8DB" } }}
-                    className="h-[240px] w-full"
-                  >
-                    <BarChart data={byCareType} layout="vertical" margin={{ left: 8 }}>
-                      <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-                      <XAxis type="number" allowDecimals={false} fontSize={11} />
-                      <YAxis
-                        type="category"
-                        dataKey="name"
-                        width={110}
-                        tickLine={false}
-                        axisLine={false}
-                        fontSize={11}
-                      />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="count" fill="#00B8DB" radius={[0, 6, 6, 0]} />
-                    </BarChart>
-                  </ChartContainer>
+                  <div className="space-y-4">
+                    <ul className="space-y-3">
+                      {pagedCareTypes.map((row) => {
+                        const pct = Math.max(
+                          6,
+                          Math.round(((Number(row.count) || 0) / careMax) * 100),
+                        );
+                        return (
+                          <li key={row.name} className="space-y-1.5">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="min-w-0 flex-1 break-words text-sm font-semibold leading-snug text-slate-800">
+                                {row.name}
+                              </p>
+                              <span className="shrink-0 text-sm font-bold text-slate-900">
+                                {row.count}
+                              </span>
+                            </div>
+                            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className="h-full rounded-full bg-[#00B8DB]"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {byCareType.length > CARE_TYPE_PAGE_SIZE && (
+                      <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <p className="text-xs text-slate-500">
+                          Page {careSafePage} of {careTotalPages}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={careSafePage <= 1}
+                            onClick={() => setCarePage((p) => Math.max(1, p - 1))}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={careSafePage >= careTotalPages}
+                            onClick={() =>
+                              setCarePage((p) => Math.min(careTotalPages, p + 1))
+                            }
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -296,26 +356,59 @@ export default function Analytics() {
                     No facility engagement yet.
                   </p>
                 ) : (
-                  <ul className="divide-y divide-slate-100">
-                    {topFacilities.map((f) => (
-                      <li
-                        key={`${f.facilityId}-${f.facilityName}`}
-                        className="flex items-center justify-between gap-3 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-800">
-                            {f.facilityName}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            {f.visits} visits · {f.emailOpened} opened
-                          </p>
+                  <div className="space-y-1">
+                    <ul className="divide-y divide-slate-100">
+                      {pagedFacilities.map((f) => (
+                        <li
+                          key={`${f.facilityId}-${f.facilityName}`}
+                          className="flex items-start justify-between gap-3 py-3"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <p className="break-words font-semibold leading-snug text-slate-800">
+                              {f.facilityName}
+                            </p>
+                            <p className="text-xs leading-snug text-slate-500">
+                              {f.visits} visits · {f.emailOpened} opened
+                            </p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-[#00B8DB]/10 px-2.5 py-1 text-xs font-bold text-[#0891b2]">
+                            {f.inquiries} inquiries
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {topFacilities.length > FACILITY_PAGE_SIZE && (
+                      <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                        <p className="text-xs text-slate-500">
+                          Page {facilitySafePage} of {facilityTotalPages}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={facilitySafePage <= 1}
+                            onClick={() => setFacilityPage((p) => Math.max(1, p - 1))}
+                          >
+                            Previous
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            disabled={facilitySafePage >= facilityTotalPages}
+                            onClick={() =>
+                              setFacilityPage((p) => Math.min(facilityTotalPages, p + 1))
+                            }
+                          >
+                            Next
+                          </Button>
                         </div>
-                        <span className="shrink-0 rounded-full bg-[#00B8DB]/10 px-2.5 py-1 text-xs font-bold text-[#0891b2]">
-                          {f.inquiries} inquiries
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                      </div>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>

@@ -7,6 +7,8 @@ import { resolveEmailTrackingBaseUrl } from "../utils/resolveApiBaseUrl.js";
 import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
 import Lead from "../models/leadModel.js";
+import Facility from "../models/facilityModel.js";
+import mongoose from "mongoose";
 
 const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
 const DEFAULT_TRACKED_FACILITY_EMAIL = "smith12@yopmail.com";
@@ -18,6 +20,12 @@ const isLocalHostUrl = (value) => {
   } catch {
     return false;
   }
+};
+
+const cleanFacilityField = (value) => {
+  const s = String(value || "").trim();
+  if (!s || /^n\/?a$/i.test(s) || s === "—" || s === "-") return "";
+  return s;
 };
 
 const resolveExploreRecipients = () => {
@@ -72,10 +80,38 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const resolvedName = String(facilityName || name || "").trim() || "Unknown facility";
   const resolvedDestination = String(destinationUrl || website || "").trim();
   const resolvedCareType = String(careType || category || "").trim();
-  const resolvedAddress = String(address || "").trim();
-  const resolvedZip = String(zipCode || "").trim();
-  const resolvedPhone = String(phone || "").trim();
-  const resolvedFacilityEmail = String(facilityEmailBody || "").trim().toLowerCase();
+  let resolvedAddress = cleanFacilityField(address);
+  let resolvedZip = cleanFacilityField(zipCode);
+  let resolvedPhone = cleanFacilityField(phone);
+  let resolvedFacilityEmail = cleanFacilityField(facilityEmailBody).toLowerCase();
+  const resolvedFacilityId = String(facilityId || "").trim();
+
+  // Hydrate contact details from owned Facility records when Explore payload is incomplete
+  try {
+    let facilityDoc = null;
+    if (resolvedFacilityId && mongoose.Types.ObjectId.isValid(resolvedFacilityId)) {
+      facilityDoc = await Facility.findById(resolvedFacilityId)
+        .select("name address phone email zip_code")
+        .lean();
+    }
+    if (!facilityDoc && resolvedName) {
+      facilityDoc = await Facility.findOne({
+        name: new RegExp(`^${resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+      })
+        .select("name address phone email zip_code")
+        .lean();
+    }
+    if (facilityDoc) {
+      resolvedAddress = resolvedAddress || cleanFacilityField(facilityDoc.address);
+      resolvedPhone = resolvedPhone || cleanFacilityField(facilityDoc.phone);
+      resolvedFacilityEmail =
+        resolvedFacilityEmail || cleanFacilityField(facilityDoc.email).toLowerCase();
+      resolvedZip = resolvedZip || cleanFacilityField(facilityDoc.zip_code);
+    }
+  } catch (err) {
+    console.warn("[explore-click] facility hydrate failed:", err?.message || err);
+  }
+
   const recipients = resolveExploreRecipients();
 
   if (recipients.length === 0) {
@@ -86,7 +122,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     userId: user._id,
     userName: user.name || "",
     userEmail: user.email || "",
-    facilityId: String(facilityId || "").trim(),
+    facilityId: resolvedFacilityId,
     facilityName: resolvedName,
     facilityAddress: resolvedAddress,
     facilityPhone: resolvedPhone,
@@ -120,7 +156,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           userId: user._id,
           userName: user.name || "",
           userEmail: user.email || "",
-          facilityId: String(facilityId || "").trim(),
+          facilityId: resolvedFacilityId,
           facilityName: resolvedName,
           destinationUrl: resolvedDestination,
           leadId: lead._id,
@@ -140,10 +176,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           userName: user.name || "User",
           userEmail: user.email || "",
           facilityName: resolvedName,
-          facilityId: String(facilityId || "").trim(),
-          address: String(address || "").trim(),
-          zipCode: String(zipCode || "").trim(),
-          phone: String(phone || "").trim(),
+          facilityId: resolvedFacilityId,
+          address: resolvedAddress,
+          zipCode: resolvedZip,
+          phone: resolvedPhone,
           website: String(website || "").trim(),
           destinationUrl: resolvedDestination,
           sourcePlatform: String(sourcePlatform || "").trim(),

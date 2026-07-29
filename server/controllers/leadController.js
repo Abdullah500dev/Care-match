@@ -22,10 +22,17 @@ const initialsFromName = (name) => {
   return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
 };
 
+const normalizeFacilityValue = (value) => {
+  const s = String(value || "").trim();
+  if (!s || /^n\/?a$/i.test(s) || s === "—" || s === "-") return "";
+  return s;
+};
+
 const mapLead = (lead, facilityLookup = {}) => {
   const linked =
     (lead.facilityId && facilityLookup[String(lead.facilityId)]) ||
-    (lead.facilityName && facilityLookup[`name:${String(lead.facilityName).toLowerCase()}`]) ||
+    (lead.facilityName &&
+      facilityLookup[`name:${String(lead.facilityName).trim().toLowerCase()}`]) ||
     null;
 
   return {
@@ -35,10 +42,23 @@ const mapLead = (lead, facilityLookup = {}) => {
     email: lead.userEmail || "",
     facility: lead.facilityName || linked?.name || "—",
     facilityId: lead.facilityId || linked?._id?.toString?.() || "",
-    facilityAddress: lead.facilityAddress || linked?.address || "",
-    facilityPhone: lead.facilityPhone || linked?.phone || "",
-    facilityEmail: lead.facilityEmail || linked?.email || "",
-    facilityZip: lead.facilityZip || linked?.zip_code || "",
+    facilityAddress:
+      normalizeFacilityValue(lead.facilityAddress) ||
+      normalizeFacilityValue(linked?.address) ||
+      "",
+    facilityPhone:
+      normalizeFacilityValue(lead.facilityPhone) ||
+      normalizeFacilityValue(linked?.phone) ||
+      normalizeFacilityValue(linked?.phone_number) ||
+      "",
+    facilityEmail:
+      normalizeFacilityValue(lead.facilityEmail) ||
+      normalizeFacilityValue(linked?.email) ||
+      "",
+    facilityZip:
+      normalizeFacilityValue(lead.facilityZip) ||
+      normalizeFacilityValue(linked?.zip_code) ||
+      "",
     careType: lead.careType || "—",
     status: lead.status || "New",
     destinationUrl: lead.destinationUrl || "",
@@ -51,6 +71,9 @@ const mapLead = (lead, facilityLookup = {}) => {
   };
 };
 
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const buildFacilityLookup = async (leads) => {
   const ids = [
     ...new Set(
@@ -59,24 +82,62 @@ const buildFacilityLookup = async (leads) => {
         .filter((id) => id && /^[a-f\d]{24}$/i.test(id)),
     ),
   ];
+  const externalRefs = [
+    ...new Set(
+      leads
+        .map((l) => String(l.facilityId || "").trim())
+        .filter((id) => id && !/^[a-f\d]{24}$/i.test(id)),
+    ),
+  ];
   const names = [
     ...new Set(leads.map((l) => String(l.facilityName || "").trim()).filter(Boolean)),
   ];
 
-  if (ids.length === 0 && names.length === 0) return {};
+  if (ids.length === 0 && externalRefs.length === 0 && names.length === 0) {
+    return {};
+  }
 
   const or = [];
   if (ids.length) or.push({ _id: { $in: ids } });
-  if (names.length) or.push({ name: { $in: names } });
+  if (externalRefs.length) or.push({ external_ref: { $in: externalRefs } });
+  for (const n of names) {
+    or.push({ name: new RegExp(`^${escapeRegex(n)}$`, "i") });
+  }
 
-  const facilities = await Facility.find({ $or: or })
-    .select("name address phone email zip_code")
+  let facilities = await Facility.find({ $or: or })
+    .select("name address phone email zip_code external_ref")
     .lean();
+
+  // Broaden match if some lead facility names still unresolved
+  const matchedNames = new Set(
+    facilities.map((f) => String(f.name || "").trim().toLowerCase()),
+  );
+  const unresolved = names.filter((n) => !matchedNames.has(n.toLowerCase()));
+  if (unresolved.length > 0) {
+    const extra = await Facility.find()
+      .select("name address phone email zip_code external_ref")
+      .limit(800)
+      .lean();
+    const have = new Set(facilities.map((f) => String(f._id)));
+    for (const f of extra) {
+      if (have.has(String(f._id))) continue;
+      const fname = String(f.name || "").trim().toLowerCase();
+      if (
+        unresolved.some(
+          (n) => fname === n.toLowerCase() || fname.includes(n.toLowerCase()) || n.toLowerCase().includes(fname),
+        )
+      ) {
+        facilities.push(f);
+        have.add(String(f._id));
+      }
+    }
+  }
 
   const lookup = {};
   for (const f of facilities) {
     lookup[String(f._id)] = f;
-    lookup[`name:${String(f.name || "").toLowerCase()}`] = f;
+    if (f.external_ref) lookup[String(f.external_ref)] = f;
+    lookup[`name:${String(f.name || "").trim().toLowerCase()}`] = f;
   }
   return lookup;
 };
@@ -141,11 +202,41 @@ export const listLeads = catchAsyncError(async (req, res, next) => {
 
   const leads = await Lead.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
   const facilityLookup = await buildFacilityLookup(leads);
+  const mapped = leads.map((lead) => mapLead(lead, facilityLookup));
+
+  // Persist hydrated facility details onto older leads that are missing them
+  const backfills = [];
+  for (let i = 0; i < leads.length; i += 1) {
+    const raw = leads[i];
+    const mappedLead = mapped[i];
+    const needs =
+      (!normalizeFacilityValue(raw.facilityAddress) && mappedLead.facilityAddress) ||
+      (!normalizeFacilityValue(raw.facilityPhone) && mappedLead.facilityPhone) ||
+      (!normalizeFacilityValue(raw.facilityEmail) && mappedLead.facilityEmail) ||
+      (!normalizeFacilityValue(raw.facilityZip) && mappedLead.facilityZip);
+    if (!needs) continue;
+    backfills.push(
+      Lead.updateOne(
+        { _id: raw._id },
+        {
+          $set: {
+            facilityAddress: mappedLead.facilityAddress || raw.facilityAddress || "",
+            facilityPhone: mappedLead.facilityPhone || raw.facilityPhone || "",
+            facilityEmail: mappedLead.facilityEmail || raw.facilityEmail || "",
+            facilityZip: mappedLead.facilityZip || raw.facilityZip || "",
+          },
+        },
+      ),
+    );
+  }
+  if (backfills.length) {
+    Promise.allSettled(backfills).catch(() => {});
+  }
 
   return res.status(200).json({
     success: true,
-    count: leads.length,
-    leads: leads.map((lead) => mapLead(lead, facilityLookup)),
+    count: mapped.length,
+    leads: mapped,
   });
 });
 
@@ -188,8 +279,7 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
   }
   const byCareType = Object.entries(careTypeMap)
     .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
+    .sort((a, b) => b.count - a.count);
 
   const facilityMap = {};
   for (const lead of allLeads) {
@@ -211,7 +301,7 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
   }
   const topFacilities = Object.values(facilityMap)
     .sort((a, b) => b.inquiries - a.inquiries)
-    .slice(0, 8);
+    .slice(0, 25);
 
   // Daily series for the selected window
   const dayKeys = [];

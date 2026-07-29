@@ -465,6 +465,7 @@ function normalizeFacilityForCard(m) {
     address: m.address || "",
     zipCode,
     phone,
+    email: String(m.email || externalData.email || "").trim(),
     website: (() => {
       const top = String(m.website || "").trim();
       const gpSite = String(googlePlacesWebsite || "").trim();
@@ -522,6 +523,7 @@ function normalizeSavedFacilityDetail(detail) {
     address: String(src.address || ""),
     zipCode: String(src.zipCode || src.zip_code || ""),
     phone: String(src.phone || ""),
+    email: String(src.email || ""),
     website: String(src.website || ""),
     rating: Number.isFinite(parsedRating) ? parsedRating : 4.8,
     reviewCount: Number.isFinite(parsedReviewCount) ? parsedReviewCount : null,
@@ -2929,6 +2931,7 @@ const CareExplorer = () => {
                     address={f.address}
                     zipCode={f.zipCode}
                     phone={f.phone}
+                    email={f.email}
                     website={f.website}
                     sourcePlatform={f.sourcePlatform}
                     isExternal={Boolean(f.isExternal)}
@@ -3070,6 +3073,7 @@ const CareExplorer = () => {
                           address={f.address}
                           zipCode={f.zipCode}
                           phone={f.phone}
+                          email={f.email}
                           website={f.website}
                           sourcePlatform={f.sourcePlatform}
                           isExternal={Boolean(f.isExternal)}

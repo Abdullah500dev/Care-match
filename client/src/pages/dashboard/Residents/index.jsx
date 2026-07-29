@@ -79,6 +79,14 @@ const toDateInputValue = (iso) => {
   return d.toISOString().slice(0, 10);
 };
 
+const splitCareTypes = (careType) =>
+  String(careType || "")
+    .split(/\s*[•·|,/&]+\s*|\s+-\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const PAGE_SIZE = 8;
+
 const FilterButton = ({ active, label, children }) => (
   <DropdownMenu>
     <DropdownMenuTrigger asChild>
@@ -114,6 +122,7 @@ export default function Residents() {
   const [careTypeFilter, setCareTypeFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -187,6 +196,17 @@ export default function Residents() {
     dateFrom,
     dateTo,
   ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, areaFilter, careTypeFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedLeads = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
 
   const hasActiveFilter = Boolean(
     statusFilter || areaFilter || careTypeFilter || dateFrom || dateTo,
@@ -399,28 +419,34 @@ export default function Residents() {
         </div>
       </div>
 
-      {(search || hasActiveFilter) && !loading && (
+      {!loading && filtered.length > 0 && (
         <p className="text-sm text-slate-500">
-          Showing <span className="font-semibold text-slate-700">{filtered.length}</span> of{" "}
-          {leads.length} leads
+          Showing{" "}
+          <span className="font-semibold text-slate-700">
+            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)}
+          </span>{" "}
+          of {filtered.length} leads
+          {(search || hasActiveFilter) && leads.length !== filtered.length
+            ? ` (filtered from ${leads.length})`
+            : ""}
         </p>
       )}
 
       <Card className="min-w-0 overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm">
         <CardContent className="min-w-0 overflow-x-auto p-0">
-          <Table className="min-w-0">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
-                <TableHead className="h-11 rounded-tl-3xl uppercase first:pl-5" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[22%] rounded-tl-3xl uppercase first:pl-5" style={HEAD_STYLE}>
                   Lead Name
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[34%] uppercase" style={HEAD_STYLE}>
                   Facility
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[22%] uppercase" style={HEAD_STYLE}>
                   Care Type
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[14%] uppercase" style={HEAD_STYLE}>
                   Status
                 </TableHead>
                 <TableHead className="h-11 w-12 rounded-tr-3xl uppercase last:pr-5" style={HEAD_STYLE}>
@@ -447,64 +473,85 @@ export default function Residents() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => (
+                pagedLeads.map((lead) => {
+                  const careParts = splitCareTypes(lead.careType);
+                  return (
                   <TableRow
                     key={lead.id}
                     className="border-slate-100 transition-colors hover:bg-slate-50/80"
                   >
-                    <TableCell className="py-3 first:pl-5">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9 rounded-full border border-slate-100 bg-sky-50">
+                    <TableCell className="align-top py-4 first:pl-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="mt-0.5 h-9 w-9 shrink-0 rounded-full border border-slate-100 bg-sky-50">
                           <AvatarFallback className="bg-[#00B8DB]/10 text-sm font-semibold text-[#00B8DB]">
                             {lead.initials}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-slate-900">{lead.name}</p>
-                          <p className="truncate text-xs" style={{ color: "#90A1B9" }}>
+                        <div className="min-w-0 space-y-1">
+                          <p className="break-words font-bold leading-snug text-slate-900">
+                            {lead.name}
+                          </p>
+                          <p className="break-all text-xs leading-snug" style={{ color: "#90A1B9" }}>
                             {lead.email}
                           </p>
                           {lead.createdAt && (
-                            <p className="mt-0.5 text-[11px] text-slate-400">
+                            <p className="text-[11px] text-slate-400">
                               {toDateInputValue(lead.createdAt)}
                             </p>
                           )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-3" style={{ color: "#45556C" }}>
-                      <div className="min-w-[12rem] max-w-[18rem] space-y-1">
-                        <p className="font-bold text-slate-800">{lead.facility}</p>
-                        <p className="flex items-start gap-1.5 text-xs text-slate-500">
-                          <MapPin className="mt-0.5 h-3 w-3 shrink-0 text-[#00B8DB]" />
-                          <span className="min-w-0 break-words">
-                            {lead.facilityAddress || "—"}
-                            {lead.facilityZip ? ` · ${lead.facilityZip}` : ""}
-                          </span>
+                    <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
+                      <div className="min-w-[14rem] max-w-[22rem] space-y-2">
+                        <p className="break-words font-bold leading-snug text-slate-800">
+                          {lead.facility}
                         </p>
-                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <Phone className="h-3 w-3 shrink-0 text-[#00B8DB]" />
-                          <span className="truncate">{lead.facilityPhone || "—"}</span>
-                        </p>
-                        <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                          <Mail className="h-3 w-3 shrink-0 text-[#00B8DB]" />
-                          <span className="truncate">{lead.facilityEmail || "—"}</span>
-                        </p>
+                        <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                            <span className="min-w-0 break-words">
+                              {lead.facilityAddress || "Address not available"}
+                              {lead.facilityZip ? ` · ${lead.facilityZip}` : ""}
+                            </span>
+                          </p>
+                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                            <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                            <span className="min-w-0 break-words">
+                              {lead.facilityPhone || "Phone not available"}
+                            </span>
+                          </p>
+                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                            <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                            <span className="min-w-0 break-all">
+                              {lead.facilityEmail || "Email not available"}
+                            </span>
+                          </p>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-3 font-bold" style={{ color: "#45556C" }}>
-                      {lead.careType}
+                    <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
+                      <div className="flex max-w-[14rem] flex-wrap gap-1.5">
+                        {(careParts.length ? careParts : ["—"]).map((part) => (
+                          <span
+                            key={`${lead.id}-${part}`}
+                            className="inline-flex max-w-full break-words rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold leading-snug text-slate-700"
+                          >
+                            {part}
+                          </span>
+                        ))}
+                      </div>
                     </TableCell>
-                    <TableCell className="py-3">
+                    <TableCell className="align-top py-4">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
                           STATUS_STYLES[lead.status] || "bg-slate-100 text-slate-700"
                         }`}
                       >
                         {lead.status}
                       </span>
                     </TableCell>
-                    <TableCell className="py-3 last:pr-5">
+                    <TableCell className="align-top py-4 last:pr-5">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -546,12 +593,41 @@ export default function Residents() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {!loading && filtered.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row">
+          <p className="text-sm text-slate-600">
+            Page {safePage} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
