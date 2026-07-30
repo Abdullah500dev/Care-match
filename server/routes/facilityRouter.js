@@ -15,6 +15,7 @@ import {
   getFacility,
   updateFacility,
   deleteFacility,
+  deleteAllFacilities,
   getMyFacility,
   importExternalFacilities,
   importFacilitiesFromApify,
@@ -140,6 +141,41 @@ router.put(
   updateMyFacility
 );
 router.post("/explore-click", isAutheticated, notifyExploreClick);
+
+/**
+ * @swagger
+ * /api/facilities/all:
+ *   delete:
+ *     summary: Delete all facilities (admin only)
+ *     description: >
+ *       Permanently deletes every facility record and removes uploaded facility images.
+ *       Does not delete users, leads, or other collections.
+ *     tags: [Facility Management]
+ *     security:
+ *       - accessTokenAuth: []
+ *     responses:
+ *       200:
+ *         description: All facilities deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: All facilities deleted successfully.
+ *                 deletedCount:
+ *                   type: integer
+ *                   example: 42
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only admin users can delete all facilities
+ */
+router.delete("/all", isAutheticated, deleteAllFacilities);
 
 /**
  * @swagger

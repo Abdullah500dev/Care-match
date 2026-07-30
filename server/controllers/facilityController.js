@@ -2137,6 +2137,32 @@ export const deleteFacility = catchAsyncError(async (req, res, next) => {
   });
 });
 
+/**
+ * Admin-only: delete every facility document (and uploaded facility images).
+ * Does not delete users, leads, or other collections.
+ */
+export const deleteAllFacilities = catchAsyncError(async (req, res, next) => {
+  const admin = await assertAdmin(req.user?.id);
+  if (!admin) {
+    return next(new ErrorHandler("Only admins can delete all facilities", 403));
+  }
+
+  const facilities = await Facility.find({}).select("images").lean();
+  facilities.forEach((facility) => {
+    (facility.images || []).forEach((imagePath) =>
+      safeRemoveFacilityImageFile(imagePath),
+    );
+  });
+
+  const result = await Facility.deleteMany({});
+
+  res.status(200).json({
+    success: true,
+    message: "All facilities deleted successfully.",
+    deletedCount: result.deletedCount || 0,
+  });
+});
+
 export const importFacilitiesFromApify = catchAsyncError(async (req, res, next) => {
   if (!isApifyIntegrationEnabled()) {
     return next(
