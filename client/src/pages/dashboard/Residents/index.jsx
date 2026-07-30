@@ -92,12 +92,18 @@ const formatEstDateTime = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZoneName: "short",
-  });
+  return (
+    d.toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }) + " EST"
+  );
 };
 
 const PAGE_SIZE = 8;
