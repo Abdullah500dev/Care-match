@@ -3,7 +3,6 @@ import {
   Heart,
   ArrowRight,
   MapPin,
-  Hash,
   ChevronLeft,
   ChevronRight,
   Phone,
@@ -231,7 +230,7 @@ const FacilityCard = ({
         // Ignore notify failures so UX is not blocked.
       });
     toast.success("Request sent", {
-      description: "We emailed the facility contacts for more information.",
+      description: "We contacted the facility contact to reach out to you.",
     });
   };
   const handleMoreInformationClick = () => {
@@ -303,7 +302,7 @@ const FacilityCard = ({
               <div className="space-y-2">
                 {hasDisplayPrice ? (
                   <p className="text-sm font-semibold text-[#132329]">
-                    Monthly investment: {displayPriceRange}
+                    Monthly Price Range: {displayPriceRange}
                   </p>
                 ) : null}
                 {descriptionText ? (
@@ -312,51 +311,57 @@ const FacilityCard = ({
               </div>
             )}
 
-            <div className="grid gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4 sm:grid-cols-2">
-              <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
-                  <MapPin className="h-3.5 w-3.5 text-[#155DFC]" />
-                  Address
-                </p>
-                <p className="text-sm text-[#132329]">
-                  {String(address || "").trim() || "N/A"}
-                  {zipCode ? ` · ${zipCode}` : ""}
-                </p>
-              </div>
-              <div>
-                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
-                  <Phone className="h-3.5 w-3.5 text-[#155DFC]" />
-                  Phone
-                </p>
-                <p className="text-sm text-[#132329]">
-                  {displayPhone && displayPhone !== "N/A" ? displayPhone : "N/A"}
-                </p>
-              </div>
-              {hasRealEmail ? (
-                <div>
+            <div className="space-y-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+                <div className="min-w-0 flex-1">
                   <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
-                    <Mail className="h-3.5 w-3.5 text-[#155DFC]" />
-                    Email
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
+                    Address
                   </p>
-                  <p className="break-all text-sm text-[#132329]">{displayEmail}</p>
-                </div>
-              ) : null}
-              {hasOperatorWebsite ? (
-                <div>
-                  <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
-                    <Globe className="h-3.5 w-3.5 text-[#155DFC]" />
-                    Website
+                  <p className="break-words text-sm text-[#132329]">
+                    {String(address || "").trim() || "N/A"}
+                    {zipCode ? ` · ${zipCode}` : ""}
                   </p>
-                  <a
-                    href={normalizedWebsite}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="break-all text-sm text-[#155DFC] hover:underline"
-                  >
-                    {normalizedWebsite}
-                  </a>
                 </div>
-              ) : null}
+                <div className="w-full shrink-0 sm:w-[11.5rem] sm:text-right">
+                  <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b] sm:justify-end">
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
+                    Phone
+                  </p>
+                  <p className="break-words text-sm text-[#132329]">
+                    {displayPhone && displayPhone !== "N/A" ? displayPhone : "N/A"}
+                  </p>
+                </div>
+              </div>
+              {(hasRealEmail || hasOperatorWebsite) && (
+                <div className="grid gap-3 border-t border-[#E2E8F0] pt-3 sm:grid-cols-2">
+                  {hasRealEmail ? (
+                    <div>
+                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+                        <Mail className="h-3.5 w-3.5 text-[#155DFC]" />
+                        Email
+                      </p>
+                      <p className="break-all text-sm text-[#132329]">{displayEmail}</p>
+                    </div>
+                  ) : null}
+                  {hasOperatorWebsite ? (
+                    <div>
+                      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+                        <Globe className="h-3.5 w-3.5 text-[#155DFC]" />
+                        Website
+                      </p>
+                      <a
+                        href={normalizedWebsite}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all text-sm text-[#155DFC] hover:underline"
+                      >
+                        {normalizedWebsite}
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -459,7 +464,7 @@ const FacilityCard = ({
             {hasDisplayPrice ? (
               <>
                 <p className="mb-0.5 text-[9px] sm:text-[10px] font-medium tracking-[0.14em] uppercase text-[#64748b]">
-                  Monthly Investment
+                  Monthly Price Range
                 </p>
                 <p
                   className="truncate text-[13px] font-semibold text-[#132329] tabular-nums sm:text-sm"
@@ -600,7 +605,7 @@ const FacilityCard = ({
                 className={`rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] ${gridView ? "w-full shrink-0 text-left" : "flex-shrink-0 text-left sm:text-right w-fit sm:w-auto"} ${compact ? "px-2 py-1.5 sm:px-3 sm:py-2" : "px-3 py-2 sm:px-4 sm:py-2.5"}`}
               >
                 <p className="text-[10px] font-bold tracking-wider text-[#64748b] uppercase">
-                  MONTHLY INVESTMENT
+                  MONTHLY PRICE RANGE
                 </p>
                 <p
                   className={`font-bold text-[#132329] ${compact ? "mt-0.5 text-xs sm:text-sm" : "mt-0.5 text-sm sm:text-base"}`}
@@ -631,23 +636,24 @@ const FacilityCard = ({
               <div
                 className={`grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}
               >
-                <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
+                <div className="min-w-0 rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
                   <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
-                    <MapPin className="h-3.5 w-3.5 text-[#155DFC]" />
+                    <MapPin className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
                     Address
                   </p>
                   <p className="mt-1 break-words font-medium text-[#132329]">
                     {String(address || "").trim() || "N/A"}
+                    {zipCode ? ` · ${zipCode}` : ""}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
+                <div className="min-w-0 rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
                   <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
-                    <Hash className="h-3.5 w-3.5 text-[#155DFC]" />
-                    Zip Code
+                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
+                    Phone
                   </p>
                   <p className="mt-1 break-words font-medium text-[#132329]">
-                    {String(zipCode || "").trim() || "N/A"}
+                    {displayPhone && displayPhone !== "N/A" ? displayPhone : "N/A"}
                   </p>
                 </div>
               </div>

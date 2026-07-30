@@ -205,7 +205,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
 
       await sendMail({
         email: recipientEmail,
-        subject: `User Interested in: ${resolvedName}`,
+        subject: `Someone is interested in ${resolvedName}`,
         template: "explore-click.ejs",
         data: {
           userName: user.name || "User",

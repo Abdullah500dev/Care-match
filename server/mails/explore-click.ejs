@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>User Interested in Facility</title>
+    <title>Someone is interested in your facility</title>
     <style>
       body {
         margin: 0;
@@ -61,57 +61,42 @@
       a {
         color: #00b8d9;
       }
-      .muted {
-        color: #6b7280;
-        font-size: 12px;
-      }
     </style>
   </head>
   <body>
     <div class="wrap">
       <div class="card">
-        <div class="header">CareMatch AI — User Interested in</div>
+        <div class="header">CareMatch</div>
         <div class="content">
-          <p>A user clicked <strong>Contact</strong> on a facility listing.</p>
+          <p>Hi <%= facilityName || "there" %>,</p>
+
+          <p>
+            Someone is interested in your facility! You can see their information below
+            and message them in your Carematch profile.
+          </p>
 
           <div class="box">
-            <p class="label">User</p>
-            <p class="value"><%= userName %> &lt;<%= userEmail %>&gt;</p>
+            <p class="label">Name</p>
+            <p class="value"><%= userName %></p>
 
-            <p class="label">Facility</p>
-            <p class="value"><%= facilityName %></p>
+            <p class="label">Email</p>
+            <p class="value">
+              <% if (userEmail) { %>
+              <a href="mailto:<%= userEmail %>"><%= userEmail %></a>
+              <% } else { %>
+              —
+              <% } %>
+            </p>
 
-            <% if (facilityId) { %>
-            <p class="label">Facility ID</p>
-            <p class="value"><%= facilityId %></p>
-            <% } %>
-
-            <% if (address) { %>
-            <p class="label">Address</p>
-            <p class="value"><%= address %><% if (zipCode) { %>, <%= zipCode %><% } %></p>
-            <% } %>
-
-            <% if (phone) { %>
-            <p class="label">Phone</p>
-            <p class="value"><%= phone %></p>
-            <% } %>
-
-            <% if (sourcePlatform) { %>
-            <p class="label">Source</p>
-            <p class="value"><%= sourcePlatform %></p>
-            <% } %>
-
-            <% if (destinationUrl) { %>
-            <p class="label">Opened URL</p>
-            <p class="value"><a href="<%= destinationUrl %>"><%= destinationUrl %></a></p>
-            <% } %>
-
+            <% if (sentAt) { %>
             <p class="label">Time</p>
             <p class="value"><%= sentAt %></p>
+            <% } %>
           </div>
 
-          <p class="muted">
-            This notification was sent because a signed-in user clicked Contact on a community on CareMatch AI.
+          <p>
+            Best,<br />
+            Carematch
           </p>
         </div>
       </div>
