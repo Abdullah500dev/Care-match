@@ -28,6 +28,9 @@ const cleanFacilityField = (value) => {
   return s;
 };
 
+const isPlaceholderFacilityEmail = (value) =>
+  /@external\.carematch\.local$/i.test(String(value || "").trim());
+
 const resolveExploreRecipients = () => {
   const adminEmail = String(
     process.env.EXPLORE_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL,
@@ -40,14 +43,26 @@ const resolveExploreRecipients = () => {
     .trim()
     .toLowerCase();
 
-  return [
-    { email: adminEmail, shouldTrackOpen: false },
-    { email: trackedFacilityEmail, shouldTrackOpen: true },
-  ].filter((r) => Boolean(r.email));
+  const recipients = [];
+  const seen = new Set();
+
+  const addRecipient = (email, shouldTrackOpen) => {
+    const normalized = String(email || "").trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    recipients.push({ email: normalized, shouldTrackOpen });
+  };
+
+  // Admin always gets a copy (no open-tracking).
+  addRecipient(adminEmail, false);
+  // Facility notify always goes to the configured track inbox (not the real facility email).
+  addRecipient(trackedFacilityEmail, true);
+
+  return recipients;
 };
 
 /**
- * Notify admins when a logged-in user clicks Explore on a facility card.
+ * Notify admins + facility when a logged-in user clicks Contact on a facility card.
  * Also creates a Lead (shown in admin Leads as New).
  * POST /api/facilities/explore-click
  */
@@ -86,19 +101,25 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   let resolvedFacilityEmail = cleanFacilityField(facilityEmailBody).toLowerCase();
   const resolvedFacilityId = String(facilityId || "").trim();
 
-  // Hydrate contact details from owned Facility records when Explore payload is incomplete
+  // Hydrate contact details from owned Facility records when Contact payload is incomplete
   try {
     let facilityDoc = null;
-    if (resolvedFacilityId && mongoose.Types.ObjectId.isValid(resolvedFacilityId)) {
-      facilityDoc = await Facility.findById(resolvedFacilityId)
-        .select("name address phone email zip_code")
+    const ownedIdMatch = resolvedFacilityId.match(/^owned-(.+)$/i);
+    const mongoId =
+      ownedIdMatch?.[1] ||
+      (mongoose.Types.ObjectId.isValid(resolvedFacilityId) ? resolvedFacilityId : "");
+
+    if (mongoId && mongoose.Types.ObjectId.isValid(mongoId)) {
+      facilityDoc = await Facility.findById(mongoId)
+        .select("name address phone email zip_code is_external")
         .lean();
     }
     if (!facilityDoc && resolvedName) {
       facilityDoc = await Facility.findOne({
         name: new RegExp(`^${resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+        is_external: { $ne: true },
       })
-        .select("name address phone email zip_code")
+        .select("name address phone email zip_code is_external")
         .lean();
     }
     if (facilityDoc) {
@@ -110,6 +131,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     }
   } catch (err) {
     console.warn("[explore-click] facility hydrate failed:", err?.message || err);
+  }
+
+  if (isPlaceholderFacilityEmail(resolvedFacilityEmail)) {
+    resolvedFacilityEmail = "";
   }
 
   const recipients = resolveExploreRecipients();
@@ -218,6 +243,8 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     failed: failed.length,
     errors: failed,
     leadId: lead._id,
+    recipients: recipients.map((r) => r.email),
+    facilityEmail: resolvedFacilityEmail || null,
     trackedEmail: recipients.find((r) => r.shouldTrackOpen)?.email || null,
   });
 });

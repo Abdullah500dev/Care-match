@@ -506,8 +506,24 @@ function normalizeSavedFacilityDetail(detail) {
   const numericPrice = parsePriceRangeNumbers(pricingText);
   const parsedRating = Number(src.rating);
   const parsedReviewCount = Number(src.reviewCount);
-  const lat = Number(src.lat ?? src.latitude);
-  const lng = Number(src.lng ?? src.longitude);
+  const rawLat = src.lat ?? src.latitude;
+  const rawLng = src.lng ?? src.longitude;
+  const parsedLat = Number(rawLat);
+  const parsedLng = Number(rawLng);
+  const lat =
+    rawLat != null &&
+    String(rawLat).trim() !== "" &&
+    Number.isFinite(parsedLat) &&
+    !(Math.abs(parsedLat) < 0.01 && Math.abs(Number(rawLng)) < 0.01)
+      ? parsedLat
+      : null;
+  const lng =
+    rawLng != null &&
+    String(rawLng).trim() !== "" &&
+    Number.isFinite(parsedLng) &&
+    lat != null
+      ? parsedLng
+      : null;
   return {
     key: key || String(src.name || "saved-facility"),
     matchPercent: Number.isFinite(Number(src.matchPercent)) ? Number(src.matchPercent) : 0,
@@ -726,12 +742,22 @@ function inferCityStateFromMatches(matches) {
   return "";
 }
 
+function hasValidFacilityCoords(facility) {
+  const rawLat = facility?.lat;
+  const rawLng = facility?.lng;
+  if (rawLat == null || rawLng == null) return false;
+  if (String(rawLat).trim() === "" || String(rawLng).trim() === "") return false;
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  // Missing geocode often collapses to Null Island (0,0) — treat as invalid.
+  if (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01) return false;
+  return true;
+}
+
 function computeFacilityMiles(facility, locationCenterCoords) {
-  if (
-    locationCenterCoords &&
-    Number.isFinite(Number(facility?.lat)) &&
-    Number.isFinite(Number(facility?.lng))
-  ) {
+  // Important: Number(null) === 0, so never coerce null coords before validating.
+  if (locationCenterCoords && hasValidFacilityCoords(facility)) {
     return distanceMiles(locationCenterCoords, {
       lat: Number(facility.lat),
       lng: Number(facility.lng),
@@ -741,18 +767,20 @@ function computeFacilityMiles(facility, locationCenterCoords) {
   const apiMilesTrusted =
     Number.isFinite(apiMiles) &&
     apiMiles >= 0 &&
-    (!isCareMatchPartnerListing(facility) || apiMiles <= 500);
+    apiMiles <= 500 &&
+    (!isCareMatchPartnerListing(facility) || apiMiles <= 200);
   if (apiMilesTrusted) {
     return apiMiles;
   }
   const parsed = Number.parseFloat(
     String(facility?.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1],
   );
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  return Number.isFinite(parsed) && parsed <= 500 ? parsed : Number.NaN;
 }
 
 function formatDistanceLabel(distanceInMiles, zipCode) {
   if (Number.isFinite(distanceInMiles) && distanceInMiles >= 0) {
+    if (distanceInMiles < 0.5) return "In your ZIP";
     const rounded =
       distanceInMiles < 10
         ? distanceInMiles.toFixed(1)
@@ -2167,7 +2195,22 @@ const CareExplorer = () => {
 
     return filteredFacilities
       .map((facility) => {
-        const computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
+        let computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
+        const searchZip = String(activeFilters.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        const facilityZip = String(facility.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        // Same ZIP search: missing/bogus coords should read as local, not ~5000 miles to (0,0).
+        if (
+          searchZip &&
+          facilityZip &&
+          searchZip === facilityZip &&
+          (!Number.isFinite(computedDistanceMiles) || computedDistanceMiles > 50)
+        ) {
+          computedDistanceMiles = 0;
+        }
         return {
           ...facility,
           distanceMiles: Number.isFinite(computedDistanceMiles)
