@@ -91,8 +91,8 @@ function formatPhoneInput(value) {
 }
 
 /**
- * Pricing: digits only (plus optional one range: min - max). Strips letters/symbols.
- * Optional suffix /month. Preserves "min - " while typing the second amount (fixes 4-digit ranges).
+ * Pricing: formats as $4,500 or $4,500 - $6,800. Digits only (plus optional range).
+ * Optional suffix /month. Preserves "min - " while typing the second amount.
  */
 function formatPricingInput(value) {
   const raw = String(value || "");
@@ -114,7 +114,8 @@ function formatPricingInput(value) {
 
   let out = fmt(leftDigits);
   if (parts.length > 1) {
-    out += " - " + fmt(rightDigits);
+    // Compact range style: $4,500-$6,800 (no spaces around dash)
+    out = rightDigits ? `${fmt(leftDigits)}-${fmt(rightDigits)}` : `${fmt(leftDigits)}-`;
   }
   const suffix = monthly ? "/month" : "";
   if (!out && !suffix) return "";
@@ -400,7 +401,7 @@ export default function Communities() {
       services: Array.isArray(facility.services) ? [...facility.services] : [],
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
-      pricing: getFacilityPricingValue(facility),
+      pricing: formatPricingInput(getFacilityPricingValue(facility)),
       units: facility.units || 0,
       occupancy: facility.occupancy || 0,
       active_leads: facility.active_leads || 0,
@@ -541,7 +542,7 @@ export default function Communities() {
       selectedImages.forEach((file) => payload.append("images", file));
       payload.append("units", form.units);
       payload.append("occupancy", form.occupancy);
-      payload.append("active_leads", form.active_leads);
+      payload.append("active_leads", editingId ? form.active_leads || 0 : 0);
 
       if (editingId) {
         payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
@@ -849,7 +850,7 @@ export default function Communities() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
                       style={{ backgroundColor: "#F8F8FA" }}
@@ -870,17 +871,6 @@ export default function Communities() {
                       </p>
                       <p className="mt-1 text-xl font-bold text-emerald-600">
   {facility.occupancy ?? 0}
-</p>
-                    </div>
-                    <div
-                      className="rounded-2xl px-3 py-3 text-center"
-                      style={{ backgroundColor: "#F8F8FA" }}
-                    >
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                        Active Leads
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">
-  {facility.active_leads ?? 0}
 </p>
                     </div>
                   </div>
@@ -1014,7 +1004,7 @@ export default function Communities() {
                   spellCheck={false}
                   value={form.pricing}
                   onChange={(e) => handleInput("pricing", formatPricingInput(e.target.value))}
-                  placeholder="4500 or 4500 - 6800 (numbers only)"
+                  placeholder="$4,500 or $4,500-$6,800"
                 />
               </div>
             </div>
@@ -1032,7 +1022,7 @@ export default function Communities() {
                 placeholder="https://www.yourfacility.com"
               />
               <p className="text-xs text-slate-500">
-                Optional. Shown when families click Explore on Care Explorer.
+                Optional. Shown when families click Contact on Care Explorer.
               </p>
             </div>
 
@@ -1271,7 +1261,7 @@ export default function Communities() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
   <div className="space-y-2">
     <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
       Units
@@ -1297,20 +1287,6 @@ export default function Communities() {
       value={countFieldDisplayValue(form.occupancy)}
       onChange={handleNonNegativeCountInput("occupancy")}
       placeholder="85"
-    />
-  </div>
-
-  <div className="space-y-2">
-    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-      Active Leads
-    </label>
-    <Input
-      type="number"
-      min="0"
-      inputMode="numeric"
-      value={countFieldDisplayValue(form.active_leads)}
-      onChange={handleNonNegativeCountInput("active_leads")}
-      placeholder="12"
     />
   </div>
 </div>

@@ -27,6 +27,27 @@ const EMPTY_FORM = {
 
 const toCsv = (arr) => (Array.isArray(arr) ? arr.join(", ") : "");
 
+/** Format pricing as $4,500 or $4,500-$6,800 */
+function formatPricingInput(value) {
+  const raw = String(value || "");
+  let body = raw.replace(/\$/g, "").replace(/,/g, "");
+  body = body.replace(/[^\d\s-]/g, "");
+  const parts = body.split(/\s*-\s*/);
+  const leftDigits = (parts[0] ?? "").replace(/\D/g, "").slice(0, 8);
+  const rightDigits =
+    parts.length > 1 ? parts.slice(1).join("").replace(/\D/g, "").slice(0, 8) : "";
+  const fmt = (digits) => {
+    if (!digits) return "";
+    const num = Number.parseInt(digits, 10);
+    if (Number.isNaN(num)) return "";
+    return `$${num.toLocaleString("en-US")}`;
+  };
+  if (parts.length > 1) {
+    return rightDigits ? `${fmt(leftDigits)}-${fmt(rightDigits)}` : `${fmt(leftDigits)}-`;
+  }
+  return fmt(leftDigits);
+}
+
 export default function FacilityDashboardFacilities() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -50,7 +71,7 @@ export default function FacilityDashboardFacilities() {
       website: doc?.website || "",
       address: doc?.address || "",
       zip_code: formatZipInput(doc?.zip_code || doc?.external_data?.zip_code),
-      pricing: doc?.pricing || "",
+      pricing: formatPricingInput(doc?.pricing || ""),
       services: toCsv(doc?.services),
       amenities: toCsv(doc?.amenities),
       care_levels: toCsv(doc?.care_levels),
@@ -91,9 +112,8 @@ export default function FacilityDashboardFacilities() {
     () => [
       { label: "Units", value: form.units || 0 },
       { label: "Occupancy", value: form.occupancy || 0 },
-      { label: "Active Leads", value: form.active_leads || 0 },
     ],
-    [form.active_leads, form.occupancy, form.units]
+    [form.occupancy, form.units]
   );
   const isPristine = JSON.stringify(form) === lastSavedSnapshot;
 
@@ -218,7 +238,10 @@ export default function FacilityDashboardFacilities() {
                 <label className="mb-1 block text-sm font-medium text-slate-700">Pricing</label>
                 <Input
                   value={form.pricing}
-                  onChange={(e) => setForm((p) => ({ ...p, pricing: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, pricing: formatPricingInput(e.target.value) }))
+                  }
+                  placeholder="$4,500 or $4,500-$6,800"
                 />
               </div>
               <div className="sm:col-span-2">
@@ -232,7 +255,7 @@ export default function FacilityDashboardFacilities() {
                   placeholder="https://www.yourfacility.com"
                 />
                 <p className="mt-1 text-xs text-slate-500">
-                  Optional. Opens when families click Explore on Care Explorer.
+                  Optional. Opens when families click Contact on Care Explorer.
                 </p>
               </div>
             </div>
@@ -278,7 +301,7 @@ export default function FacilityDashboardFacilities() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Units</label>
                 <Input
@@ -295,15 +318,6 @@ export default function FacilityDashboardFacilities() {
                   min="0"
                   value={form.occupancy}
                   onChange={(e) => setForm((p) => ({ ...p, occupancy: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Active leads</label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.active_leads}
-                  onChange={(e) => setForm((p) => ({ ...p, active_leads: e.target.value }))}
                 />
               </div>
             </div>

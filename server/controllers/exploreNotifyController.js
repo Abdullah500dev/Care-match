@@ -142,7 +142,17 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     );
   }
 
-  const sentAt = new Date().toLocaleString("en-US", { timeZone: "UTC" }) + " UTC";
+  const sentAt =
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }) + " EST";
 
   const results = await Promise.allSettled(
     recipients.map(async ({ email: recipientEmail, shouldTrackOpen }) => {
@@ -170,7 +180,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
 
       await sendMail({
         email: recipientEmail,
-        subject: `Explore click: ${resolvedName}`,
+        subject: `User Interested in: ${resolvedName}`,
         template: "explore-click.ejs",
         data: {
           userName: user.name || "User",

@@ -32,7 +32,6 @@ export default function FacilityDashboardHome() {
 
   const units = facility?.units ?? 0;
   const occupancy = facility?.occupancy ?? 0;
-  const activeLeads = facility?.active_leads ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -50,7 +49,7 @@ export default function FacilityDashboardHome() {
           Loading facility metrics...
         </div>
       ) : null}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card className="border-slate-200">
           <CardHeader>
             <CardDescription>Units</CardDescription>
@@ -61,12 +60,6 @@ export default function FacilityDashboardHome() {
           <CardHeader>
             <CardDescription>Occupancy</CardDescription>
             <CardTitle>{occupancy}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardDescription>Active Leads</CardDescription>
-            <CardTitle>{activeLeads}</CardTitle>
           </CardHeader>
         </Card>
         <Card className="border-slate-200">

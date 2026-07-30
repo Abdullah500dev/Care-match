@@ -252,10 +252,36 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
   const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const [allLeads, recentLeads, facilityCount] = await Promise.all([
+  const [
+    allLeads,
+    recentLeads,
+    facilityCount,
+    userCount,
+    facilitySignupCount,
+    recentUsers,
+    recentFacilitySignups,
+  ] = await Promise.all([
     Lead.find({ isRemoved: false }).lean(),
     Lead.find({ isRemoved: false, createdAt: { $gte: since } }).lean(),
     Facility.countDocuments(),
+    User.countDocuments({
+      role: "user",
+      user_type: { $nin: ["admin", "authenticator", "moderator"] },
+    }),
+    Facility.countDocuments({ is_external: { $ne: true } }),
+    User.find({
+      role: "user",
+      user_type: { $nin: ["admin", "authenticator", "moderator"] },
+      createdAt: { $gte: since },
+    })
+      .select("createdAt")
+      .lean(),
+    Facility.find({
+      is_external: { $ne: true },
+      createdAt: { $gte: since },
+    })
+      .select("createdAt")
+      .lean(),
   ]);
 
   const byStatus = {};
@@ -305,12 +331,24 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
     dayKeys.push(d.toISOString().slice(0, 10));
   }
-  const dailyCounts = Object.fromEntries(dayKeys.map((k) => [k, { visits: 0, inquiries: 0 }]));
+  const dailyCounts = Object.fromEntries(
+    dayKeys.map((k) => [k, { visits: 0, inquiries: 0, users: 0, facilities: 0 }]),
+  );
   for (const lead of recentLeads) {
     const key = new Date(lead.createdAt).toISOString().slice(0, 10);
     if (!dailyCounts[key]) continue;
     dailyCounts[key].visits += 1;
     dailyCounts[key].inquiries += 1;
+  }
+  for (const u of recentUsers) {
+    const key = new Date(u.createdAt).toISOString().slice(0, 10);
+    if (!dailyCounts[key]) continue;
+    dailyCounts[key].users += 1;
+  }
+  for (const f of recentFacilitySignups) {
+    const key = new Date(f.createdAt).toISOString().slice(0, 10);
+    if (!dailyCounts[key]) continue;
+    dailyCounts[key].facilities += 1;
   }
   const timeline = dayKeys.map((date) => ({
     date,
@@ -318,17 +356,31 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     visits: dailyCounts[date].visits,
     inquiries: dailyCounts[date].inquiries,
   }));
+  const usersTimeline = dayKeys.map((date) => ({
+    date,
+    label: date.slice(5),
+    users: dailyCounts[date].users,
+  }));
+  const facilitiesTimeline = dayKeys.map((date) => ({
+    date,
+    label: date.slice(5),
+    facilities: dailyCounts[date].facilities,
+  }));
 
   return res.status(200).json({
     success: true,
     days,
     summary: {
       facilitiesListed: facilityCount,
+      facilitiesSignedUp: facilitySignupCount,
+      totalUsers: userCount,
       userVisits: visits,
       inquiriesSent: inquiries,
       emailsOpened: emailOpened,
       contacted,
       recentInquiries: recentLeads.length,
+      recentUsers: recentUsers.length,
+      recentFacilitySignups: recentFacilitySignups.length,
       conversionRate:
         visits > 0 ? Number(((contacted / visits) * 100).toFixed(1)) : 0,
     },
@@ -336,6 +388,8 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     byCareType,
     topFacilities,
     timeline,
+    usersTimeline,
+    facilitiesTimeline,
   });
 });
 

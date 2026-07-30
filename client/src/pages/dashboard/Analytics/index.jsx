@@ -11,12 +11,12 @@ import {
   YAxis,
 } from "recharts";
 import {
-  Building2,
   Eye,
   MessageSquare,
-  MailOpen,
   TrendingUp,
   Loader2,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
@@ -33,6 +33,14 @@ const FACILITY_PAGE_SIZE = 5;
 const chartConfig = {
   visits: { label: "Visits", color: "#00B8DB" },
   inquiries: { label: "Inquiries", color: "#6366F1" },
+};
+
+const usersChartConfig = {
+  users: { label: "Users", color: "#00B8DB" },
+};
+
+const facilitiesChartConfig = {
+  facilities: { label: "Facilities", color: "#00B8DB" },
 };
 
 export default function Analytics() {
@@ -68,6 +76,10 @@ export default function Analytics() {
 
   const summary = data?.summary || {};
   const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
+  const usersTimeline = Array.isArray(data?.usersTimeline) ? data.usersTimeline : [];
+  const facilitiesTimeline = Array.isArray(data?.facilitiesTimeline)
+    ? data.facilitiesTimeline
+    : [];
   const byCareType = Array.isArray(data?.byCareType) ? data.byCareType : [];
   const topFacilities = Array.isArray(data?.topFacilities) ? data.topFacilities : [];
   const byStatus = data?.byStatus || {};
@@ -89,11 +101,20 @@ export default function Analytics() {
 
   const cards = [
     {
-      label: "Facilities listed",
-      value: summary.facilitiesListed ?? 0,
-      icon: Building2,
+      label: "Number of users",
+      value: summary.totalUsers ?? 0,
+      icon: Users,
       color: "text-sky-600",
       bg: "bg-sky-100",
+      hint: `${summary.recentUsers ?? 0} new in range`,
+    },
+    {
+      label: "Facilities signed up",
+      value: summary.facilitiesSignedUp ?? summary.facilitiesListed ?? 0,
+      icon: UserPlus,
+      color: "text-teal-600",
+      bg: "bg-teal-100",
+      hint: `${summary.recentFacilitySignups ?? 0} new in range`,
     },
     {
       label: "User visits",
@@ -110,13 +131,6 @@ export default function Analytics() {
       color: "text-[#00B8DB]",
       bg: "bg-cyan-100",
       hint: "Notify emails from Explore",
-    },
-    {
-      label: "Emails opened",
-      value: summary.emailsOpened ?? 0,
-      icon: MailOpen,
-      color: "text-emerald-600",
-      bg: "bg-emerald-100",
     },
     {
       label: "Conversion rate",
@@ -266,6 +280,86 @@ export default function Analytics() {
                     {summary.recentInquiries} inquiries in the last {days} days
                   </p>
                 )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
+            <Card className="rounded-2xl border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Number of users ({days} days)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {usersTimeline.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-slate-400">No user signups in this range.</p>
+                ) : (
+                  <ChartContainer config={usersChartConfig} className="h-[260px] w-full">
+                    <AreaChart data={usersTimeline}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area
+                        type="monotone"
+                        dataKey="users"
+                        stroke="#00B8DB"
+                        fill="#00B8DB"
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                )}
+                <p className="mt-2 text-xs text-slate-400">
+                  Total users: <span className="font-semibold text-slate-700">{summary.totalUsers ?? 0}</span>
+                  {" · "}
+                  New in range: <span className="font-semibold text-slate-700">{summary.recentUsers ?? 0}</span>
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-slate-200">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base font-bold text-slate-900">
+                  Number of facilities signed up ({days} days)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {facilitiesTimeline.length === 0 ? (
+                  <p className="py-10 text-center text-sm text-slate-400">
+                    No facility signups in this range.
+                  </p>
+                ) : (
+                  <ChartContainer config={facilitiesChartConfig} className="h-[260px] w-full">
+                    <AreaChart data={facilitiesTimeline}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area
+                        type="monotone"
+                        dataKey="facilities"
+                        stroke="#00B8DB"
+                        fill="#00B8DB"
+                        fillOpacity={0.15}
+                        strokeWidth={2}
+                      />
+                    </AreaChart>
+                  </ChartContainer>
+                )}
+                <p className="mt-2 text-xs text-slate-400">
+                  Total signed up:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {summary.facilitiesSignedUp ?? 0}
+                  </span>
+                  {" · "}
+                  New in range:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {summary.recentFacilitySignups ?? 0}
+                  </span>
+                </p>
               </CardContent>
             </Card>
           </div>

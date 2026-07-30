@@ -85,7 +85,19 @@ const toDateInputValue = (iso) => {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+};
+
+const formatEstDateTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZoneName: "short",
+  });
 };
 
 const PAGE_SIZE = 8;
@@ -249,7 +261,7 @@ export default function Residents() {
 
   const handleViewDetails = (lead) => {
     const opened = lead.emailOpenedAt
-      ? new Date(lead.emailOpenedAt).toLocaleString()
+      ? formatEstDateTime(lead.emailOpenedAt)
       : "—";
     toast.info(`Viewing ${lead.name}`, {
       description: `${lead.facility} · ${normalizeCareTypeDisplay(lead.careType)} · Email opened ${opened}`,
@@ -465,7 +477,7 @@ export default function Residents() {
                 <TableRow>
                   <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
                     {leads.length === 0
-                      ? "No leads yet. They appear when a user clicks Explore."
+                      ? "No leads yet. They appear when a user clicks Contact."
                       : "No leads match your search or filters."}
                   </TableCell>
                 </TableRow>
@@ -493,7 +505,7 @@ export default function Residents() {
                           </p>
                           {lead.createdAt && (
                             <p className="text-[11px] text-slate-400">
-                              {toDateInputValue(lead.createdAt)}
+                              {formatEstDateTime(lead.createdAt)}
                             </p>
                           )}
                         </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Heart, MapPin, Phone, ExternalLink, Star } from "lucide-react";
+import { Heart, MapPin, Phone, ExternalLink } from "lucide-react";
 import SEO from "@/components/common/SEO";
 import { apiClient } from "@/services/api";
 import { toast } from "sonner";
@@ -70,8 +70,6 @@ export default function UserDashboardFacilities() {
             const imgSrc = f.imageSrc || PLACEHOLDER_IMAGE;
             const isPlaceholder = imgSrc === PLACEHOLDER_IMAGE;
             const hasWebsite = typeof f.website === "string" && /^https?:\/\//i.test(f.website);
-            const rating = Number(f.rating);
-            const hasRating = Number.isFinite(rating) && rating > 0;
 
             return (
               <div
@@ -95,7 +93,10 @@ export default function UserDashboardFacilities() {
                   </button>
                   {f.savedAt && (
                     <div className="absolute bottom-2 left-2 rounded-full bg-black/50 text-white text-[10px] px-2 py-0.5 backdrop-blur-sm">
-                      Saved {new Date(f.savedAt).toLocaleDateString()}
+                      Saved{" "}
+                      {new Date(f.savedAt).toLocaleDateString("en-US", {
+                        timeZone: "America/New_York",
+                      })}
                     </div>
                   )}
                 </div>
@@ -109,16 +110,6 @@ export default function UserDashboardFacilities() {
                   <h3 className="font-semibold text-[#132329] text-sm leading-tight line-clamp-2">
                     {f.name || "Unknown Facility"}
                   </h3>
-
-                  {hasRating && (
-                    <div className="flex items-center gap-1">
-                      <Star className="h-3.5 w-3.5 fill-[#FBBF24] text-[#FBBF24]" />
-                      <span className="text-xs font-semibold text-[#132329]">{rating}</span>
-                      {f.reviewCount > 0 && (
-                        <span className="text-xs text-[#64748b]">({f.reviewCount})</span>
-                      )}
-                    </div>
-                  )}
 
                   {f.priceRange && String(f.priceRange).trim().toUpperCase() !== "N/A" && (
                     <p className="text-xs font-semibold text-[#132329]">{f.priceRange}</p>
@@ -146,7 +137,7 @@ export default function UserDashboardFacilities() {
                         rel="noopener noreferrer"
                         className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white text-xs font-medium py-2 px-3 hover:bg-[#1e293b] transition-colors"
                       >
-                        Explore <ExternalLink className="h-3.5 w-3.5" />
+                        Contact <ExternalLink className="h-3.5 w-3.5" />
                       </a>
                     )}
                     <button

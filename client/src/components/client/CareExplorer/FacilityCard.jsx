@@ -1,5 +1,5 @@
 import React from "react";
-import { Heart, Star, ArrowRight, MapPin, Hash, ChevronLeft, ChevronRight } from "lucide-react";
+import { Heart, ArrowRight, MapPin, Hash, ChevronLeft, ChevronRight } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -17,9 +17,6 @@ const FacilityCard = ({
   matchPercent = 96,
   category = "ASSISTED LIVING",
   name = "Sunrise Senior Living",
-  rating = 4.8,
-  reviewCount = 127,
-  ratingLabel = "family reviews",
   priceRange = "",
   distance = "2.3 MILES AWAY",
   address = "",
@@ -30,7 +27,7 @@ const FacilityCard = ({
   imageUrls = [],
   website = "",
   sourcePlatform = "",
-  isExternal = false,
+  isExternal = true,
   externalSourceUrl = "",
   compact = false,
   gridView = false,
@@ -49,8 +46,6 @@ const FacilityCard = ({
     const filtered = normalizedImageUrls.filter((url) => !failedImageUrls.has(url));
     return filtered.length > 0 ? filtered : [DEFAULT_IMAGE];
   }, [normalizedImageUrls, failedImageUrls]);
-  const hasReviewCount = Number.isFinite(Number(reviewCount)) && Number(reviewCount) > 0;
-  const ratingMetaText = hasReviewCount ? `${reviewCount} ${ratingLabel}` : ratingLabel;
   const rawPrice = String(priceRange || "").trim();
   const displayPriceRange =
     rawPrice &&
@@ -97,6 +92,11 @@ const FacilityCard = ({
       : "";
   const hasListingUrl = Boolean(listingUrl);
   const listingIsAggregator = hasListingUrl && isAggregatorListingUrl(listingUrl);
+  // Scraped listings hide More Information until the facility has a CareMatch account.
+  const showMoreInformation =
+    isExternal === false ||
+    String(sourcePlatform || "").toLowerCase() === "carematch" ||
+    String(facilityId || "").startsWith("owned-");
   const navigate = useNavigate();
   const location = useLocation();
   const isLoggedIn = Boolean(localStorage.getItem("access_token"));
@@ -134,8 +134,6 @@ const FacilityCard = ({
       phone,
       website,
       priceRange,
-      rating,
-      reviewCount,
       imageSrc,
       imageUrls: safeImageUrls,
       distance,
@@ -153,12 +151,12 @@ const FacilityCard = ({
     )}`;
   };
 
-  const openExploreDestination = () => {
+  const openContactDestination = () => {
     if (!requireLoginForFacilityAction()) return;
 
     const destinationUrl = resolveFacilitySiteUrl();
 
-    // Fire-and-forget email notify. Do not navigate to facility URL on Explore.
+    // Fire-and-forget email notify. Do not navigate to facility URL on Contact.
     apiClient
       .post("/api/facilities/explore-click", {
         facilityId: facilityId || "",
@@ -276,19 +274,21 @@ const FacilityCard = ({
           <div className="mt-auto flex gap-2 pt-2 sm:gap-2.5 sm:pt-2.5">
             <button
               type="button"
-              onClick={openExploreDestination}
+              onClick={openContactDestination}
               className="flex-1 min-w-0 rounded-full bg-[#0F172A] py-1.5 text-center text-[12px] sm:text-[13px] font-medium text-white transition-colors hover:bg-[#1e293b]"
             >
-              Explore
+              Contact
             </button>
-            <button
-              type="button"
-              className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
-              onClick={handleMoreInformationClick}
-              title="Open facility website for more information"
-            >
-              More Information
-            </button>
+            {showMoreInformation ? (
+              <button
+                type="button"
+                className="flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9]"
+                onClick={handleMoreInformationClick}
+                title="Open facility website for more information"
+              >
+                More Information
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -392,13 +392,6 @@ const FacilityCard = ({
             >
               {name}
             </h3>
-            <div className={`flex flex-wrap items-center gap-1.5 ${compact ? "mt-1 text-[10px] sm:text-xs" : "mt-1.5 gap-2 text-xs sm:text-sm"}`}>
-              <div className="flex items-center gap-1 rounded-full bg-[#FEFCE8]/55 px-2 py-0.5">
-                <Star className={`fill-[#FBBF24] text-[#FBBF24] shrink-0 ${compact ? "h-3 w-3" : "h-3.5 w-3.5 sm:h-4 sm:w-4"}`} />
-                <span className="font-semibold text-[#132329]">{rating}</span>
-              </div>
-              <span className={`text-[#64748b] ${gridView ? "truncate" : ""}`}>{ratingMetaText}</span>
-            </div>
           </div>
           {/* Monthly Investment — only when a real price is available */}
           {hasDisplayPrice ? (
@@ -458,21 +451,23 @@ const FacilityCard = ({
         <div className={`flex flex-col sm:flex-row flex-wrap ${compact ? "mt-2 gap-2 sm:gap-3" : "mt-4 sm:mt-5 gap-3 sm:gap-4"}`}>
           <button
             type="button"
-            onClick={openExploreDestination}
+            onClick={openContactDestination}
             className={`inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#0F172A] text-white transition-colors hover:bg-[#1e293b] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
             style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
           >
-            Explore <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
+            Contact <ArrowRight className={`shrink-0 ${compact ? "h-3.5 w-3.5" : "h-4 w-4"}`} />
           </button>
-          <button
-            type="button"
-            className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
-            style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
-            onClick={handleMoreInformationClick}
-            title="Open facility website for more information"
-          >
-            More Information
-          </button>
+          {showMoreInformation ? (
+            <button
+              type="button"
+              className={`inline-flex min-w-0 flex-1 items-center justify-center rounded-xl border border-[#E2E8F0] bg-white text-[#132329] transition-colors hover:bg-[#F8FAFC] text-center ${compact ? "px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm min-h-[36px] sm:min-h-0" : "px-6 py-3 sm:px-10 sm:py-3.5 min-h-[44px] sm:min-h-0"}`}
+              style={compact ? {} : { fontFamily: "Rethink Sans, sans-serif", fontWeight: 400, fontSize: "clamp(14px, 4vw, 18px)", lineHeight: "28px", letterSpacing: "-0.44px" }}
+              onClick={handleMoreInformationClick}
+              title="Open facility website for more information"
+            >
+              More Information
+            </button>
+          ) : null}
         </div>
       </div>
     </div>
