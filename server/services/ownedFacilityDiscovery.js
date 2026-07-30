@@ -45,6 +45,10 @@ function mapOwnedDocToAiInput(doc) {
   const zip = normalizeZip(doc.zip_code);
   const address = String(doc.address || "").trim();
   const { city, state } = parseLocationTokens(address);
+  const fullAddress =
+    zip && address && !new RegExp(`\\b${zip}\\b`).test(address)
+      ? `${address}, ${zip}`
+      : address;
 
   return {
     care_levels: Array.isArray(doc.care_levels) && doc.care_levels.length ? doc.care_levels : ["Assisted Living"],
@@ -59,7 +63,7 @@ function mapOwnedDocToAiInput(doc) {
     images: Array.isArray(doc.images) ? doc.images : [],
     budget: { min_monthly: null, max_monthly: null, currency: "USD" },
     location: {
-      full_address: address,
+      full_address: fullAddress,
       city,
       county: "",
       state,

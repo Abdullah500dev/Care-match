@@ -140,7 +140,10 @@ function isCareMatchPartnerListing(facility) {
 
 function partnerMatchesSearchArea(facility, { zipCode = "", locationQuery = "" } = {}) {
   if (!isCareMatchPartnerListing(facility)) return false;
-  const searchZip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+  const zipFromLocation =
+    String(locationQuery || "").match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] || "";
+  const searchZip =
+    String(zipCode || "").replace(/\D/g, "").slice(0, 5) || zipFromLocation;
   const facilityZip = String(facility.zipCode || "").replace(/\D/g, "").slice(0, 5);
   if (searchZip && facilityZip && searchZip === facilityZip) return true;
   const loc = String(locationQuery || "").trim();
@@ -828,6 +831,16 @@ function dedupeFacilities(facilities) {
     const existing = selected.get(dedupKey);
     if (!existing) {
       selected.set(dedupKey, facility);
+      return;
+    }
+
+    const existingIsPartner = isCareMatchPartnerListing(existing);
+    const incomingIsPartner = isCareMatchPartnerListing(facility);
+    if (incomingIsPartner && !existingIsPartner) {
+      selected.set(dedupKey, facility);
+      return;
+    }
+    if (existingIsPartner && !incomingIsPartner) {
       return;
     }
 
@@ -1982,25 +1995,36 @@ const CareExplorer = () => {
       }
 
       // Strict radius: only show communities with a verified distance <= max miles from search center.
+      // Partner (admin/CareMatch) listings in the searched ZIP stay visible even without map coords.
       if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        if (!locationCenterCoords) return false;
-        const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
-        if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) {
-          if (
-            partnerMatchesSearchArea(facility, {
-              zipCode: activeFilters.zipCode,
-              locationQuery: effectiveLocation || locationQuery,
-            })
-          ) {
-            // Partner listing in the searched ZIP/city — keep even without map miles.
-          } else {
-            return false;
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery: effectiveLocation || locationQuery,
+        });
+        if (!locationCenterCoords) {
+          if (!partnerInArea) return false;
+        } else {
+          const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
+          if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) {
+            if (!partnerInArea) return false;
           }
         }
       } else if (effectiveLocation) {
-        if (!addressMatchesLocation(facility.address, effectiveLocation)) return false;
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery: effectiveLocation || locationQuery,
+        });
+        if (!partnerInArea && !addressMatchesLocation(facility.address, effectiveLocation)) {
+          return false;
+        }
       } else if (locationQuery && !isZipOnlyLocationQuery) {
-        if (!addressMatchesLocation(facility.address, locationQuery)) return false;
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery,
+        });
+        if (!partnerInArea && !addressMatchesLocation(facility.address, locationQuery)) {
+          return false;
+        }
       }
 
       if (!ZIP_ONLY_DISCOVERY_MODE && q) {
@@ -2933,6 +2957,10 @@ const CareExplorer = () => {
                     sourcePlatform={f.sourcePlatform}
                     isExternal={Boolean(f.isExternal)}
                     externalSourceUrl={f.externalSourceUrl}
+                    description={f.description}
+                    careLevels={f.careLevels}
+                    amenities={f.amenities}
+                    services={f.services}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
                     isFavorite={favoriteFacilityIds.includes(
@@ -3075,6 +3103,10 @@ const CareExplorer = () => {
                           sourcePlatform={f.sourcePlatform}
                           isExternal={Boolean(f.isExternal)}
                           externalSourceUrl={f.externalSourceUrl}
+                          description={f.description}
+                          careLevels={f.careLevels}
+                          amenities={f.amenities}
+                          services={f.services}
                           compact
                           isFavorite={favoriteFacilityIds.includes(
                             String(f.key ?? f.facilityId ?? f.name),
