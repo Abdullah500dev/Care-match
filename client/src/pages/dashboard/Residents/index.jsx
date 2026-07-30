@@ -490,10 +490,16 @@ export default function Residents() {
               ) : (
                 pagedLeads.map((lead) => {
                   const careLabel = normalizeCareTypeDisplay(lead.careType);
+                  const facilityEmail = String(lead.facilityEmail || "").trim();
+                  const hasFacilityEmail =
+                    facilityEmail &&
+                    !/@external\.carematch\.local$/i.test(facilityEmail);
                   return (
                   <TableRow
                     key={lead.id}
-                    className="border-slate-100 transition-colors hover:bg-slate-50/80"
+                    className={`border-slate-100 transition-colors hover:bg-slate-50/80 ${
+                      hasFacilityEmail ? "" : "bg-red-50/70 hover:bg-red-50"
+                    }`}
                   >
                     <TableCell className="align-top py-4 first:pl-5">
                       <div className="flex items-start gap-3">
@@ -519,10 +525,20 @@ export default function Residents() {
                     </TableCell>
                     <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
                       <div className="min-w-[14rem] max-w-[22rem] space-y-2">
-                        <p className="break-words font-bold leading-snug text-slate-800">
+                        <p
+                          className={`break-words font-bold leading-snug ${
+                            hasFacilityEmail ? "text-slate-800" : "text-red-700"
+                          }`}
+                        >
                           {lead.facility}
                         </p>
-                        <div className="space-y-1.5 rounded-xl border border-slate-100 bg-slate-50/80 px-2.5 py-2">
+                        <div
+                          className={`space-y-1.5 rounded-xl border px-2.5 py-2 ${
+                            hasFacilityEmail
+                              ? "border-slate-100 bg-slate-50/80"
+                              : "border-red-200 bg-red-50"
+                          }`}
+                        >
                           <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
                             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                             <span className="min-w-0 break-words">
@@ -530,10 +546,18 @@ export default function Residents() {
                               {lead.facilityZip ? ` · ${lead.facilityZip}` : ""}
                             </span>
                           </p>
-                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
-                            <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                          <p
+                            className={`flex items-start gap-2 text-xs leading-snug ${
+                              hasFacilityEmail ? "text-slate-600" : "font-semibold text-red-600"
+                            }`}
+                          >
+                            <Mail
+                              className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                                hasFacilityEmail ? "text-[#00B8DB]" : "text-red-500"
+                              }`}
+                            />
                             <span className="min-w-0 break-all">
-                              {lead.facilityEmail || "Email not available"}
+                              {hasFacilityEmail ? facilityEmail : "Email not available"}
                             </span>
                           </p>
                         </div>

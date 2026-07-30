@@ -11,7 +11,6 @@ import Facility from "../models/facilityModel.js";
 import mongoose from "mongoose";
 
 const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
-const DEFAULT_TRACKED_FACILITY_EMAIL = "smith12@yopmail.com";
 
 const isLocalHostUrl = (value) => {
   try {
@@ -31,15 +30,13 @@ const cleanFacilityField = (value) => {
 const isPlaceholderFacilityEmail = (value) =>
   /@external\.carematch\.local$/i.test(String(value || "").trim());
 
-const resolveExploreRecipients = () => {
+const resolveExploreRecipients = (facilityEmail = "") => {
   const adminEmail = String(
     process.env.EXPLORE_ADMIN_EMAIL || DEFAULT_ADMIN_EMAIL,
   )
     .trim()
     .toLowerCase();
-  const trackedFacilityEmail = String(
-    process.env.EXPLORE_TRACK_EMAIL || DEFAULT_TRACKED_FACILITY_EMAIL,
-  )
+  const realFacilityEmail = String(facilityEmail || "")
     .trim()
     .toLowerCase();
 
@@ -55,8 +52,11 @@ const resolveExploreRecipients = () => {
 
   // Admin always gets a copy (no open-tracking).
   addRecipient(adminEmail, false);
-  // Facility notify always goes to the configured track inbox (not the real facility email).
-  addRecipient(trackedFacilityEmail, true);
+
+  // Real facility email only — never the smith12 test inbox.
+  if (realFacilityEmail && !isPlaceholderFacilityEmail(realFacilityEmail)) {
+    addRecipient(realFacilityEmail, true);
+  }
 
   return recipients;
 };
@@ -137,7 +137,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
     resolvedFacilityEmail = "";
   }
 
-  const recipients = resolveExploreRecipients();
+  const recipients = resolveExploreRecipients(resolvedFacilityEmail);
 
   if (recipients.length === 0) {
     return res.status(200).json({ success: true, sent: 0, message: "No notify emails configured" });
