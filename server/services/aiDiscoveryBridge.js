@@ -211,6 +211,10 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     providerUrl ||
     (isAggregatorListingUrl(f.website) ? String(f.website || "").trim() : "");
 
+  const rawEmail = String(f.email || "").trim().toLowerCase();
+  // Never expose synthetic scrape placeholders in discover payloads.
+  const email = /@external\.carematch\.local$/i.test(rawEmail) ? "" : rawEmail;
+
   return {
     facilityId,
     name: f.name || "Community",
@@ -228,6 +232,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     images: Array.isArray(f.images) ? f.images : [],
     website: operatorWebsite,
     phone: f.phone || "",
+    email,
     zip_code: loc.zip_code || "",
     specialty: [],
     description: String(f.description || "").trim(),

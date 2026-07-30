@@ -81,12 +81,14 @@ function mapOwnedDocToAiInput(doc) {
 export function mapOwnedFacilityToMatchRow(doc, index) {
   const aiInput = mapOwnedDocToAiInput(doc);
   const row = mapAiDiscoveryFacilityToMatchRow(aiInput, index);
+  const email = String(doc.email || "").trim().toLowerCase();
   return {
     ...row,
     facilityId: `owned-${String(doc._id)}`,
     is_external: false,
     source_platform: "CareMatch",
     external_source_url: "",
+    email: /@external\.carematch\.local$/i.test(email) ? "" : email,
     reasons: ["CareMatch partner community — added by the facility."],
     score: Math.max(row.score || 0, 88),
   };
