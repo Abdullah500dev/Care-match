@@ -101,6 +101,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   let resolvedPhone = cleanFacilityField(phone);
   let resolvedFacilityEmail = cleanFacilityField(facilityEmailBody).toLowerCase();
   const resolvedFacilityId = String(facilityId || "").trim();
+  let resolvedIsExternal = true;
 
   // Hydrate contact details from owned Facility records when Contact payload is incomplete
   try {
@@ -129,10 +130,18 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
       resolvedFacilityEmail =
         resolvedFacilityEmail || cleanFacilityField(facilityDoc.email).toLowerCase();
       resolvedZip = resolvedZip || cleanFacilityField(facilityDoc.zip_code);
+      resolvedIsExternal = facilityDoc.is_external !== false;
     }
   } catch (err) {
     console.warn("[explore-click] facility hydrate failed:", err?.message || err);
   }
+
+  const platform = String(sourcePlatform || "").toLowerCase();
+  const isOwnedFacility =
+    resolvedFacilityId.startsWith("owned-") ||
+    platform === "carematch" ||
+    resolvedIsExternal === false;
+  const isScrapedFacility = !isOwnedFacility;
 
   if (isPlaceholderFacilityEmail(resolvedFacilityEmail)) {
     resolvedFacilityEmail = "";
@@ -204,17 +213,26 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
         trackingPixelUrl = `${apiBase}/api/email/track/${token}.gif`;
       }
 
+      // Facility copy for scraped listings: onboarding only (no user email, no Sign In).
+      // Admin copy (and owned facilities) keep lead details.
+      const sendScrapedOnboarding = isScrapedFacility && shouldTrackOpen;
+      const template = sendScrapedOnboarding
+        ? "explore-click-scraped.ejs"
+        : "explore-click.ejs";
+
       console.log(
-        `[explore-click] sending to ${recipientEmail}${trackingPixelUrl ? ` track=${trackingPixelUrl}` : ""}`,
+        `[explore-click] sending to ${recipientEmail} template=${template}${trackingPixelUrl ? ` track=${trackingPixelUrl}` : ""}`,
       );
 
       await sendMail({
         email: recipientEmail,
-        subject: `Someone is interested in ${resolvedName}`,
-        template: "explore-click.ejs",
+        subject: sendScrapedOnboarding
+          ? `Claim your facility on CareMatch: ${resolvedName}`
+          : `Someone is interested in ${resolvedName}`,
+        template,
         data: {
-          userName: user.name || "User",
-          userEmail: user.email || "",
+          userName: sendScrapedOnboarding ? "" : user.name || "User",
+          userEmail: sendScrapedOnboarding ? "" : user.email || "",
           facilityName: resolvedName,
           facilityId: resolvedFacilityId,
           address: resolvedAddress,
@@ -226,8 +244,8 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           careType: resolvedCareType,
           sentAt,
           trackingPixelUrl,
-          signupUrl,
-          loginUrl,
+          signupUrl: sendScrapedOnboarding ? signupUrl : "",
+          loginUrl: sendScrapedOnboarding ? "" : loginUrl,
         },
       });
 

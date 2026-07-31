@@ -120,14 +120,12 @@
             <p class="label">Name</p>
             <p class="value"><%= userName %></p>
 
+            <% if (userEmail) { %>
             <p class="label">Email</p>
             <p class="value">
-              <% if (userEmail) { %>
               <a href="mailto:<%= userEmail %>"><%= userEmail %></a>
-              <% } else { %>
-              —
-              <% } %>
             </p>
+            <% } %>
 
             <% if (sentAt) { %>
             <p class="label">Time</p>
@@ -135,36 +133,13 @@
             <% } %>
           </div>
 
-          <p>
-            Don’t have a CareMatch account yet? Sign up or register to claim your
-            facility and reply to this lead.
-          </p>
-
-          <% if (signupUrl) { %>
-          <div class="cta-wrap">
-            <a class="button" href="<%= signupUrl %>" target="_blank" rel="noopener noreferrer">
-              Sign Up / Register
-            </a>
-          </div>
-          <% } %>
-
           <% if (loginUrl) { %>
-          <p class="cta-note">Already have an account?</p>
+          <p class="cta-note">Sign in to your CareMatch facility account to follow up.</p>
           <div class="cta-wrap">
             <a class="button-secondary" href="<%= loginUrl %>" target="_blank" rel="noopener noreferrer">
               Sign In
             </a>
           </div>
-          <% } %>
-
-          <% if (signupUrl) { %>
-          <p class="link-fallback">
-            If the button does not work, copy and paste this signup link:
-          </p>
-          <p class="link"><%= signupUrl %></p>
-          <% } %>
-
-          <% if (loginUrl) { %>
           <p class="link-fallback">Sign in link:</p>
           <p class="link"><%= loginUrl %></p>
           <% } %>
