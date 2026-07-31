@@ -3,6 +3,10 @@ import ErrorHandler from "../utils/errorHandler.js";
 import Lead, { LEAD_STATUS_VALUES } from "../models/leadModel.js";
 import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
+import {
+  eachDayYmd,
+  resolveAnalyticsRange,
+} from "../utils/dateRangePresets.js";
 
 const requireAdmin = async (userId) => {
   const dbUser = await User.findById(userId).select("role user_type");
@@ -249,12 +253,16 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("Admin only", 403));
   }
 
-  const days = Math.min(Math.max(Number(req.query.days) || 30, 7), 90);
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const range = resolveAnalyticsRange(req.query);
+  const { from, to, fromYmd, toYmd, period } = range;
+  const dayKeys = eachDayYmd(from, to);
+  const days = dayKeys.length;
+
+  const createdInRange = { createdAt: { $gte: from, $lte: to } };
 
   const [
     allLeads,
-    recentLeads,
+    periodLeads,
     facilityCount,
     userCount,
     facilitySignupCount,
@@ -262,7 +270,7 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     recentFacilitySignups,
   ] = await Promise.all([
     Lead.find({ isRemoved: false }).lean(),
-    Lead.find({ isRemoved: false, createdAt: { $gte: since } }).lean(),
+    Lead.find({ isRemoved: false, ...createdInRange }).lean(),
     Facility.countDocuments(),
     User.countDocuments({
       role: "user",
@@ -272,13 +280,13 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     User.find({
       role: "user",
       user_type: { $nin: ["admin", "authenticator", "moderator"] },
-      createdAt: { $gte: since },
+      ...createdInRange,
     })
       .select("createdAt")
       .lean(),
     Facility.find({
       is_external: { $ne: true },
-      createdAt: { $gte: since },
+      ...createdInRange,
     })
       .select("createdAt")
       .lean(),
@@ -286,25 +294,27 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
 
   const byStatus = {};
   for (const s of LEAD_STATUS_VALUES) byStatus[s] = 0;
-  for (const lead of allLeads) {
+  for (const lead of periodLeads) {
     const key = lead.status || "New";
     byStatus[key] = (byStatus[key] || 0) + 1;
   }
 
-  const inquiries = allLeads.length;
-  const emailOpened = allLeads.filter((l) => l.emailOpened || l.status === "Email Opened").length;
-  const contacted = allLeads.filter((l) =>
+  const inquiries = periodLeads.length;
+  const emailOpened = periodLeads.filter(
+    (l) => l.emailOpened || l.status === "Email Opened",
+  ).length;
+  const contacted = periodLeads.filter((l) =>
     ["Contacted", "Tour Scheduled"].includes(l.status),
   ).length;
   const visits = inquiries; // Explore click = facility interest / visit signal
 
-  const careTypeMap = { "Assisted Living": allLeads.length };
+  const careTypeMap = { "Assisted Living": periodLeads.length };
   const byCareType = Object.entries(careTypeMap)
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
   const facilityMap = {};
-  for (const lead of allLeads) {
+  for (const lead of periodLeads) {
     const key = lead.facilityId || lead.facilityName || "Unknown";
     if (!facilityMap[key]) {
       facilityMap[key] = {
@@ -325,28 +335,29 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     .sort((a, b) => b.inquiries - a.inquiries)
     .slice(0, 25);
 
-  // Daily series for the selected window
-  const dayKeys = [];
-  for (let i = days - 1; i >= 0; i -= 1) {
-    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
-    dayKeys.push(d.toISOString().slice(0, 10));
-  }
   const dailyCounts = Object.fromEntries(
     dayKeys.map((k) => [k, { visits: 0, inquiries: 0, users: 0, facilities: 0 }]),
   );
-  for (const lead of recentLeads) {
-    const key = new Date(lead.createdAt).toISOString().slice(0, 10);
+  const localYmd = (d) => {
+    const x = new Date(d);
+    const y = x.getFullYear();
+    const m = String(x.getMonth() + 1).padStart(2, "0");
+    const day = String(x.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  for (const lead of periodLeads) {
+    const key = localYmd(lead.createdAt);
     if (!dailyCounts[key]) continue;
     dailyCounts[key].visits += 1;
     dailyCounts[key].inquiries += 1;
   }
   for (const u of recentUsers) {
-    const key = new Date(u.createdAt).toISOString().slice(0, 10);
+    const key = localYmd(u.createdAt);
     if (!dailyCounts[key]) continue;
     dailyCounts[key].users += 1;
   }
   for (const f of recentFacilitySignups) {
-    const key = new Date(f.createdAt).toISOString().slice(0, 10);
+    const key = localYmd(f.createdAt);
     if (!dailyCounts[key]) continue;
     dailyCounts[key].facilities += 1;
   }
@@ -369,6 +380,9 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
 
   return res.status(200).json({
     success: true,
+    period,
+    from: fromYmd,
+    to: toYmd,
     days,
     summary: {
       facilitiesListed: facilityCount,
@@ -378,9 +392,10 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
       inquiriesSent: inquiries,
       emailsOpened: emailOpened,
       contacted,
-      recentInquiries: recentLeads.length,
+      recentInquiries: periodLeads.length,
       recentUsers: recentUsers.length,
       recentFacilitySignups: recentFacilitySignups.length,
+      allTimeInquiries: allLeads.length,
       conversionRate:
         visits > 0 ? Number(((contacted / visits) * 100).toFixed(1)) : 0,
     },

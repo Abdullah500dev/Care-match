@@ -20,12 +20,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
-
-const RANGE_OPTIONS = [
-  { value: 7, label: "7 days" },
-  { value: 30, label: "30 days" },
-  { value: 90, label: "90 days" },
-];
+import DateRangeFilter from "@/components/common/DateRangeFilter";
+import {
+  DEFAULT_PERIOD,
+  periodLabel,
+  resolveDateRange,
+} from "@/lib/dateRangePresets";
 
 const CARE_TYPE_PAGE_SIZE = 5;
 const FACILITY_PAGE_SIZE = 5;
@@ -43,18 +43,36 @@ const facilitiesChartConfig = {
   facilities: { label: "Facilities", color: "#00B8DB" },
 };
 
+function defaultCustomBounds() {
+  const r = resolveDateRange("this_month");
+  return { from: r.from, to: r.to };
+}
+
 export default function Analytics() {
-  const [days, setDays] = useState(30);
+  const [period, setPeriod] = useState(DEFAULT_PERIOD);
+  const [customFrom, setCustomFrom] = useState(() => defaultCustomBounds().from);
+  const [customTo, setCustomTo] = useState(() => defaultCustomBounds().to);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [carePage, setCarePage] = useState(1);
   const [facilityPage, setFacilityPage] = useState(1);
 
+  const range = useMemo(
+    () => resolveDateRange(period, customFrom, customTo),
+    [period, customFrom, customTo],
+  );
+  const rangeLabel = periodLabel(period);
+
   const fetchAnalytics = useCallback(async () => {
+    if (!range) return;
     setLoading(true);
     try {
       const { data: res } = await apiClient.get("/api/email/analytics", {
-        params: { days },
+        params: {
+          period,
+          from: range.from,
+          to: range.to,
+        },
       });
       setData(res);
       setCarePage(1);
@@ -68,11 +86,12 @@ export default function Analytics() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [period, range]);
 
   useEffect(() => {
+    if (period === "custom" && (!customFrom || !customTo)) return;
     fetchAnalytics();
-  }, [fetchAnalytics]);
+  }, [fetchAnalytics, period, customFrom, customTo]);
 
   const summary = data?.summary || {};
   const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
@@ -158,24 +177,16 @@ export default function Analytics() {
             Website reporting — visits, inquiries, and facility engagement across CareMatch.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {RANGE_OPTIONS.map((opt) => (
-            <Button
-              key={opt.value}
-              type="button"
-              variant={days === opt.value ? "default" : "outline"}
-              size="sm"
-              className={
-                days === opt.value
-                  ? "rounded-xl bg-[#00B8DB] text-white hover:bg-[#00B8DB]/90"
-                  : "rounded-xl"
-              }
-              onClick={() => setDays(opt.value)}
-            >
-              {opt.label}
-            </Button>
-          ))}
-        </div>
+        <DateRangeFilter
+          period={period}
+          customFrom={customFrom}
+          customTo={customTo}
+          onPeriodChange={setPeriod}
+          onCustomChange={({ from, to }) => {
+            setCustomFrom(from);
+            setCustomTo(to);
+          }}
+        />
       </div>
 
       {loading ? (
@@ -220,7 +231,7 @@ export default function Analytics() {
             <Card className="rounded-2xl border-slate-200 lg:col-span-3">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-bold text-slate-900">
-                  Visits &amp; inquiries ({days} days)
+                  Visits &amp; inquiries ({rangeLabel})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -277,7 +288,7 @@ export default function Analytics() {
                 )}
                 {summary.recentInquiries != null && (
                   <p className="pt-2 text-xs text-slate-400">
-                    {summary.recentInquiries} inquiries in the last {days} days
+                    {summary.recentInquiries} inquiries · {rangeLabel}
                   </p>
                 )}
               </CardContent>
@@ -288,7 +299,7 @@ export default function Analytics() {
             <Card className="rounded-2xl border-slate-200">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-bold text-slate-900">
-                  Number of users ({days} days)
+                  Number of users ({rangeLabel})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -323,7 +334,7 @@ export default function Analytics() {
             <Card className="rounded-2xl border-slate-200">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base font-bold text-slate-900">
-                  Number of facilities signed up ({days} days)
+                  Number of facilities signed up ({rangeLabel})
                 </CardTitle>
               </CardHeader>
               <CardContent>

@@ -26,6 +26,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 import AnimatedNumber from "@/components/common/AnimatedNumber";
+import DateRangeFilter from "@/components/common/DateRangeFilter";
+import {
+  DEFAULT_PERIOD,
+  resolveDateRange,
+} from "@/lib/dateRangePresets";
 
 const SUMMARY_CARDS = [
   {
@@ -90,12 +95,6 @@ const CHART_DATA_BY_RANGE = {
   ],
 };
 
-const RANGE_OPTIONS = [
-  { value: "week", label: "7 days" },
-  { value: "month", label: "30 days" },
-  { value: "quarter", label: "90 days" },
-];
-
 const TOP_LEADS = [
   { initials: "SJ", name: "Sarah Johnson", facility: "Sunrise Villa", score: "95%", time: "3 H AGO" },
   { initials: "RM", name: "Robert Miller", facility: "Sunrise Villa", score: "88%", time: "5 H AGO" },
@@ -149,10 +148,38 @@ const chartConfig = {
   },
 };
 
+function defaultCustomBounds() {
+  const r = resolveDateRange("this_month");
+  return { from: r.from, to: r.to };
+}
+
+/** Map period presets onto existing mock chart series until Overview is wired to live data. */
+function chartKeyForPeriod(period) {
+  if (
+    period === "today" ||
+    period === "yesterday" ||
+    period === "this_week" ||
+    period === "last_week"
+  ) {
+    return "week";
+  }
+  if (
+    period === "this_month" ||
+    period === "last_month" ||
+    period === "custom"
+  ) {
+    return "month";
+  }
+  return "quarter";
+}
+
 export default function DashboardHome() {
   const navigate = useNavigate();
-  const [leadsRange, setLeadsRange] = useState("week");
-  const chartData = CHART_DATA_BY_RANGE[leadsRange] ?? CHART_DATA_BY_RANGE.week;
+  const [period, setPeriod] = useState(DEFAULT_PERIOD);
+  const [customFrom, setCustomFrom] = useState(() => defaultCustomBounds().from);
+  const [customTo, setCustomTo] = useState(() => defaultCustomBounds().to);
+  const chartData =
+    CHART_DATA_BY_RANGE[chartKeyForPeriod(period)] ?? CHART_DATA_BY_RANGE.week;
   const yAxisMax = useMemo(() => {
     const max = Math.max(...chartData.map((d) => d.leads), 1);
     return Math.ceil(max * 1.2);
@@ -232,29 +259,23 @@ export default function DashboardHome() {
                   Leads generated across all facilities
                 </CardDescription>
               </div>
-              {/* Tab-style range filter – no portal, no z-index issues */}
-              <div className="flex shrink-0 items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-                {RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setLeadsRange(opt.value)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                      leadsRange === opt.value
-                        ? "bg-white text-[#00B8DB] shadow-sm"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <DateRangeFilter
+                period={period}
+                customFrom={customFrom}
+                customTo={customTo}
+                onPeriodChange={setPeriod}
+                onCustomChange={({ from, to }) => {
+                  setCustomFrom(from);
+                  setCustomTo(to);
+                }}
+                triggerClassName="h-8 w-[160px] text-xs"
+              />
             </div>
           </CardHeader>
           <CardContent className="min-w-0 overflow-x-auto">
             <ChartContainer config={chartConfig} className="h-[240px] w-full min-w-0 sm:h-[280px]">
               <AreaChart
-                key={leadsRange}
+                key={period}
                 data={chartData}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >

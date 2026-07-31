@@ -832,7 +832,7 @@ export default function Communities() {
                           )}
                           {facility.pricing && (
                             <p className="mt-1">
-                              <span className="font-semibold text-slate-500">Pricing: </span>
+                              <span className="font-semibold text-slate-500">Monthly Pricing: </span>
                               {facility.pricing}
                             </p>
                           )}
@@ -1028,7 +1028,7 @@ export default function Communities() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                  Pricing
+                  Monthly Pricing
                 </label>
                 <Input
                   type="text"
