@@ -555,18 +555,27 @@ export default function Residents() {
                                   .trim()
                                   .replace(/\s+/g, " ")
                                   .replace(/\s*[·|]\s*/g, ", ");
-                                const zip = String(lead.facilityZip || "")
+                                const zipFromField = String(lead.facilityZip || "")
                                   .replace(/\D/g, "")
                                   .slice(0, 5);
-                                const zipHits = addr.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
-                                if (zipHits.length > 1) {
-                                  const firstZip = zipHits[0].slice(0, 5);
-                                  const firstIdx = addr.search(new RegExp(`\\b${firstZip}\\b`));
+                                const zipFromAddr =
+                                  (addr.match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || "";
+                                const zip = zipFromField || zipFromAddr;
+                                if (zip) {
+                                  const leading = addr.match(new RegExp(`^${zip}\\s+`));
+                                  if (
+                                    leading &&
+                                    new RegExp(`\\b${zip}\\b`).test(addr.slice(leading[0].length))
+                                  ) {
+                                    addr = addr.slice(leading[0].length).trim();
+                                  }
+                                  const firstIdx = addr.search(new RegExp(`\\b${zip}\\b`));
                                   if (firstIdx >= 0) {
-                                    addr = addr
-                                      .slice(0, firstIdx + 5)
-                                      .trim()
-                                      .replace(/[,\s]+$/g, "");
+                                    let end = firstIdx + 5;
+                                    const after = addr.slice(end);
+                                    const usaMatch = after.match(/^\s*,?\s*USA\b/i);
+                                    if (usaMatch) end += usaMatch[0].length;
+                                    addr = addr.slice(0, end).trim().replace(/[,\s]+$/g, "");
                                   }
                                 }
                                 if (!addr && !zip) return "Address not available";

@@ -129,6 +129,40 @@ function getFacilityZipCode(facility) {
   return formatZipInput(facility.external_data?.zip_code);
 }
 
+/** Show ZIP once — strip repeats in address and only append zip when missing. */
+function formatAddressWithZip(address, zipCode) {
+  let addr = String(address || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*[·|]\s*/g, ", ");
+  const zipFromField = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+  const zipFromAddr = (addr.match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || "";
+  const zip = zipFromField || zipFromAddr;
+
+  if (zip) {
+    // Drop leading ZIP when the same ZIP also appears later in the string.
+    const leading = addr.match(new RegExp(`^${zip}\\s+`));
+    if (leading && new RegExp(`\\b${zip}\\b`).test(addr.slice(leading[0].length))) {
+      addr = addr.slice(leading[0].length).trim();
+    }
+
+    const firstIdx = addr.search(new RegExp(`\\b${zip}\\b`));
+    if (firstIdx >= 0) {
+      let end = firstIdx + 5;
+      const after = addr.slice(end);
+      const usaMatch = after.match(/^\s*,?\s*USA\b/i);
+      if (usaMatch) end += usaMatch[0].length;
+      addr = addr.slice(0, end).trim().replace(/[,\s]+$/g, "");
+    }
+  }
+
+  if (!addr && !zip) return "—";
+  if (!addr) return zip || "—";
+  if (!zip) return addr || "—";
+  if (new RegExp(`\\b${zip}\\b`).test(addr)) return addr;
+  return `${addr}, ${zip}`;
+}
+
 function getFacilityPricingValue(facility) {
   if (!facility || typeof facility !== "object") return "";
   const direct = String(facility.pricing || "").trim();
@@ -726,7 +760,7 @@ export default function Communities() {
                     </h3>
                     <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/95 drop-shadow-md">
                       <MapPin className="h-4 w-4 shrink-0" />
-                      {facility.address || "—"}
+                      {formatAddressWithZip(facility.address, getFacilityZipCode(facility))}
                     </p>
                   </div>
                 </div>
@@ -741,8 +775,7 @@ export default function Communities() {
                         <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                         <span className="min-w-0 break-words">
                           <span className="font-semibold text-slate-500">Address: </span>
-                          {facility.address || "—"}
-                          {facility.zip_code ? `, ${facility.zip_code}` : ""}
+                          {formatAddressWithZip(facility.address, getFacilityZipCode(facility))}
                         </span>
                       </p>
                       <p className="flex items-start gap-2">
@@ -763,7 +796,7 @@ export default function Communities() {
                         <Hash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                         <span className="min-w-0 break-words">
                           <span className="font-semibold text-slate-500">ZIP: </span>
-                          {facility.zip_code || "—"}
+                          {getFacilityZipCode(facility) || "—"}
                         </span>
                       </p>
                       <p className="flex items-start gap-2">
