@@ -29,6 +29,7 @@ import {
   Loader2,
   MapPin,
   Mail,
+  Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
@@ -491,14 +492,21 @@ export default function Residents() {
                 pagedLeads.map((lead) => {
                   const careLabel = normalizeCareTypeDisplay(lead.careType);
                   const facilityEmail = String(lead.facilityEmail || "").trim();
+                  const facilityPhone = String(lead.facilityPhone || "").trim();
                   const hasFacilityEmail =
                     facilityEmail &&
                     !/@external\.carematch\.local$/i.test(facilityEmail);
+                  const hasFacilityPhone =
+                    facilityPhone &&
+                    facilityPhone.toUpperCase() !== "N/A" &&
+                    facilityPhone !== "—" &&
+                    facilityPhone !== "-";
+                  const missingContact = !hasFacilityEmail && !hasFacilityPhone;
                   return (
                   <TableRow
                     key={lead.id}
                     className={`border-slate-100 transition-colors hover:bg-slate-50/80 ${
-                      hasFacilityEmail ? "" : "bg-red-50/70 hover:bg-red-50"
+                      missingContact ? "bg-red-50/70 hover:bg-red-50" : ""
                     }`}
                   >
                     <TableCell className="align-top py-4 first:pl-5">
@@ -527,39 +535,64 @@ export default function Residents() {
                       <div className="min-w-[14rem] max-w-[22rem] space-y-2">
                         <p
                           className={`break-words font-bold leading-snug ${
-                            hasFacilityEmail ? "text-slate-800" : "text-red-700"
+                            missingContact ? "text-red-700" : "text-slate-800"
                           }`}
                         >
                           {lead.facility}
                         </p>
                         <div
                           className={`space-y-1.5 rounded-xl border px-2.5 py-2 ${
-                            hasFacilityEmail
-                              ? "border-slate-100 bg-slate-50/80"
-                              : "border-red-200 bg-red-50"
+                            missingContact
+                              ? "border-red-200 bg-red-50"
+                              : "border-slate-100 bg-slate-50/80"
                           }`}
                         >
                           <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
                             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                             <span className="min-w-0 break-words">
-                              {lead.facilityAddress || "Address not available"}
-                              {lead.facilityZip ? ` · ${lead.facilityZip}` : ""}
+                              {(() => {
+                                let addr = String(lead.facilityAddress || "")
+                                  .trim()
+                                  .replace(/\s+/g, " ")
+                                  .replace(/\s*[·|]\s*/g, ", ");
+                                const zip = String(lead.facilityZip || "")
+                                  .replace(/\D/g, "")
+                                  .slice(0, 5);
+                                const zipHits = addr.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
+                                if (zipHits.length > 1) {
+                                  const firstZip = zipHits[0].slice(0, 5);
+                                  const firstIdx = addr.search(new RegExp(`\\b${firstZip}\\b`));
+                                  if (firstIdx >= 0) {
+                                    addr = addr
+                                      .slice(0, firstIdx + 5)
+                                      .trim()
+                                      .replace(/[,\s]+$/g, "");
+                                  }
+                                }
+                                if (!addr && !zip) return "Address not available";
+                                if (!addr) return zip;
+                                if (!zip) return addr;
+                                if (new RegExp(`\\b${zip}\\b`).test(addr)) return addr;
+                                return `${addr}, ${zip}`;
+                              })()}
                             </span>
                           </p>
-                          <p
-                            className={`flex items-start gap-2 text-xs leading-snug ${
-                              hasFacilityEmail ? "text-slate-600" : "font-semibold text-red-600"
-                            }`}
-                          >
-                            <Mail
-                              className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
-                                hasFacilityEmail ? "text-[#00B8DB]" : "text-red-500"
-                              }`}
-                            />
-                            <span className="min-w-0 break-all">
-                              {hasFacilityEmail ? facilityEmail : "Email not available"}
-                            </span>
-                          </p>
+                          {hasFacilityEmail ? (
+                            <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                              <span className="min-w-0 break-all">{facilityEmail}</span>
+                            </p>
+                          ) : hasFacilityPhone ? (
+                            <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                              <span className="min-w-0 break-all">{facilityPhone}</span>
+                            </p>
+                          ) : (
+                            <p className="flex items-start gap-2 text-xs font-semibold leading-snug text-red-600">
+                              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+                              <span className="min-w-0 break-all">Contact not available</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>

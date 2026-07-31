@@ -7,6 +7,7 @@ import {
 } from "../controllers/emailTrackController.js";
 import {
   getFacilityAnalytics,
+  getMyFacilityAnalytics,
   getWebsiteAnalytics,
   listLeads,
   removeLead,
@@ -17,6 +18,7 @@ const router = express.Router();
 
 router.get("/track/:token", trackEmailOpen);
 router.get("/explore-opens", isAutheticated, listExploreEmailOpens);
+router.get("/analytics/me", isAutheticated, getMyFacilityAnalytics);
 router.get("/analytics/facility", isAutheticated, getFacilityAnalytics);
 router.get("/analytics", isAutheticated, getWebsiteAnalytics);
 router.get("/leads", isAutheticated, listLeads);

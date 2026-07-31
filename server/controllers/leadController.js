@@ -409,33 +409,82 @@ export const getFacilityAnalytics = catchAsyncError(async (req, res, next) => {
     return next(new ErrorHandler("facilityId or facilityName is required", 400));
   }
 
+  const or = [];
+  if (facilityId) {
+    or.push({ facilityId });
+    if (!facilityId.startsWith("owned-")) {
+      or.push({ facilityId: `owned-${facilityId}` });
+    }
+  }
+  if (facilityName) {
+    or.push({ facilityName });
+  }
+
   const filter = { isRemoved: false };
-  if (facilityId && facilityName) {
-    filter.$or = [{ facilityId }, { facilityName }];
-  } else if (facilityId) {
-    filter.facilityId = facilityId;
-  } else {
-    filter.facilityName = facilityName;
+  if (or.length === 1) {
+    Object.assign(filter, or[0]);
+  } else if (or.length > 1) {
+    filter.$or = or;
   }
 
   const leads = await Lead.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+  return res.status(200).json(buildFacilityAnalyticsPayload(leads, facilityId, facilityName));
+});
 
-  const visits = leads.length;
-  const inquiries = leads.length;
-  const emailsOpened = leads.filter(
+/**
+ * Facility account: analytics for their own listing.
+ * GET /api/email/analytics/me
+ */
+export const getMyFacilityAnalytics = catchAsyncError(async (req, res, next) => {
+  const user = await User.findById(req.user?.id).select("role");
+  if (!user || user.role !== "facility") {
+    return next(new ErrorHandler("Facility account only", 403));
+  }
+
+  const facility = await Facility.findOne({ user_id: user._id }).lean();
+  if (!facility) {
+    return next(new ErrorHandler("Facility profile not found", 404));
+  }
+
+  const idStr = String(facility._id);
+  const ownedKey = `owned-${idStr}`;
+  const name = String(facility.name || "").trim();
+  const email = String(facility.email || "").trim().toLowerCase();
+
+  const or = [{ facilityId: ownedKey }, { facilityId: idStr }];
+  if (name) or.push({ facilityName: name });
+  if (email && !/@external\.carematch\.local$/i.test(email)) {
+    or.push({ facilityEmail: email });
+  }
+
+  const leads = await Lead.find({ isRemoved: false, $or: or })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .lean();
+
+  return res.status(200).json(
+    buildFacilityAnalyticsPayload(leads, ownedKey, name || "Your facility"),
+  );
+});
+
+const buildFacilityAnalyticsPayload = (leads, facilityId, facilityName) => {
+  const list = Array.isArray(leads) ? leads : [];
+  const visits = list.length;
+  const inquiries = list.length;
+  const emailsOpened = list.filter(
     (l) => l.emailOpened || l.status === "Email Opened",
   ).length;
-  const contacted = leads.filter((l) =>
+  const contacted = list.filter((l) =>
     ["Contacted", "Tour Scheduled"].includes(l.status),
   ).length;
 
   const byStatus = {};
-  for (const lead of leads) {
+  for (const lead of list) {
     const key = lead.status || "New";
     byStatus[key] = (byStatus[key] || 0) + 1;
   }
 
-  const recent = leads.slice(0, 10).map((l) => ({
+  const recent = list.slice(0, 10).map((l) => ({
     id: l._id,
     name: l.userName || "Unknown",
     email: l.userEmail || "",
@@ -445,20 +494,21 @@ export const getFacilityAnalytics = catchAsyncError(async (req, res, next) => {
     emailOpened: Boolean(l.emailOpened),
   }));
 
-  return res.status(200).json({
+  return {
     success: true,
     facilityId,
-    facilityName: facilityName || leads[0]?.facilityName || "Facility",
+    facilityName: facilityName || list[0]?.facilityName || "Facility",
     summary: {
       userVisited: visits,
       inquiriesSent: inquiries,
       emailsOpened,
       contacted,
+      peopleReached: visits,
     },
     byStatus,
     recent,
-  });
-});
+  };
+};
 
 /**
  * Update lead status.

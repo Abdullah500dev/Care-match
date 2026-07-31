@@ -31,6 +31,31 @@ const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
 const isPlaceholderEmail = (value) =>
   /@external\.carematch\.local$/i.test(String(value || "").trim());
 
+/** Show ZIP once — only append when address does not already include it. */
+const formatAddressWithZip = (address, zipCode) => {
+  let addr = String(address || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*[·|]\s*/g, ", ");
+  const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+
+  // If ZIP already appears more than once in the address, keep text only through the first ZIP.
+  const zipHits = addr.match(/\b\d{5}(?:-\d{4})?\b/g) || [];
+  if (zipHits.length > 1) {
+    const firstZip = zipHits[0].slice(0, 5);
+    const firstIdx = addr.search(new RegExp(`\\b${firstZip}\\b`));
+    if (firstIdx >= 0) {
+      addr = addr.slice(0, firstIdx + 5).trim().replace(/[,\s]+$/g, "");
+    }
+  }
+
+  if (!addr && !zip) return "N/A";
+  if (!addr) return zip || "N/A";
+  if (!zip) return addr;
+  if (new RegExp(`\\b${zip}\\b`).test(addr)) return addr;
+  return `${addr}, ${zip}`;
+};
+
 const TagList = ({ items = [] }) => {
   const list = (Array.isArray(items) ? items : [])
     .map((item) => String(item || "").trim())
@@ -319,8 +344,7 @@ const FacilityCard = ({
                     Address
                   </p>
                   <p className="break-words text-sm text-[#132329]">
-                    {String(address || "").trim() || "N/A"}
-                    {zipCode ? ` · ${zipCode}` : ""}
+                    {formatAddressWithZip(address, zipCode)}
                   </p>
                 </div>
                 <div className="w-full shrink-0 sm:w-[11.5rem] sm:text-right">
@@ -642,8 +666,7 @@ const FacilityCard = ({
                     Address
                   </p>
                   <p className="mt-1 break-words font-medium text-[#132329]">
-                    {String(address || "").trim() || "N/A"}
-                    {zipCode ? ` · ${zipCode}` : ""}
+                    {formatAddressWithZip(address, zipCode)}
                   </p>
                 </div>
 
