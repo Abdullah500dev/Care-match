@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import {
@@ -24,6 +24,7 @@ import {
   TrendingUp,
   MessageSquare,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import AnimatedNumber from "@/components/common/AnimatedNumber";
 import DateRangeFilter from "@/components/common/DateRangeFilter";
@@ -31,6 +32,7 @@ import {
   DEFAULT_PERIOD,
   resolveDateRange,
 } from "@/lib/dateRangePresets";
+import { apiClient } from "@/services/api";
 
 const SUMMARY_CARDS = [
   {
@@ -71,29 +73,6 @@ const SUMMARY_CARDS = [
     to: "/admin/analytics",
   },
 ];
-
-const CHART_DATA_BY_RANGE = {
-  week: [
-    { day: "Mon", leads: 4 },
-    { day: "Tue", leads: 8 },
-    { day: "Wed", leads: 6 },
-    { day: "Thu", leads: 12 },
-    { day: "Fri", leads: 14 },
-    { day: "Sat", leads: 10 },
-    { day: "Sun", leads: 8 },
-  ],
-  month: [
-    { day: "W1", leads: 24 },
-    { day: "W2", leads: 67 },
-    { day: "W3", leads: 31 },
-    { day: "W4", leads: 53 },
-  ],
-  quarter: [
-    { day: "Jan", leads: 102 },
-    { day: "Feb", leads: 66 },
-    { day: "Mar", leads: 149 },
-  ],
-};
 
 const TOP_LEADS = [
   { initials: "SJ", name: "Sarah Johnson", facility: "Sunrise Villa", score: "95%", time: "3 H AGO" },
@@ -153,37 +132,54 @@ function defaultCustomBounds() {
   return { from: r.from, to: r.to };
 }
 
-/** Map period presets onto existing mock chart series until Overview is wired to live data. */
-function chartKeyForPeriod(period) {
-  if (
-    period === "today" ||
-    period === "yesterday" ||
-    period === "this_week" ||
-    period === "last_week"
-  ) {
-    return "week";
-  }
-  if (
-    period === "this_month" ||
-    period === "last_month" ||
-    period === "custom"
-  ) {
-    return "month";
-  }
-  return "quarter";
-}
-
 export default function DashboardHome() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState(DEFAULT_PERIOD);
   const [customFrom, setCustomFrom] = useState(() => defaultCustomBounds().from);
   const [customTo, setCustomTo] = useState(() => defaultCustomBounds().to);
-  const chartData =
-    CHART_DATA_BY_RANGE[chartKeyForPeriod(period)] ?? CHART_DATA_BY_RANGE.week;
+  const [chartLoading, setChartLoading] = useState(true);
+  const [timeline, setTimeline] = useState([]);
+
+  const range = useMemo(
+    () => resolveDateRange(period, customFrom, customTo),
+    [period, customFrom, customTo],
+  );
+
+  const fetchLeadsChart = useCallback(async () => {
+    if (!range) return;
+    setChartLoading(true);
+    try {
+      const { data: res } = await apiClient.get("/api/email/analytics", {
+        params: { period, from: range.from, to: range.to },
+      });
+      const rows = Array.isArray(res?.timeline) ? res.timeline : [];
+      setTimeline(
+        rows.map((row) => ({
+          day: row.label,
+          leads: Number(row.inquiries) || 0,
+        })),
+      );
+    } catch (err) {
+      console.error(err);
+      setTimeline([]);
+    } finally {
+      setChartLoading(false);
+    }
+  }, [period, range]);
+
+  useEffect(() => {
+    if (period === "custom" && (!customFrom || !customTo)) return;
+    fetchLeadsChart();
+  }, [fetchLeadsChart, period, customFrom, customTo]);
+
+  const chartData = timeline;
   const yAxisMax = useMemo(() => {
     const max = Math.max(...chartData.map((d) => d.leads), 1);
     return Math.ceil(max * 1.2);
   }, [chartData]);
+
+  // Hourly charts: show every 3rd tick so X-axis stays readable
+  const xTickInterval = chartData.length > 14 ? Math.ceil(chartData.length / 8) - 1 : 0;
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6">
@@ -273,9 +269,19 @@ export default function DashboardHome() {
             </div>
           </CardHeader>
           <CardContent className="min-w-0 overflow-x-auto">
+            {chartLoading ? (
+              <div className="flex h-[240px] items-center justify-center gap-2 text-sm text-slate-500 sm:h-[280px]">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Loading leads…
+              </div>
+            ) : chartData.length === 0 ? (
+              <p className="flex h-[240px] items-center justify-center text-sm text-slate-400 sm:h-[280px]">
+                No leads in this range.
+              </p>
+            ) : (
             <ChartContainer config={chartConfig} className="h-[240px] w-full min-w-0 sm:h-[280px]">
               <AreaChart
-                key={period}
+                key={`${period}-${range?.from}-${range?.to}`}
                 data={chartData}
                 margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
               >
@@ -288,14 +294,17 @@ export default function DashboardHome() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis
                   dataKey="day"
-                  tick={{ fill: "#64748b", fontSize: 12 }}
+                  tick={{ fill: "#64748b", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
+                  interval={xTickInterval}
+                  minTickGap={8}
                 />
                 <YAxis
                   tick={{ fill: "#64748b", fontSize: 12 }}
                   axisLine={false}
                   tickLine={false}
+                  allowDecimals={false}
                   tickFormatter={(v) => String(v)}
                   domain={[0, yAxisMax]}
                 />
@@ -307,9 +316,11 @@ export default function DashboardHome() {
                   strokeWidth={2}
                   fill="url(#fillLeads)"
                   isAnimationActive
+                  connectNulls
                 />
               </AreaChart>
             </ChartContainer>
+            )}
           </CardContent>
         </Card>
 

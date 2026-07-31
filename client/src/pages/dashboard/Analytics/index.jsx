@@ -99,6 +99,8 @@ export default function Analytics() {
   const facilitiesTimeline = Array.isArray(data?.facilitiesTimeline)
     ? data.facilitiesTimeline
     : [];
+  const xTickInterval =
+    timeline.length > 14 ? Math.ceil(timeline.length / 8) - 1 : 0;
   const byCareType = Array.isArray(data?.byCareType) ? data.byCareType : [];
   const topFacilities = Array.isArray(data?.topFacilities) ? data.topFacilities : [];
   const byStatus = data?.byStatus || {};
@@ -241,7 +243,14 @@ export default function Analytics() {
                   <ChartContainer config={chartConfig} className="h-[260px] w-full">
                     <AreaChart data={timeline}>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        fontSize={11}
+                        interval={xTickInterval}
+                        minTickGap={8}
+                      />
                       <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
                       <ChartTooltip content={<ChartTooltipContent />} />
                       <Area
@@ -309,7 +318,14 @@ export default function Analytics() {
                   <ChartContainer config={usersChartConfig} className="h-[260px] w-full">
                     <AreaChart data={usersTimeline}>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        fontSize={11}
+                        interval={xTickInterval}
+                        minTickGap={8}
+                      />
                       <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
                       <ChartTooltip content={<ChartTooltipContent />} />
                       <Area
@@ -346,7 +362,14 @@ export default function Analytics() {
                   <ChartContainer config={facilitiesChartConfig} className="h-[260px] w-full">
                     <AreaChart data={facilitiesTimeline}>
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                      <XAxis dataKey="label" tickLine={false} axisLine={false} fontSize={11} />
+                      <XAxis
+                        dataKey="label"
+                        tickLine={false}
+                        axisLine={false}
+                        fontSize={11}
+                        interval={xTickInterval}
+                        minTickGap={8}
+                      />
                       <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
                       <ChartTooltip content={<ChartTooltipContent />} />
                       <Area

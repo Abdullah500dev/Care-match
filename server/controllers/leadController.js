@@ -335,9 +335,6 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     .sort((a, b) => b.inquiries - a.inquiries)
     .slice(0, 25);
 
-  const dailyCounts = Object.fromEntries(
-    dayKeys.map((k) => [k, { visits: 0, inquiries: 0, users: 0, facilities: 0 }]),
-  );
   const localYmd = (d) => {
     const x = new Date(d);
     const y = x.getFullYear();
@@ -345,38 +342,86 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     const day = String(x.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   };
-  for (const lead of periodLeads) {
-    const key = localYmd(lead.createdAt);
-    if (!dailyCounts[key]) continue;
-    dailyCounts[key].visits += 1;
-    dailyCounts[key].inquiries += 1;
+  const localHour = (d) => new Date(d).getHours();
+
+  let timeline;
+  let usersTimeline;
+  let facilitiesTimeline;
+  let granularity = "day";
+
+  // Today / Yesterday (single calendar day): hourly buckets so charts have real points
+  if (days === 1) {
+    granularity = "hour";
+    const hourKeys = Array.from({ length: 24 }, (_, h) => h);
+    const hourly = Object.fromEntries(
+      hourKeys.map((h) => [h, { visits: 0, inquiries: 0, users: 0, facilities: 0 }]),
+    );
+    for (const lead of periodLeads) {
+      const h = localHour(lead.createdAt);
+      hourly[h].visits += 1;
+      hourly[h].inquiries += 1;
+    }
+    for (const u of recentUsers) {
+      hourly[localHour(u.createdAt)].users += 1;
+    }
+    for (const f of recentFacilitySignups) {
+      hourly[localHour(f.createdAt)].facilities += 1;
+    }
+    const hourLabel = (h) =>
+      `${String(h).padStart(2, "0")}:00`;
+    timeline = hourKeys.map((h) => ({
+      date: `${fromYmd}T${hourLabel(h)}`,
+      label: hourLabel(h),
+      visits: hourly[h].visits,
+      inquiries: hourly[h].inquiries,
+    }));
+    usersTimeline = hourKeys.map((h) => ({
+      date: `${fromYmd}T${hourLabel(h)}`,
+      label: hourLabel(h),
+      users: hourly[h].users,
+    }));
+    facilitiesTimeline = hourKeys.map((h) => ({
+      date: `${fromYmd}T${hourLabel(h)}`,
+      label: hourLabel(h),
+      facilities: hourly[h].facilities,
+    }));
+  } else {
+    const dailyCounts = Object.fromEntries(
+      dayKeys.map((k) => [k, { visits: 0, inquiries: 0, users: 0, facilities: 0 }]),
+    );
+    for (const lead of periodLeads) {
+      const key = localYmd(lead.createdAt);
+      if (!dailyCounts[key]) continue;
+      dailyCounts[key].visits += 1;
+      dailyCounts[key].inquiries += 1;
+    }
+    for (const u of recentUsers) {
+      const key = localYmd(u.createdAt);
+      if (!dailyCounts[key]) continue;
+      dailyCounts[key].users += 1;
+    }
+    for (const f of recentFacilitySignups) {
+      const key = localYmd(f.createdAt);
+      if (!dailyCounts[key]) continue;
+      dailyCounts[key].facilities += 1;
+    }
+    timeline = dayKeys.map((date) => ({
+      date,
+      label: date.slice(5),
+      visits: dailyCounts[date].visits,
+      inquiries: dailyCounts[date].inquiries,
+    }));
+    usersTimeline = dayKeys.map((date) => ({
+      date,
+      label: date.slice(5),
+      users: dailyCounts[date].users,
+    }));
+    facilitiesTimeline = dayKeys.map((date) => ({
+      date,
+      label: date.slice(5),
+      facilities: dailyCounts[date].facilities,
+    }));
   }
-  for (const u of recentUsers) {
-    const key = localYmd(u.createdAt);
-    if (!dailyCounts[key]) continue;
-    dailyCounts[key].users += 1;
-  }
-  for (const f of recentFacilitySignups) {
-    const key = localYmd(f.createdAt);
-    if (!dailyCounts[key]) continue;
-    dailyCounts[key].facilities += 1;
-  }
-  const timeline = dayKeys.map((date) => ({
-    date,
-    label: date.slice(5),
-    visits: dailyCounts[date].visits,
-    inquiries: dailyCounts[date].inquiries,
-  }));
-  const usersTimeline = dayKeys.map((date) => ({
-    date,
-    label: date.slice(5),
-    users: dailyCounts[date].users,
-  }));
-  const facilitiesTimeline = dayKeys.map((date) => ({
-    date,
-    label: date.slice(5),
-    facilities: dailyCounts[date].facilities,
-  }));
 
   return res.status(200).json({
     success: true,
@@ -384,6 +429,7 @@ export const getWebsiteAnalytics = catchAsyncError(async (req, res, next) => {
     from: fromYmd,
     to: toYmd,
     days,
+    granularity,
     summary: {
       facilitiesListed: facilityCount,
       facilitiesSignedUp: facilitySignupCount,
