@@ -61,6 +61,47 @@
       a {
         color: #00b8d9;
       }
+      .cta-wrap {
+        text-align: center;
+        margin: 20px 0 8px;
+      }
+      .button {
+        display: inline-block;
+        background-color: #00b8d9;
+        color: #ffffff !important;
+        padding: 12px 28px;
+        text-decoration: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .button-secondary {
+        display: inline-block;
+        background-color: #132329;
+        color: #ffffff !important;
+        padding: 12px 28px;
+        text-decoration: none;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+      .cta-note {
+        text-align: center;
+        font-size: 12px;
+        color: #6b7280;
+        margin: 0 0 8px;
+      }
+      .link-fallback {
+        margin: 16px 0 4px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .link {
+        margin: 0 0 12px;
+        word-break: break-all;
+        font-size: 12px;
+        color: #00b8d9;
+      }
     </style>
   </head>
   <body>
@@ -93,6 +134,40 @@
             <p class="value"><%= sentAt %></p>
             <% } %>
           </div>
+
+          <p>
+            Don’t have a CareMatch account yet? Sign up or register to claim your
+            facility and reply to this lead.
+          </p>
+
+          <% if (signupUrl) { %>
+          <div class="cta-wrap">
+            <a class="button" href="<%= signupUrl %>" target="_blank" rel="noopener noreferrer">
+              Sign Up / Register
+            </a>
+          </div>
+          <% } %>
+
+          <% if (loginUrl) { %>
+          <p class="cta-note">Already have an account?</p>
+          <div class="cta-wrap">
+            <a class="button-secondary" href="<%= loginUrl %>" target="_blank" rel="noopener noreferrer">
+              Sign In
+            </a>
+          </div>
+          <% } %>
+
+          <% if (signupUrl) { %>
+          <p class="link-fallback">
+            If the button does not work, copy and paste this signup link:
+          </p>
+          <p class="link"><%= signupUrl %></p>
+          <% } %>
+
+          <% if (loginUrl) { %>
+          <p class="link-fallback">Sign in link:</p>
+          <p class="link"><%= loginUrl %></p>
+          <% } %>
 
           <p>
             Best,<br />

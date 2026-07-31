@@ -4,6 +4,7 @@ import catchAsyncError from "../middleware/catchAsyncErrors.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendMail from "../utils/sendMail.js";
 import { resolveEmailTrackingBaseUrl } from "../utils/resolveApiBaseUrl.js";
+import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
 import Lead from "../models/leadModel.js";
@@ -179,6 +180,10 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
       hour12: true,
     }) + " EST";
 
+  const clientBaseUrl = resolveClientBaseUrl(req);
+  const signupUrl = `${clientBaseUrl}/register`;
+  const loginUrl = `${clientBaseUrl}/signin`;
+
   const results = await Promise.allSettled(
     recipients.map(async ({ email: recipientEmail, shouldTrackOpen }) => {
       let trackingPixelUrl = "";
@@ -221,6 +226,8 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
           careType: resolvedCareType,
           sentAt,
           trackingPixelUrl,
+          signupUrl,
+          loginUrl,
         },
       });
 
