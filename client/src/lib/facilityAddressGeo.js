@@ -5,6 +5,12 @@ export function formatZipInput(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 5);
 }
 
+/** First 5-digit ZIP found in a free-text address (e.g. "Avenel, NJ 07001, USA"). */
+export function extractZipFromAddress(address) {
+  const m = String(address || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? formatZipInput(m[1]) : "";
+}
+
 export function readPostalCodeFromComponents(components) {
   if (!Array.isArray(components)) return "";
   const postal = components.find((c) => c.types?.includes("postal_code"));

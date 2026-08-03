@@ -25,6 +25,7 @@ export default function DateRangeFilter({
   onCustomChange,
   className = "",
   triggerClassName = "",
+  showRangeHint = true,
 }) {
   const range = useMemo(
     () => resolveDateRange(period, customFrom, customTo),
@@ -81,7 +82,7 @@ export default function DateRangeFilter({
         </>
       )}
 
-      {period !== "custom" && range && (
+      {showRangeHint && period !== "custom" && range && (
         <span className="hidden text-xs text-slate-400 sm:inline">
           {range.from} → {range.to}
         </span>

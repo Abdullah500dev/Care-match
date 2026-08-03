@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/api";
 import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
 import FacilityImagesManager from "@/components/facilityDashboard/FacilityImagesManager";
-import { formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
+import { extractZipFromAddress, formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
 import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 const EMPTY_FORM = {
   name: "",
@@ -67,7 +68,7 @@ export default function FacilityDashboardFacilities() {
     const nextForm = {
       name: doc?.name || "",
       email: doc?.email || "",
-      phone: doc?.phone || "",
+      phone: formatPhoneInput(doc?.phone || ""),
       website: doc?.website || "",
       address: doc?.address || "",
       zip_code: formatZipInput(doc?.zip_code || doc?.external_data?.zip_code),
@@ -125,17 +126,27 @@ export default function FacilityDashboardFacilities() {
       return;
     }
 
-    const zipDigits = formatZipInput(form.zip_code);
+    const phoneFormatted = formatPhoneInput(form.phone);
+    if (phoneDigitsOnly(phoneFormatted).length !== 10) {
+      toast.error("Invalid phone number", {
+        description: "Enter a 10-digit US phone number, e.g. (206) 555-0123.",
+      });
+      return;
+    }
+
+    const zipDigits =
+      formatZipInput(form.zip_code) || extractZipFromAddress(form.address);
     if (zipDigits.length !== 5) {
       toast.error("ZIP code required", {
-        description: "Enter a valid 5-digit US ZIP code (e.g. 98101).",
+        description:
+          "Include a valid 5-digit US ZIP in the address (e.g. Avenel, NJ 07001).",
       });
       return;
     }
 
     const geoCheck = await validateAddressZipPair(form.address, zipDigits);
     if (geoCheck.state === "mismatch") {
-      toast.error("Address and ZIP do not match", {
+      toast.error("Address ZIP could not be verified", {
         description: geoCheck.message,
       });
       return;
@@ -151,7 +162,7 @@ export default function FacilityDashboardFacilities() {
 
     const payload = {
       name: String(form.name).trim(),
-      phone: String(form.phone).trim(),
+      phone: phoneFormatted,
       website: normalizedWebsite,
       address: String(form.address).trim(),
       zip_code: zipDigits,
@@ -230,8 +241,14 @@ export default function FacilityDashboardFacilities() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
                 <Input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, phone: formatPhoneInput(e.target.value) }))
+                  }
+                  placeholder="(206) 555-0123"
                 />
               </div>
               <div>

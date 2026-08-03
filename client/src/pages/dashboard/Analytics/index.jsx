@@ -48,6 +48,36 @@ function defaultCustomBounds() {
   return { from: r.from, to: r.to };
 }
 
+function useSectionRangeFilter(initialPeriod = DEFAULT_PERIOD) {
+  const [period, setPeriod] = useState(initialPeriod);
+  const [customFrom, setCustomFrom] = useState(() => defaultCustomBounds().from);
+  const [customTo, setCustomTo] = useState(() => defaultCustomBounds().to);
+  const range = useMemo(
+    () => resolveDateRange(period, customFrom, customTo),
+    [period, customFrom, customTo],
+  );
+  const onCustomChange = useCallback(({ from, to }) => {
+    setCustomFrom(from);
+    setCustomTo(to);
+  }, []);
+  return {
+    period,
+    setPeriod,
+    customFrom,
+    customTo,
+    onCustomChange,
+    range,
+    label: periodLabel(period),
+  };
+}
+
+async function fetchAnalyticsRange(period, range) {
+  const { data: res } = await apiClient.get("/api/email/analytics", {
+    params: { period, from: range.from, to: range.to },
+  });
+  return res;
+}
+
 export default function Analytics() {
   const [period, setPeriod] = useState(DEFAULT_PERIOD);
   const [customFrom, setCustomFrom] = useState(() => defaultCustomBounds().from);
@@ -56,6 +86,13 @@ export default function Analytics() {
   const [data, setData] = useState(null);
   const [carePage, setCarePage] = useState(1);
   const [facilityPage, setFacilityPage] = useState(1);
+
+  const usersFilter = useSectionRangeFilter(DEFAULT_PERIOD);
+  const facilitiesFilter = useSectionRangeFilter(DEFAULT_PERIOD);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [facilitiesLoading, setFacilitiesLoading] = useState(true);
+  const [usersSection, setUsersSection] = useState(null);
+  const [facilitiesSection, setFacilitiesSection] = useState(null);
 
   const range = useMemo(
     () => resolveDateRange(period, customFrom, customTo),
@@ -67,13 +104,7 @@ export default function Analytics() {
     if (!range) return;
     setLoading(true);
     try {
-      const { data: res } = await apiClient.get("/api/email/analytics", {
-        params: {
-          period,
-          from: range.from,
-          to: range.to,
-        },
-      });
+      const res = await fetchAnalyticsRange(period, range);
       setData(res);
       setCarePage(1);
       setFacilityPage(1);
@@ -88,19 +119,92 @@ export default function Analytics() {
     }
   }, [period, range]);
 
+  const fetchUsersSection = useCallback(async () => {
+    if (!usersFilter.range) return;
+    setUsersLoading(true);
+    try {
+      const res = await fetchAnalyticsRange(usersFilter.period, usersFilter.range);
+      setUsersSection(res);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load users chart");
+      setUsersSection(null);
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [usersFilter.period, usersFilter.range]);
+
+  const fetchFacilitiesSection = useCallback(async () => {
+    if (!facilitiesFilter.range) return;
+    setFacilitiesLoading(true);
+    try {
+      const res = await fetchAnalyticsRange(
+        facilitiesFilter.period,
+        facilitiesFilter.range,
+      );
+      setFacilitiesSection(res);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load facilities chart");
+      setFacilitiesSection(null);
+    } finally {
+      setFacilitiesLoading(false);
+    }
+  }, [facilitiesFilter.period, facilitiesFilter.range]);
+
   useEffect(() => {
     if (period === "custom" && (!customFrom || !customTo)) return;
     fetchAnalytics();
   }, [fetchAnalytics, period, customFrom, customTo]);
 
+  useEffect(() => {
+    if (
+      usersFilter.period === "custom" &&
+      (!usersFilter.customFrom || !usersFilter.customTo)
+    ) {
+      return;
+    }
+    fetchUsersSection();
+  }, [
+    fetchUsersSection,
+    usersFilter.period,
+    usersFilter.customFrom,
+    usersFilter.customTo,
+  ]);
+
+  useEffect(() => {
+    if (
+      facilitiesFilter.period === "custom" &&
+      (!facilitiesFilter.customFrom || !facilitiesFilter.customTo)
+    ) {
+      return;
+    }
+    fetchFacilitiesSection();
+  }, [
+    fetchFacilitiesSection,
+    facilitiesFilter.period,
+    facilitiesFilter.customFrom,
+    facilitiesFilter.customTo,
+  ]);
+
   const summary = data?.summary || {};
   const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
-  const usersTimeline = Array.isArray(data?.usersTimeline) ? data.usersTimeline : [];
-  const facilitiesTimeline = Array.isArray(data?.facilitiesTimeline)
-    ? data.facilitiesTimeline
+  const usersTimeline = Array.isArray(usersSection?.usersTimeline)
+    ? usersSection.usersTimeline
     : [];
+  const facilitiesTimeline = Array.isArray(facilitiesSection?.facilitiesTimeline)
+    ? facilitiesSection.facilitiesTimeline
+    : [];
+  const usersSummary = usersSection?.summary || {};
+  const facilitiesSummary = facilitiesSection?.summary || {};
   const xTickInterval =
     timeline.length > 14 ? Math.ceil(timeline.length / 8) - 1 : 0;
+  const usersTickInterval =
+    usersTimeline.length > 14 ? Math.ceil(usersTimeline.length / 8) - 1 : 0;
+  const facilitiesTickInterval =
+    facilitiesTimeline.length > 14
+      ? Math.ceil(facilitiesTimeline.length / 8) - 1
+      : 0;
   const byCareType = Array.isArray(data?.byCareType) ? data.byCareType : [];
   const topFacilities = Array.isArray(data?.topFacilities) ? data.topFacilities : [];
   const byStatus = data?.byStatus || {};
@@ -307,12 +411,29 @@ export default function Analytics() {
           <div className="grid min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
             <Card className="rounded-2xl border-slate-200">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base font-bold text-slate-900">
-                  Number of users ({rangeLabel})
-                </CardTitle>
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <CardTitle className="text-base font-bold text-slate-900">
+                    Number of users ({usersFilter.label})
+                  </CardTitle>
+                  <DateRangeFilter
+                    period={usersFilter.period}
+                    customFrom={usersFilter.customFrom}
+                    customTo={usersFilter.customTo}
+                    onPeriodChange={usersFilter.setPeriod}
+                    onCustomChange={usersFilter.onCustomChange}
+                    showRangeHint={false}
+                    triggerClassName="h-8 w-[150px] text-xs"
+                    className="shrink-0"
+                  />
+                </div>
               </CardHeader>
               <CardContent>
-                {usersTimeline.length === 0 ? (
+                {usersLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Loading…
+                  </div>
+                ) : usersTimeline.length === 0 ? (
                   <p className="py-10 text-center text-sm text-slate-400">No user signups in this range.</p>
                 ) : (
                   <ChartContainer config={usersChartConfig} className="h-[260px] w-full">
@@ -323,7 +444,7 @@ export default function Analytics() {
                         tickLine={false}
                         axisLine={false}
                         fontSize={11}
-                        interval={xTickInterval}
+                        interval={usersTickInterval}
                         minTickGap={8}
                       />
                       <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
@@ -340,21 +461,44 @@ export default function Analytics() {
                   </ChartContainer>
                 )}
                 <p className="mt-2 text-xs text-slate-400">
-                  Total users: <span className="font-semibold text-slate-700">{summary.totalUsers ?? 0}</span>
+                  Total users:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {usersSummary.totalUsers ?? summary.totalUsers ?? 0}
+                  </span>
                   {" · "}
-                  New in range: <span className="font-semibold text-slate-700">{summary.recentUsers ?? 0}</span>
+                  New in range:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {usersSummary.recentUsers ?? 0}
+                  </span>
                 </p>
               </CardContent>
             </Card>
 
             <Card className="rounded-2xl border-slate-200">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base font-bold text-slate-900">
-                  Number of facilities signed up ({rangeLabel})
-                </CardTitle>
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <CardTitle className="text-base font-bold text-slate-900">
+                    Number of facilities signed up ({facilitiesFilter.label})
+                  </CardTitle>
+                  <DateRangeFilter
+                    period={facilitiesFilter.period}
+                    customFrom={facilitiesFilter.customFrom}
+                    customTo={facilitiesFilter.customTo}
+                    onPeriodChange={facilitiesFilter.setPeriod}
+                    onCustomChange={facilitiesFilter.onCustomChange}
+                    showRangeHint={false}
+                    triggerClassName="h-8 w-[150px] text-xs"
+                    className="shrink-0"
+                  />
+                </div>
               </CardHeader>
               <CardContent>
-                {facilitiesTimeline.length === 0 ? (
+                {facilitiesLoading ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Loading…
+                  </div>
+                ) : facilitiesTimeline.length === 0 ? (
                   <p className="py-10 text-center text-sm text-slate-400">
                     No facility signups in this range.
                   </p>
@@ -367,7 +511,7 @@ export default function Analytics() {
                         tickLine={false}
                         axisLine={false}
                         fontSize={11}
-                        interval={xTickInterval}
+                        interval={facilitiesTickInterval}
                         minTickGap={8}
                       />
                       <YAxis allowDecimals={false} tickLine={false} axisLine={false} fontSize={11} />
@@ -386,12 +530,14 @@ export default function Analytics() {
                 <p className="mt-2 text-xs text-slate-400">
                   Total signed up:{" "}
                   <span className="font-semibold text-slate-700">
-                    {summary.facilitiesSignedUp ?? 0}
+                    {facilitiesSummary.facilitiesSignedUp ??
+                      summary.facilitiesSignedUp ??
+                      0}
                   </span>
                   {" · "}
                   New in range:{" "}
                   <span className="font-semibold text-slate-700">
-                    {summary.recentFacilitySignups ?? 0}
+                    {facilitiesSummary.recentFacilitySignups ?? 0}
                   </span>
                 </p>
               </CardContent>
@@ -412,10 +558,14 @@ export default function Analytics() {
                   <div className="space-y-4">
                     <ul className="space-y-3">
                       {pagedCareTypes.map((row) => {
-                        const pct = Math.max(
-                          6,
-                          Math.round(((Number(row.count) || 0) / careMax) * 100),
-                        );
+                        const count = Number(row.count) || 0;
+                        const pct =
+                          count <= 0 || careMax <= 0
+                            ? 0
+                            : Math.min(
+                                100,
+                                Math.max(6, Math.round((count / careMax) * 100)),
+                              );
                         return (
                           <li key={row.name} className="space-y-1.5">
                             <div className="flex items-start justify-between gap-3">
@@ -423,12 +573,12 @@ export default function Analytics() {
                                 {row.name}
                               </p>
                               <span className="shrink-0 text-sm font-bold text-slate-900">
-                                {row.count}
+                                {count}
                               </span>
                             </div>
                             <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
                               <div
-                                className="h-full rounded-full bg-[#00B8DB]"
+                                className="h-full rounded-full bg-[#00B8DB] transition-[width] duration-300"
                                 style={{ width: `${pct}%` }}
                               />
                             </div>

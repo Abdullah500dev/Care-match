@@ -43,10 +43,12 @@ import {
 } from "@/components/ui/carousel";
 import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
 import {
+  extractZipFromAddress,
   formatZipInput,
   validateAddressZipPair,
 } from "@/lib/facilityAddressGeo";
 import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
@@ -65,29 +67,6 @@ function getFacilityImageUrls(images) {
     return [PLACEHOLDER_IMAGE];
   }
   return images.map((p) => resolveSingleImageUrl(p));
-}
-
-/** Formats phone as you type: US (XXX) XXX-XXXX; +1 (…) when 11 digits start with 1; +intl when leading + or longer numbers. */
-function formatPhoneInput(value) {
-  const raw = String(value || "");
-  const hasPlus = raw.trim().startsWith("+");
-  const digits = raw.replace(/\D/g, "").slice(0, 15);
-  if (!digits) return hasPlus ? "+" : "";
-
-  // NANP 11 digits without leading + (e.g. pasted 12065550123)
-  if (digits.length === 11 && digits[0] === "1" && !hasPlus) {
-    const d = digits.slice(1);
-    return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-  }
-
-  if (hasPlus || digits.length > 10) {
-    return "+" + digits.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
-  }
-
-  const d = digits.slice(0, 10);
-  if (d.length <= 3) return `(${d}`;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
 
 /**
@@ -428,7 +407,7 @@ export default function Communities() {
     setForm({
       name: facility.name || "",
       email: facility.email || "",
-      phone: facility.phone || "",
+      phone: formatPhoneInput(facility.phone || ""),
       website: facility.website || "",
       address: facility.address || "",
       zip_code: getFacilityZipCode(facility),
@@ -535,17 +514,27 @@ export default function Communities() {
 
   const handleSubmitFacility = async (e) => {
     e.preventDefault();
-    const zipDigits = formatZipInput(form.zip_code);
+    const phoneFormatted = formatPhoneInput(form.phone);
+    if (phoneDigitsOnly(phoneFormatted).length !== 10) {
+      toast.error("Invalid phone number", {
+        description: "Enter a 10-digit US phone number, e.g. (206) 555-0123.",
+      });
+      return;
+    }
+
+    const zipDigits =
+      formatZipInput(form.zip_code) || extractZipFromAddress(form.address);
     if (zipDigits.length !== 5) {
       toast.error("ZIP code required", {
-        description: "Enter a valid 5-digit US ZIP code (e.g. 98101).",
+        description:
+          "Include a valid 5-digit US ZIP in the address (e.g. Avenel, NJ 07001).",
       });
       return;
     }
 
     const geoCheck = await validateAddressZipPair(form.address, zipDigits);
     if (geoCheck.state === "mismatch") {
-      toast.error("Address and ZIP do not match", {
+      toast.error("Address ZIP could not be verified", {
         description: geoCheck.message,
       });
       return;
@@ -565,7 +554,7 @@ export default function Communities() {
       const payload = new FormData();
       payload.append("name", form.name);
       payload.append("email", form.email);
-      payload.append("phone", form.phone);
+      payload.append("phone", phoneFormatted);
       payload.append("website", normalizedWebsite);
       payload.append("address", form.address);
       payload.append("zip_code", zipDigits);
@@ -782,7 +771,7 @@ export default function Communities() {
                         <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                         <span className="min-w-0 break-words">
                           <span className="font-semibold text-slate-500">Phone: </span>
-                          {facility.phone || "—"}
+                          {formatPhoneInput(facility.phone) || "—"}
                         </span>
                       </p>
                       <p className="flex items-start gap-2">

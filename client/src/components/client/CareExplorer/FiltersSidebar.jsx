@@ -300,6 +300,7 @@ const FiltersSidebar = ({
   const lastAutofillLocationRef = useRef("");
   const lastAutofillZipFromLocationRef = useRef("");
   const zipInputRef = useRef(null);
+  const maxMilesInputRef = useRef(null);
   const zipAutocompleteRef = useRef(null);
   const activePacInputRef = useRef(null);
   const latestFiltersRef = useRef(filters);
@@ -592,18 +593,30 @@ const FiltersSidebar = ({
         </div>
 
         <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
-        <div className="mb-4 flex h-10 items-center gap-1 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm focus-within:border-[#00CFF4] focus-within:ring-2 focus-within:ring-[#00CFF4]/40">
+        <div
+          role="presentation"
+          className="mb-4 flex h-10 cursor-text items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm focus-within:border-[#00CFF4] focus-within:ring-2 focus-within:ring-[#00CFF4]/40"
+          onMouseDown={(e) => {
+            // Focus the input when clicking empty padding or the "miles" label
+            if (e.target === maxMilesInputRef.current) return;
+            e.preventDefault();
+            maxMilesInputRef.current?.focus();
+          }}
+        >
           <input
+            ref={maxMilesInputRef}
             id="maxDistance"
             type="text"
             inputMode="numeric"
             placeholder="25"
             value={maxMiles}
             onChange={(e) => setFilters({ maxMiles: e.target.value })}
-            style={{ width: `calc(${Math.max(String(maxMiles ?? "").length, 2)}ch + 2px)` }}
-            className="min-w-0 border-0 bg-transparent p-0 text-[#364153] outline-none placeholder:text-[#94a3b8]"
+            className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[#364153] outline-none placeholder:text-[#94a3b8]"
+            aria-label="Maximum travel distance in miles"
           />
-          <span className="text-[#364153] pointer-events-none">miles</span>
+          <span className="shrink-0 text-[#364153] pointer-events-none select-none">
+            miles
+          </span>
         </div>
 
         <div className="mb-4">

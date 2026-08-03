@@ -586,17 +586,19 @@ export default function Residents() {
                               })()}
                             </span>
                           </p>
-                          {hasFacilityEmail ? (
+                          {hasFacilityEmail && (
                             <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
                               <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                               <span className="min-w-0 break-all">{facilityEmail}</span>
                             </p>
-                          ) : hasFacilityPhone ? (
+                          )}
+                          {hasFacilityPhone && (
                             <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
                               <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
                               <span className="min-w-0 break-all">{facilityPhone}</span>
                             </p>
-                          ) : (
+                          )}
+                          {missingContact && (
                             <p className="flex items-start gap-2 text-xs font-semibold leading-snug text-red-600">
                               <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
                               <span className="min-w-0 break-all">Contact not available</span>
