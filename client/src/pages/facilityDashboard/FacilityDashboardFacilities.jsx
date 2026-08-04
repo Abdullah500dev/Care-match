@@ -252,7 +252,7 @@ export default function FacilityDashboardFacilities() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Pricing</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Monthly Pricing</label>
                 <Input
                   value={form.pricing}
                   onChange={(e) =>
