@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ImagePlus, MapPin, Plus, Star, X } from "lucide-react";
+import {
+  ImagePlus,
+  MapPin,
+  Plus,
+  Star,
+  X,
+  Phone,
+  Mail,
+  Globe,
+  Hash,
+  Search,
+  Eye,
+  MessageSquare,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
 import {
@@ -28,7 +41,14 @@ import {
   CarouselContent,
   CarouselItem,
 } from "@/components/ui/carousel";
-import GooglePlacesAddressInput from "@/components/dashboard/facilities/GooglePlacesAddressInput";
+import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import {
+  extractZipFromAddress,
+  formatZipInput,
+  validateAddressZipPair,
+} from "@/lib/facilityAddressGeo";
+import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 const PLACEHOLDER_IMAGE =
   "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=220&fit=crop";
@@ -49,32 +69,9 @@ function getFacilityImageUrls(images) {
   return images.map((p) => resolveSingleImageUrl(p));
 }
 
-/** Formats phone as you type: US (XXX) XXX-XXXX; +1 (…) when 11 digits start with 1; +intl when leading + or longer numbers. */
-function formatPhoneInput(value) {
-  const raw = String(value || "");
-  const hasPlus = raw.trim().startsWith("+");
-  const digits = raw.replace(/\D/g, "").slice(0, 15);
-  if (!digits) return hasPlus ? "+" : "";
-
-  // NANP 11 digits without leading + (e.g. pasted 12065550123)
-  if (digits.length === 11 && digits[0] === "1" && !hasPlus) {
-    const d = digits.slice(1);
-    return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-  }
-
-  if (hasPlus || digits.length > 10) {
-    return "+" + digits.replace(/(\d{3})(?=\d)/g, "$1 ").trim();
-  }
-
-  const d = digits.slice(0, 10);
-  if (d.length <= 3) return `(${d}`;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
-
 /**
- * Pricing: digits only (plus optional one range: min - max). Strips letters/symbols.
- * Optional suffix /month. Preserves "min - " while typing the second amount (fixes 4-digit ranges).
+ * Pricing: formats as $4,500 or $4,500 - $6,800. Digits only (plus optional range).
+ * Optional suffix /month. Preserves "min - " while typing the second amount.
  */
 function formatPricingInput(value) {
   const raw = String(value || "");
@@ -96,11 +93,53 @@ function formatPricingInput(value) {
 
   let out = fmt(leftDigits);
   if (parts.length > 1) {
-    out += " - " + fmt(rightDigits);
+    // Compact range style: $4,500-$6,800 (no spaces around dash)
+    out = rightDigits ? `${fmt(leftDigits)}-${fmt(rightDigits)}` : `${fmt(leftDigits)}-`;
   }
   const suffix = monthly ? "/month" : "";
   if (!out && !suffix) return "";
   return out + suffix;
+}
+
+function getFacilityZipCode(facility) {
+  if (!facility || typeof facility !== "object") return "";
+  const direct = formatZipInput(facility.zip_code);
+  if (direct) return direct;
+  return formatZipInput(facility.external_data?.zip_code);
+}
+
+/** Show ZIP once — strip repeats in address and only append zip when missing. */
+function formatAddressWithZip(address, zipCode) {
+  let addr = String(address || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/\s*[·|]\s*/g, ", ");
+  const zipFromField = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+  const zipFromAddr = (addr.match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || "";
+  const zip = zipFromField || zipFromAddr;
+
+  if (zip) {
+    // Drop leading ZIP when the same ZIP also appears later in the string.
+    const leading = addr.match(new RegExp(`^${zip}\\s+`));
+    if (leading && new RegExp(`\\b${zip}\\b`).test(addr.slice(leading[0].length))) {
+      addr = addr.slice(leading[0].length).trim();
+    }
+
+    const firstIdx = addr.search(new RegExp(`\\b${zip}\\b`));
+    if (firstIdx >= 0) {
+      let end = firstIdx + 5;
+      const after = addr.slice(end);
+      const usaMatch = after.match(/^\s*,?\s*USA\b/i);
+      if (usaMatch) end += usaMatch[0].length;
+      addr = addr.slice(0, end).trim().replace(/[,\s]+$/g, "");
+    }
+  }
+
+  if (!addr && !zip) return "—";
+  if (!addr) return zip || "—";
+  if (!zip) return addr || "—";
+  if (new RegExp(`\\b${zip}\\b`).test(addr)) return addr;
+  return `${addr}, ${zip}`;
 }
 
 function getFacilityPricingValue(facility) {
@@ -173,7 +212,6 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
-  const navigate = useNavigate();
   const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -186,7 +224,9 @@ export default function Communities() {
     name: "",
     email: "",
     phone: "",
+    website: "",
     address: "",
+    zip_code: "",
     services: [],
     amenities: [],
     careLevels: [],
@@ -204,6 +244,12 @@ export default function Communities() {
   const [listLoading, setListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [facilitySearch, setFacilitySearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [analyticsFacility, setAnalyticsFacility] = useState(null);
+  const [facilityAnalytics, setFacilityAnalytics] = useState(null);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: PAGE_SIZE,
@@ -212,6 +258,15 @@ export default function Communities() {
     hasNextPage: false,
     hasPrevPage: false,
   });
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(facilitySearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [facilitySearch]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   const selectedImagePreviewUrls = useMemo(
     () => selectedImages.map((file) => URL.createObjectURL(file)),
@@ -232,7 +287,11 @@ export default function Communities() {
     setListError("");
     try {
       const { data } = await apiClient.get("/api/facilities", {
-        params: { page: currentPage, limit: PAGE_SIZE },
+        params: {
+          page: currentPage,
+          limit: PAGE_SIZE,
+          ...(debouncedSearch ? { q: debouncedSearch } : {}),
+        },
       });
       const nextFacilities = data?.facilities || [];
       const nextPagination = data?.pagination || {
@@ -264,11 +323,34 @@ export default function Communities() {
     } finally {
       setListLoading(false);
     }
-  }, [currentPage, PAGE_SIZE]);
+  }, [currentPage, PAGE_SIZE, debouncedSearch]);
 
   useEffect(() => {
     fetchFacilities();
   }, [fetchFacilities]);
+
+  const openFacilityAnalytics = async (facility) => {
+    setAnalyticsFacility(facility);
+    setFacilityAnalytics(null);
+    setAnalyticsOpen(true);
+    setAnalyticsLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/email/analytics/facility", {
+        params: {
+          facilityId: facility._id,
+          facilityName: facility.name,
+        },
+      });
+      setFacilityAnalytics(data);
+    } catch (err) {
+      toast.error("Could not load facility analytics", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+      setFacilityAnalytics(null);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
 
   const handleInput = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -296,7 +378,9 @@ export default function Communities() {
       name: "",
       email: "",
       phone: "",
+      website: "",
       address: "",
+      zip_code: "",
       services: [],
       amenities: [],
       careLevels: [],
@@ -323,12 +407,14 @@ export default function Communities() {
     setForm({
       name: facility.name || "",
       email: facility.email || "",
-      phone: facility.phone || "",
+      phone: formatPhoneInput(facility.phone || ""),
+      website: facility.website || "",
       address: facility.address || "",
+      zip_code: getFacilityZipCode(facility),
       services: Array.isArray(facility.services) ? [...facility.services] : [],
       amenities: Array.isArray(facility.amenities) ? [...facility.amenities] : [],
       careLevels: Array.isArray(facility.care_levels) ? [...facility.care_levels] : [],
-      pricing: getFacilityPricingValue(facility),
+      pricing: formatPricingInput(getFacilityPricingValue(facility)),
       units: facility.units || 0,
       occupancy: facility.occupancy || 0,
       active_leads: facility.active_leads || 0,
@@ -428,14 +514,50 @@ export default function Communities() {
 
   const handleSubmitFacility = async (e) => {
     e.preventDefault();
+    const phoneFormatted = formatPhoneInput(form.phone);
+    if (phoneDigitsOnly(phoneFormatted).length !== 10) {
+      toast.error("Invalid phone number", {
+        description: "Enter a 10-digit US phone number, e.g. (206) 555-0123.",
+      });
+      return;
+    }
+
+    const zipDigits =
+      formatZipInput(form.zip_code) || extractZipFromAddress(form.address);
+    if (zipDigits.length !== 5) {
+      toast.error("ZIP code required", {
+        description:
+          "Include a valid 5-digit US ZIP in the address (e.g. Avenel, NJ 07001).",
+      });
+      return;
+    }
+
+    const geoCheck = await validateAddressZipPair(form.address, zipDigits);
+    if (geoCheck.state === "mismatch") {
+      toast.error("Address ZIP could not be verified", {
+        description: geoCheck.message,
+      });
+      return;
+    }
+
+    const normalizedWebsite = normalizeFacilityWebsite(form.website);
+    if (String(form.website || "").trim() && !normalizedWebsite) {
+      toast.error("Invalid website", {
+        description: "Enter a valid URL (e.g. https://www.yourfacility.com or yourfacility.com).",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
       const payload = new FormData();
       payload.append("name", form.name);
       payload.append("email", form.email);
-      payload.append("phone", form.phone);
+      payload.append("phone", phoneFormatted);
+      payload.append("website", normalizedWebsite);
       payload.append("address", form.address);
+      payload.append("zip_code", zipDigits);
       payload.append("pricing", form.pricing);
       form.services.forEach((service) => payload.append("services", service));
       form.amenities.forEach((amenity) => payload.append("amenities", amenity));
@@ -443,7 +565,7 @@ export default function Communities() {
       selectedImages.forEach((file) => payload.append("images", file));
       payload.append("units", form.units);
       payload.append("occupancy", form.occupancy);
-      payload.append("active_leads", form.active_leads);
+      payload.append("active_leads", editingId ? form.active_leads || 0 : 0);
 
       if (editingId) {
         payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
@@ -538,7 +660,26 @@ export default function Communities() {
             Manage your facilities and track performance.
           </p>
         </div>
-        <div className="mt-3 sm:mt-0">
+        <div className="mt-3 flex flex-col gap-2 sm:mt-0 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 sm:w-64">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search facilities by name…"
+              value={facilitySearch}
+              onChange={(e) => setFacilitySearch(e.target.value)}
+              className="rounded-xl border-slate-200 bg-white pl-9 pr-8"
+            />
+            {facilitySearch && (
+              <button
+                type="button"
+                onClick={() => setFacilitySearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                aria-label="Clear facility search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <Button
             type="button"
             onClick={openCreateModal}
@@ -560,15 +701,22 @@ export default function Communities() {
         <p className="text-center text-sm text-slate-500">Loading facilities…</p>
       ) : facilities.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-6 py-12 text-center text-sm text-slate-500">
-          No facilities yet. Click <span className="font-semibold text-slate-700">New Facility</span> to add one.
+          {debouncedSearch
+            ? (
+              <>
+                No facilities match <span className="font-semibold text-slate-700">“{debouncedSearch}”</span>.
+              </>
+            )
+            : (
+              <>
+                No facilities yet. Click <span className="font-semibold text-slate-700">New Facility</span> to add one.
+              </>
+            )}
         </p>
       ) : (
         <div className="grid min-w-0 grid-cols-1 gap-6 sm:grid-cols-2">
           {facilities.map((facility) => {
-            const typeLabel =
-              (facility.care_levels && facility.care_levels[0]) ||
-              (facility.services && facility.services[0]) ||
-              "Facility";
+              const typeLabel = "Assisted Living";
             return (
               <Card
                 key={facility._id}
@@ -601,13 +749,130 @@ export default function Communities() {
                     </h3>
                     <p className="mt-0.5 flex items-center gap-1.5 text-sm text-white/95 drop-shadow-md">
                       <MapPin className="h-4 w-4 shrink-0" />
-                      {facility.address || "—"}
+                      {formatAddressWithZip(facility.address, getFacilityZipCode(facility))}
                     </p>
                   </div>
                 </div>
 
                 <CardContent className="space-y-4 p-4 sm:p-5">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-2 rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3 text-sm">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Facility details
+                    </p>
+                    <div className="space-y-1.5 text-slate-700">
+                      <p className="flex items-start gap-2">
+                        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Address: </span>
+                          {formatAddressWithZip(facility.address, getFacilityZipCode(facility))}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Phone: </span>
+                          {formatPhoneInput(facility.phone) || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Email: </span>
+                          {facility.email || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Hash className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">ZIP: </span>
+                          {getFacilityZipCode(facility) || "—"}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2">
+                        <Globe className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold text-slate-500">Website: </span>
+                          {facility.website ? (
+                            <a
+                              href={
+                                /^https?:\/\//i.test(facility.website)
+                                  ? facility.website
+                                  : `https://${facility.website}`
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00B8DB] hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {facility.website}
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </span>
+                      </p>
+                      {(facility.care_levels?.length > 0 || facility.pricing) && (
+                        <div className="border-t border-slate-200 pt-2 text-xs text-slate-600">
+                          {facility.care_levels?.length > 0 && (
+                            <p>
+                              <span className="font-semibold text-slate-500">Care levels: </span>
+                              Assisted Living
+                            </p>
+                          )}
+                          {facility.pricing && (
+                            <p className="mt-1">
+                              <span className="font-semibold text-slate-500">Monthly Pricing: </span>
+                              {facility.pricing}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-2xl border border-slate-100 bg-white px-3 py-3">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                      Services &amp; amenities
+                    </p>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-slate-500">Services</p>
+                        {facility.services?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {facility.services.map((s) => (
+                              <span
+                                key={s}
+                                className="rounded-full bg-[#00B8DB]/10 px-2.5 py-0.5 text-xs font-medium text-[#0891b2]"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">No services listed</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold text-slate-500">Amenities</p>
+                        {facility.amenities?.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {facility.amenities.map((a) => (
+                              <span
+                                key={a}
+                                className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-700"
+                              >
+                                {a}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">No amenities listed</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
                     <div
                       className="rounded-2xl px-3 py-3 text-center"
                       style={{ backgroundColor: "#F8F8FA" }}
@@ -630,17 +895,6 @@ export default function Communities() {
   {facility.occupancy ?? 0}
 </p>
                     </div>
-                    <div
-                      className="rounded-2xl px-3 py-3 text-center"
-                      style={{ backgroundColor: "#F8F8FA" }}
-                    >
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                        Active Leads
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-[#00B8DB]">
-  {facility.active_leads ?? 0}
-</p>
-                    </div>
                   </div>
 
                   <div className="flex gap-2 pt-1">
@@ -657,7 +911,7 @@ export default function Communities() {
                       variant="outline"
                       size="default"
                       className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
-                      onClick={() => navigate("/admin/analytics")}
+                      onClick={() => openFacilityAnalytics(facility)}
                     >
                       View Analytics
                     </Button>
@@ -763,7 +1017,7 @@ export default function Communities() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                  Pricing
+                  Monthly Pricing
                 </label>
                 <Input
                   type="text"
@@ -772,27 +1026,39 @@ export default function Communities() {
                   spellCheck={false}
                   value={form.pricing}
                   onChange={(e) => handleInput("pricing", formatPricingInput(e.target.value))}
-                  placeholder="4500 or 4500 - 6800 (numbers only)"
+                  placeholder="$4,500 or $4,500-$6,800"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                Address
+                Website
               </label>
-              <GooglePlacesAddressInput
-                enabled={modalOpen}
-                value={form.address}
-                onChange={(e) => handleInput("address", e.target.value)}
-                placeholder="Start typing street or city — select from suggestions"
-                required
+              <Input
+                type="url"
+                inputMode="url"
+                autoComplete="url"
+                value={form.website}
+                onChange={(e) => handleInput("website", e.target.value)}
+                placeholder="https://www.yourfacility.com"
               />
+              <p className="text-xs text-slate-500">
+                Optional. Shown when families click Contact on Care Explorer.
+              </p>
             </div>
+
+            <FacilityAddressZipFields
+              enabled={modalOpen}
+              address={form.address}
+              zipCode={form.zip_code}
+              onAddressChange={(e) => handleInput("address", e.target.value)}
+              onZipCodeChange={(zip) => handleInput("zip_code", zip)}
+            />
 
             <div className="mt-8 space-y-3">
               <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                Facility images (max 8 total)
+                Facility images (max 8 total) — change / upload here
               </label>
               {editingId && keptImagePaths.length > 0 && (
                 <p className="facility-copy-fade text-xs text-slate-500">
@@ -1017,7 +1283,7 @@ export default function Communities() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
   <div className="space-y-2">
     <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
       Units
@@ -1043,20 +1309,6 @@ export default function Communities() {
       value={countFieldDisplayValue(form.occupancy)}
       onChange={handleNonNegativeCountInput("occupancy")}
       placeholder="85"
-    />
-  </div>
-
-  <div className="space-y-2">
-    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-      Active Leads
-    </label>
-    <Input
-      type="number"
-      min="0"
-      inputMode="numeric"
-      value={countFieldDisplayValue(form.active_leads)}
-      onChange={handleNonNegativeCountInput("active_leads")}
-      placeholder="12"
     />
   </div>
 </div>
@@ -1091,6 +1343,91 @@ export default function Communities() {
 
             
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={analyticsOpen} onOpenChange={setAnalyticsOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900">
+              {analyticsFacility?.name || "Facility"} analytics
+            </DialogTitle>
+          </DialogHeader>
+          {analyticsLoading ? (
+            <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading analytics…
+            </div>
+          ) : !facilityAnalytics ? (
+            <p className="py-8 text-center text-sm text-slate-500">
+              No analytics available for this facility yet.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Eye className="h-4 w-4 text-[#00B8DB]" />
+                    <span className="text-xs font-bold uppercase tracking-wide">User visited</span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">
+                    {facilityAnalytics.summary?.userVisited ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Explore / interest clicks from Care Explorer
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-4">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <MessageSquare className="h-4 w-4 text-[#00B8DB]" />
+                    <span className="text-xs font-bold uppercase tracking-wide">
+                      Sent inquiries
+                    </span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">
+                    {facilityAnalytics.summary?.inquiriesSent ?? 0}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Inquiry emails sent to facility contacts
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-slate-100 px-3 py-3 text-center">
+                  <p className="text-xs font-medium uppercase text-slate-400">Emails opened</p>
+                  <p className="mt-1 text-xl font-bold text-emerald-600">
+                    {facilityAnalytics.summary?.emailsOpened ?? 0}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-slate-100 px-3 py-3 text-center">
+                  <p className="text-xs font-medium uppercase text-slate-400">Contacted</p>
+                  <p className="mt-1 text-xl font-bold text-[#00B8DB]">
+                    {facilityAnalytics.summary?.contacted ?? 0}
+                  </p>
+                </div>
+              </div>
+              {Array.isArray(facilityAnalytics.recent) && facilityAnalytics.recent.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Recent inquiries
+                  </p>
+                  <ul className="divide-y divide-slate-100 rounded-xl border border-slate-100">
+                    {facilityAnalytics.recent.map((row) => (
+                      <li key={row.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-800">{row.name}</p>
+                          <p className="truncate text-xs text-slate-500">{row.email}</p>
+                        </div>
+                        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                          {row.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -9,14 +9,24 @@ import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
+import Facility from "../models/facilityModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
+
+const escapeRegex = (value) =>
+  String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const emailMatchFilter = (email) => ({
+  email: { $regex: `^${escapeRegex(email)}$`, $options: "i" },
+});
 
 // Register user
 export const register = catchAsyncError(async (req, res, next) => {
   try {
-    const { name, email, password, confirmPassword } = req.body;
+    const { name, email, password, confirmPassword, role: roleRaw } = req.body;
+    const role = roleRaw === "facility" ? "facility" : "user";
+    const normalizedEmail = String(email || "").trim().toLowerCase();
 
-    if (!validator.validate(email)) {
+    if (!validator.validate(normalizedEmail)) {
       return next(new ErrorHandler("Invalid email", 400));
     }
 
@@ -27,23 +37,55 @@ export const register = catchAsyncError(async (req, res, next) => {
     }
 
     // Check for unique email
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne(emailMatchFilter(normalizedEmail));
     if (existingUser) {
       return next(new ErrorHandler("Email already exists", 400));
     }
 
-    // Create user directly
+    // Create user with selected account role (user or facility)
     const user = new User({
       name,
-      email,
+      email: normalizedEmail,
       password,
+      user_type: "user",
+      role,
     });
 
     await user.save();
 
+    // Facility accounts get a starter profile so /facility dashboard can load.
+    if (role === "facility") {
+      try {
+        await Facility.create({
+          name: String(name || "").trim() || "My Facility",
+          email: normalizedEmail,
+          phone: "0000000000",
+          address: "To be updated",
+          care_levels: ["Assisted Living"],
+          user_id: user._id,
+          created_by: user._id,
+        });
+      } catch (facilityError) {
+        await User.deleteOne({ _id: user._id });
+        return next(
+          new ErrorHandler(
+            facilityError?.message || "Unable to create facility profile",
+            400,
+          ),
+        );
+      }
+    }
+
     // Generate 6-digit verification code
     const verificationCode = user.getVerificationCode(15);
     await user.save({ validateBeforeSave: false });
+
+    // Helps local debugging when SMTP is flaky / emails land in spam.
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[register] verification code for ${user.email}: ${verificationCode}`,
+      );
+    }
 
     try {
       const clientBaseUrl = resolveClientBaseUrl(req);
@@ -62,14 +104,34 @@ export const register = catchAsyncError(async (req, res, next) => {
         },
       });
 
-      res.status(201).json({
+      const payload = {
         success: true,
         message: `Please check your email: ${user.email} for your 6-digit verification code to activate your account!`,
-      });
+        role,
+      };
+      // Only expose the code outside production so signup can continue during SMTP issues.
+      if (process.env.NODE_ENV !== "production") {
+        payload.verificationCode = verificationCode;
+        payload.activationUrl = activationUrl;
+      }
+      res.status(201).json(payload);
     } catch (error) {
-      // Rollback user creation if email fails
+      console.error("[register] verification email failed:", error?.message || error);
+      // Rollback user (+ facility stub) if email fails
+      if (role === "facility") {
+        await Facility.deleteOne({ user_id: user._id });
+      }
       await User.deleteOne({ _id: user._id });
-      return next(new ErrorHandler("Unable to send verification email", 400));
+      const detail =
+        process.env.NODE_ENV !== "production"
+          ? ` ${error?.message || ""}`.trim()
+          : "";
+      return next(
+        new ErrorHandler(
+          `Unable to send verification email.${detail ? ` ${detail}` : ""}`.trim(),
+          400,
+        ),
+      );
     }
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));
@@ -79,36 +141,64 @@ export const register = catchAsyncError(async (req, res, next) => {
 // Activate user with 6-digit code
 export const activateUser = catchAsyncError(async (req, res, next) => {
   try {
-    const { email, code } = req.body;
+    const rawEmail = String(req.body?.email || "").trim().toLowerCase();
+    const normalizedCode = String(req.body?.code || "")
+      .replace(/\D/g, "")
+      .trim();
 
-    if (!email || !code) {
+    if (!rawEmail || !normalizedCode) {
       return next(
         new ErrorHandler("Email and verification code are required", 400),
       );
     }
 
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      return next(
+        new ErrorHandler("Verification code must be exactly 6 digits", 400),
+      );
+    }
+
     const hashedCode = crypto
       .createHash("sha256")
-      .update(String(code))
+      .update(normalizedCode)
       .digest("hex");
 
-    const user = await User.findOne({ email });
+    // Case-insensitive email match (Gmail etc. treat address case as identical)
+    const user = await User.findOne(emailMatchFilter(rawEmail));
 
     if (!user) {
       return next(new ErrorHandler("Invalid email or verification code", 400));
     }
 
-    if (
-      user.token !== hashedCode ||
-      !user.tokenExpire ||
-      user.tokenExpire < Date.now()
-    ) {
+    if (!user.token || !user.tokenExpire) {
       return next(
-        new ErrorHandler("Invalid or expired verification code", 400),
+        new ErrorHandler(
+          "No active verification code. Please tap Resend to get a new code.",
+          400,
+        ),
+      );
+    }
+
+    if (new Date(user.tokenExpire).getTime() < Date.now()) {
+      return next(
+        new ErrorHandler(
+          "Verification code has expired. Please tap Resend to get a new code.",
+          400,
+        ),
+      );
+    }
+
+    if (user.token !== hashedCode) {
+      return next(
+        new ErrorHandler(
+          "Incorrect verification code. After you resend, only the newest code works — check the latest email.",
+          400,
+        ),
       );
     }
 
     user.is_verified = true;
+    user.email = rawEmail;
     user.token = undefined;
     user.tokenExpire = undefined;
     user.tokenValidityInMinutes = undefined;
@@ -348,6 +438,7 @@ export const forgotPassword = catchAsyncError(async (req, res, next) => {
       user.tokenExpire = undefined;
       user.tokenValidityInMinutes = undefined;
       await user.save({ validateBeforeSave: false });
+      console.error("[forgotPassword] reset email send failed:", error?.message || error);
       return next(new ErrorHandler("Failed to send reset email", 500));
     }
   } catch (error) {
@@ -404,13 +495,13 @@ export const resetPassword = catchAsyncError(async (req, res, next) => {
 export const resendVerificationToken = catchAsyncError(
   async (req, res, next) => {
     try {
-      const { email } = req.body;
+      const normalizedEmail = String(req.body?.email || "").trim().toLowerCase();
 
-      if (!email) {
+      if (!normalizedEmail) {
         return next(new ErrorHandler("Email is required", 400));
       }
 
-      const user = await User.findOne({ email });
+      const user = await User.findOne(emailMatchFilter(normalizedEmail));
 
       if (!user) {
         return next(new ErrorHandler("User not found", 404));
@@ -420,9 +511,16 @@ export const resendVerificationToken = catchAsyncError(
         return next(new ErrorHandler("User is already verified", 400));
       }
 
-      // Generate new 6-digit verification code
+      // Generate new 6-digit verification code (invalidates any previous code)
       const verificationCode = user.getVerificationCode(15);
+      user.email = normalizedEmail;
       await user.save({ validateBeforeSave: false });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          `[resend] verification code for ${user.email}: ${verificationCode}`,
+        );
+      }
 
       try {
         const clientBaseUrl = resolveClientBaseUrl(req);
@@ -441,16 +539,31 @@ export const resendVerificationToken = catchAsyncError(
           },
         });
 
-        res.status(200).json({
+        const payload = {
           success: true,
-          message: "Verification code sent to your email!",
-        });
+          message:
+            "Verification code sent to your email! Older codes no longer work — use the newest email.",
+        };
+        if (process.env.NODE_ENV !== "production") {
+          payload.verificationCode = verificationCode;
+        }
+        res.status(200).json(payload);
       } catch (error) {
+        console.error("[resend] verification email failed:", error?.message || error);
         user.token = undefined;
         user.tokenExpire = undefined;
         user.tokenValidityInMinutes = undefined;
         await user.save({ validateBeforeSave: false });
-        return next(new ErrorHandler("Failed to send verification email", 500));
+        const detail =
+          process.env.NODE_ENV !== "production"
+            ? ` ${error?.message || ""}`.trim()
+            : "";
+        return next(
+          new ErrorHandler(
+            `Failed to send verification email.${detail ? ` ${detail}` : ""}`.trim(),
+            500,
+          ),
+        );
       }
     } catch (error) {
       return next(new ErrorHandler(error.message, 400));
@@ -485,7 +598,7 @@ export const getActivationStatus = catchAsyncError(async (req, res, next) => {
 // Toggle Favorite Facility
 export const toggleFavorite = catchAsyncError(async (req, res, next) => {
   try {
-    const { facilityId } = req.body;
+    const { facilityId, facilityData } = req.body;
     const userId = req.user?.id;
 
     if (!facilityId) {
@@ -497,20 +610,35 @@ export const toggleFavorite = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("User not found", 404));
     }
 
-    const index = user.saved_facilities.indexOf(String(facilityId));
+    const safeId = String(facilityId);
+    const index = user.saved_facilities.indexOf(safeId);
 
     if (index === -1) {
-      user.saved_facilities.push(String(facilityId));
+      user.saved_facilities.push(safeId);
+      if (facilityData && typeof facilityData === "object") {
+        const alreadyStored = (user.saved_facility_details || []).some(
+          (d) => String(d?.facilityId || d?.id || "") === safeId
+        );
+        if (!alreadyStored) {
+          if (!user.saved_facility_details) user.saved_facility_details = [];
+          user.saved_facility_details.push({ ...facilityData, facilityId: safeId, savedAt: new Date() });
+        }
+      }
     } else {
       user.saved_facilities.splice(index, 1);
+      user.saved_facility_details = (user.saved_facility_details || []).filter(
+        (d) => String(d?.facilityId || d?.id || "") !== safeId
+      );
     }
 
+    user.markModified("saved_facility_details");
     await user.save();
 
     res.status(200).json({
       success: true,
       message: index === -1 ? "Added to favorites" : "Removed from favorites",
       favorites: user.saved_facilities,
+      facilityDetails: user.saved_facility_details,
     });
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));
@@ -530,6 +658,7 @@ export const getFavorites = catchAsyncError(async (req, res, next) => {
     res.status(200).json({
       success: true,
       favorites: user.saved_facilities || [],
+      facilityDetails: user.saved_facility_details || [],
     });
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));

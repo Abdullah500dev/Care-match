@@ -190,6 +190,37 @@
   }
 }
 
+@keyframes carrie-pulse-slow {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.04);
+    opacity: 0.9;
+  }
+}
+
+.carrie-pulse-slow {
+  animation: carrie-pulse-slow 3.6s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes carrieIconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.carrie-icon-bounce {
+  --carrie-bounce-duration: 6s;
+  animation: carrieIconBounce var(--carrie-bounce-duration) ease-in-out infinite;
+}
+
+
 @keyframes notfound-rotate-slow {
   from {
     transform: rotate(0deg);
@@ -264,6 +295,17 @@
 
 .pac-item-query {
   pointer-events: auto !important;
+}
+
+/* Hide only the "Powered by Google" logo (rendered as an ::after on the
+   .pac-container.pac-logo element) without hiding the suggestions dropdown itself. */
+.pac-logo::after {
+  display: none !important;
+  content: none !important;
+  background-image: none !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 /* Facility modal — image upload zone & thumbnails (CareMatch cyan accent) */

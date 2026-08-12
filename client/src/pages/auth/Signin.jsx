@@ -124,12 +124,14 @@ function Signin() {
             const redirect = getPostLoginRedirect() || getStoredPostLoginRedirect();
             sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
             if (role === "facility") {
-              navigate(redirect ? redirect.pathname : "/facility", {
+              navigate(redirect && String(redirect.pathname || "").startsWith("/facility")
+                ? redirect.pathname
+                : "/facility", {
                 replace: true,
                 state: redirect?.state,
               });
             } else {
-              if (redirect) {
+              if (redirect && !String(redirect.pathname || "").startsWith("/facility") && !String(redirect.pathname || "").startsWith("/admin")) {
                 navigate(
                   {
                     pathname: redirect.pathname,
@@ -139,7 +141,7 @@ function Signin() {
                   { replace: true, state: redirect.state },
                 );
               } else {
-                navigate("/", { replace: true });
+                navigate("/portal", { replace: true });
               }
             }
         } catch (error) {

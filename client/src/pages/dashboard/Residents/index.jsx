@@ -1,10 +1,7 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,81 +20,47 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, Filter, ChevronDown, X, MoreHorizontal } from "lucide-react";
+import {
+  Search,
+  Filter,
+  ChevronDown,
+  X,
+  MoreHorizontal,
+  Loader2,
+  MapPin,
+  Mail,
+  Phone,
+} from "lucide-react";
 import { toast } from "sonner";
+import { apiClient } from "@/services/api";
 
 const STATUS_STYLES = {
   New: "bg-amber-500 text-white",
+  "Email Opened": "bg-emerald-500 text-white",
   "Tour Scheduled": "bg-violet-500 text-white",
   Contacted: "bg-[#00B8DB] text-white",
   Waitlist: "bg-slate-200 text-slate-700",
   Closed: "bg-slate-700 text-white",
 };
 
-const ALL_STATUSES = ["New", "Tour Scheduled", "Contacted", "Waitlist", "Closed"];
-
-const INITIAL_LEADS = [
-  {
-    id: 1,
-    initials: "SJ",
-    name: "Sarah Johnson",
-    email: "sarah.j@email.com",
-    facility: "Sunrise Villa",
-    careType: "Assisted Living",
-    status: "New",
-    score: "96%",
-  },
-  {
-    id: 2,
-    initials: "RM",
-    name: "Robert Miller",
-    email: "robert.m@email.com",
-    facility: "Sunrise Villa",
-    careType: "Memory Care",
-    status: "Tour Scheduled",
-    score: "88%",
-  },
-  {
-    id: 3,
-    initials: "ED",
-    name: "Emily Davis",
-    email: "emily.d@email.com",
-    facility: "Golden Years",
-    careType: "Independent Living",
-    status: "Contacted",
-    score: "92%",
-  },
-  {
-    id: 4,
-    initials: "MC",
-    name: "Michael Chen",
-    email: "michael.c@email.com",
-    facility: "Sunrise Villa",
-    careType: "Skilled Nursing",
-    status: "Waitlist",
-    score: "85%",
-  },
-  {
-    id: 5,
-    initials: "JW",
-    name: "Jennifer Wilson",
-    email: "jennifer.w@email.com",
-    facility: "Golden Years",
-    careType: "Assisted Living",
-    status: "Closed",
-    score: "78%",
-  },
-  {
-    id: 6,
-    initials: "DB",
-    name: "David Brown",
-    email: "david.b@email.com",
-    facility: "Sunrise Villa",
-    careType: "Memory Care",
-    status: "New",
-    score: "94%",
-  },
+const ALL_STATUSES = [
+  "New",
+  "Email Opened",
+  "Tour Scheduled",
+  "Contacted",
+  "Waitlist",
+  "Closed",
 ];
+
+/** Product only supports Assisted Living — never show other care-type chips. */
+const ASSISTED_LIVING_LABEL = "Assisted Living";
+
+const normalizeCareTypeDisplay = (careType) => {
+  const raw = String(careType || "").trim();
+  if (!raw || raw === "—") return ASSISTED_LIVING_LABEL;
+  if (/assisted\s*living/i.test(raw)) return ASSISTED_LIVING_LABEL;
+  return ASSISTED_LIVING_LABEL;
+};
 
 const HEAD_STYLE = {
   fontFamily: "Rethink Sans, sans-serif",
@@ -108,49 +71,207 @@ const HEAD_STYLE = {
   color: "#90A1B9",
 };
 
+const areaKeyFromLead = (lead) => {
+  const zip = String(lead.facilityZip || "").trim();
+  if (zip) return zip;
+  const address = String(lead.facilityAddress || "").trim();
+  if (!address) return "";
+  // Prefer city-ish segment before last comma, else full address
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts[parts.length - 2] || parts[0];
+  return parts[0] || "";
+};
+
+const toDateInputValue = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+};
+
+const formatEstDateTime = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return (
+    d.toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }) + " EST"
+  );
+};
+
+const PAGE_SIZE = 8;
+
+const FilterButton = ({ active, label, children }) => (
+  <DropdownMenu>
+    <DropdownMenuTrigger asChild>
+      <Button
+        variant="outline"
+        size="default"
+        className="flex shrink-0 items-center gap-2 bg-white"
+        style={{
+          height: "40px",
+          borderRadius: "12px",
+          border: active ? "1.5px solid #00B8DB" : "1px solid rgba(0,0,0,0.08)",
+          color: active ? "#00B8DB" : "#000",
+        }}
+      >
+        <Filter className="h-4 w-4 shrink-0" />
+        <span className="max-w-[9rem] truncate text-sm font-bold">{label}</span>
+        <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+      </Button>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="max-h-64 w-52 overflow-y-auto">
+      {children}
+    </DropdownMenuContent>
+  </DropdownMenu>
+);
+
 export default function Residents() {
   const navigate = useNavigate();
-  const [leads, setLeads] = useState(INITIAL_LEADS);
+  const [leads, setLeads] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [areaFilter, setAreaFilter] = useState("");
+  const [careTypeFilter, setCareTypeFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
 
-  /* ── derived filtered list ───────────────────────────────── */
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/email/leads", {
+        params: { limit: 300 },
+      });
+      setLeads(Array.isArray(data?.leads) ? data.leads : []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load leads", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+      setLeads([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLeads();
+  }, [fetchLeads]);
+
+  const areaOptions = useMemo(() => {
+    const set = new Set();
+    leads.forEach((lead) => {
+      const key = areaKeyFromLead(lead);
+      if (key) set.add(key);
+    });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [leads]);
+
+  const careTypeOptions = useMemo(() => [ASSISTED_LIVING_LABEL], []);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    return leads.filter((lead) => {
-      const matchSearch =
-        !q ||
-        lead.name.toLowerCase().includes(q) ||
-        lead.email.toLowerCase().includes(q) ||
-        lead.facility.toLowerCase().includes(q);
-      const matchStatus = !statusFilter || lead.status === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [leads, search, statusFilter]);
+    const fromTs = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
+    const toTs = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null;
 
-  const hasActiveFilter = Boolean(statusFilter);
+    return leads.filter((lead) => {
+      const name = String(lead.name || "").toLowerCase();
+      const email = String(lead.email || "").toLowerCase();
+      const facility = String(lead.facility || "").toLowerCase();
+
+      const matchSearch =
+        !q || name.includes(q) || email.includes(q) || facility.includes(q);
+      const matchStatus = !statusFilter || lead.status === statusFilter;
+      const matchArea = !areaFilter || areaKeyFromLead(lead) === areaFilter;
+      const matchCare =
+        !careTypeFilter ||
+        normalizeCareTypeDisplay(lead.careType) === careTypeFilter;
+
+      const created = lead.createdAt ? new Date(lead.createdAt).getTime() : null;
+      const matchFrom = fromTs == null || (created != null && created >= fromTs);
+      const matchTo = toTs == null || (created != null && created <= toTs);
+
+      return matchSearch && matchStatus && matchArea && matchCare && matchFrom && matchTo;
+    });
+  }, [
+    leads,
+    search,
+    statusFilter,
+    areaFilter,
+    careTypeFilter,
+    dateFrom,
+    dateTo,
+  ]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, areaFilter, careTypeFilter, dateFrom, dateTo]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pagedLeads = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
+  const hasActiveFilter = Boolean(
+    statusFilter || areaFilter || careTypeFilter || dateFrom || dateTo,
+  );
 
   const clearFilters = () => {
     setStatusFilter("");
+    setAreaFilter("");
+    setCareTypeFilter("");
+    setDateFrom("");
+    setDateTo("");
   };
 
-  /* ── action handlers ─────────────────────────────────────── */
-  const updateLeadStatus = (id, newStatus) => {
-    setLeads((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, status: newStatus } : l))
+  const updateLeadStatus = async (id, newStatus) => {
+    const prev = leads;
+    setLeads((list) =>
+      list.map((l) => (l.id === id ? { ...l, status: newStatus } : l)),
     );
-    toast.success("Status updated", { description: `Lead moved to "${newStatus}".` });
+    try {
+      await apiClient.patch(`/api/email/leads/${id}`, { status: newStatus });
+      toast.success("Status updated", { description: `Lead moved to "${newStatus}".` });
+    } catch (err) {
+      setLeads(prev);
+      toast.error("Could not update status", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+    }
   };
 
-  const removeLead = (id, name) => {
-    setLeads((prev) => prev.filter((l) => l.id !== id));
-    toast.success("Lead removed", { description: `${name} has been removed.` });
+  const removeLead = async (id, name) => {
+    const prev = leads;
+    setLeads((list) => list.filter((l) => l.id !== id));
+    try {
+      await apiClient.delete(`/api/email/leads/${id}`);
+      toast.success("Lead removed", { description: `${name} has been removed.` });
+    } catch (err) {
+      setLeads(prev);
+      toast.error("Could not remove lead", {
+        description: err?.response?.data?.message || "Please try again.",
+      });
+    }
   };
 
   const handleViewDetails = (lead) => {
+    const opened = lead.emailOpenedAt
+      ? formatEstDateTime(lead.emailOpenedAt)
+      : "—";
     toast.info(`Viewing ${lead.name}`, {
-      description: `${lead.facility} · ${lead.careType} · Score ${lead.score}`,
+      description: `${lead.facility} · ${normalizeCareTypeDisplay(lead.careType)} · Email opened ${opened}`,
     });
   };
 
@@ -160,7 +281,6 @@ export default function Residents() {
       style={{ fontFamily: "Rethink Sans, sans-serif" }}
     >
       <SEO title="Leads – Admin | CareMatch AI" />
-      {/* Page header */}
       <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 flex flex-col">
           <h1
@@ -173,19 +293,17 @@ export default function Residents() {
             className="mt-1 text-sm text-slate-500 md:text-base lg:h-6"
             style={{ maxWidth: "100%" }}
           >
-            Manage your leads and track performance.
+            Search by name, email, or facility. Filter by area, status, care type, and date.
           </p>
         </div>
       </div>
 
-      {/* Search + Filter bar */}
       <div
         className="min-w-0 overflow-visible rounded-[1.25rem] bg-white px-4 py-3 sm:px-5 sm:py-4"
         style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}
       >
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-          {/* Search */}
-          <div className="relative min-w-0 flex-1 sm:max-w-[42%]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div className="relative min-w-0 w-full sm:max-w-[420px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               placeholder="Search by name, email, or facility…"
@@ -205,52 +323,104 @@ export default function Residents() {
             )}
           </div>
 
-          {/* Filters */}
-          <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:ml-auto">
-            {/* Status filter */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="default"
-                  className="flex shrink-0 items-center gap-2 bg-white"
-                  style={{
-                    height: "40px",
-                    borderRadius: "12px",
-                    border: statusFilter
-                      ? "1.5px solid #00B8DB"
-                      : "1px solid rgba(0,0,0,0.08)",
-                    color: statusFilter ? "#00B8DB" : "#000",
-                  }}
-                >
-                  <Filter className="h-4 w-4 shrink-0" />
-                  <span className="text-sm font-bold">
-                    {statusFilter ? statusFilter : "Status"}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem
-                  onClick={() => setStatusFilter("")}
-                  className={!statusFilter ? "font-semibold text-[#00B8DB]" : ""}
-                >
-                  All statuses
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {ALL_STATUSES.map((s) => (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <FilterButton
+              active={Boolean(areaFilter)}
+              label={areaFilter ? `Area: ${areaFilter}` : "Area"}
+            >
+              <DropdownMenuItem
+                onClick={() => setAreaFilter("")}
+                className={!areaFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All areas
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {areaOptions.length === 0 ? (
+                <DropdownMenuItem disabled>No areas yet</DropdownMenuItem>
+              ) : (
+                areaOptions.map((area) => (
                   <DropdownMenuItem
-                    key={s}
-                    onClick={() => setStatusFilter(s)}
-                    className={statusFilter === s ? "font-semibold text-[#00B8DB]" : ""}
+                    key={area}
+                    onClick={() => setAreaFilter(area)}
+                    className={areaFilter === area ? "font-semibold text-[#00B8DB]" : ""}
                   >
-                    {s}
+                    {area}
                   </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                ))
+              )}
+            </FilterButton>
 
-            {/* Clear filters */}
+            <FilterButton
+              active={Boolean(statusFilter)}
+              label={statusFilter || "Status"}
+            >
+              <DropdownMenuItem
+                onClick={() => setStatusFilter("")}
+                className={!statusFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All statuses
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {ALL_STATUSES.map((s) => (
+                <DropdownMenuItem
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={statusFilter === s ? "font-semibold text-[#00B8DB]" : ""}
+                >
+                  {s}
+                </DropdownMenuItem>
+              ))}
+            </FilterButton>
+
+            <FilterButton
+              active={Boolean(careTypeFilter)}
+              label={careTypeFilter || "Care type"}
+            >
+              <DropdownMenuItem
+                onClick={() => setCareTypeFilter("")}
+                className={!careTypeFilter ? "font-semibold text-[#00B8DB]" : ""}
+              >
+                All care types
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {careTypeOptions.length === 0 ? (
+                <DropdownMenuItem disabled>No care types yet</DropdownMenuItem>
+              ) : (
+                careTypeOptions.map((ct) => (
+                  <DropdownMenuItem
+                    key={ct}
+                    onClick={() => setCareTypeFilter(ct)}
+                    className={
+                      careTypeFilter === ct ? "font-semibold text-[#00B8DB]" : ""
+                    }
+                  >
+                    {ct}
+                  </DropdownMenuItem>
+                ))
+              )}
+            </FilterButton>
+
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-2 py-1.5">
+              <span className="px-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+                Date
+              </span>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-8 w-[9.5rem] rounded-lg border-slate-200 bg-white text-sm"
+                aria-label="From date"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-8 w-[9.5rem] rounded-lg border-slate-200 bg-white text-sm"
+                aria-label="To date"
+              />
+            </div>
+
             {hasActiveFilter && (
               <button
                 type="button"
@@ -265,34 +435,35 @@ export default function Residents() {
         </div>
       </div>
 
-      {/* Result count when filtering */}
-      {(search || hasActiveFilter) && (
+      {!loading && filtered.length > 0 && (
         <p className="text-sm text-slate-500">
-          Showing <span className="font-semibold text-slate-700">{filtered.length}</span> of{" "}
-          {leads.length} leads
+          Showing{" "}
+          <span className="font-semibold text-slate-700">
+            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)}
+          </span>{" "}
+          of {filtered.length} leads
+          {(search || hasActiveFilter) && leads.length !== filtered.length
+            ? ` (filtered from ${leads.length})`
+            : ""}
         </p>
       )}
 
-      {/* Leads table */}
       <Card className="min-w-0 overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm">
         <CardContent className="min-w-0 overflow-x-auto p-0">
-          <Table className="min-w-0">
+          <Table className="min-w-[920px]">
             <TableHeader>
               <TableRow className="border-slate-100 bg-slate-50/80 hover:bg-slate-50/80">
-                <TableHead className="h-11 rounded-tl-3xl uppercase first:pl-5" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[22%] rounded-tl-3xl uppercase first:pl-5" style={HEAD_STYLE}>
                   Lead Name
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[34%] uppercase" style={HEAD_STYLE}>
                   Facility
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[22%] uppercase" style={HEAD_STYLE}>
                   Care Type
                 </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
+                <TableHead className="h-11 w-[14%] uppercase" style={HEAD_STYLE}>
                   Status
-                </TableHead>
-                <TableHead className="h-11 uppercase" style={HEAD_STYLE}>
-                  Score
                 </TableHead>
                 <TableHead className="h-11 w-12 rounded-tr-3xl uppercase last:pr-5" style={HEAD_STYLE}>
                   Actions
@@ -300,52 +471,157 @@ export default function Residents() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                    No leads match your search or filters.
+                  <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading leads…
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-12 text-center text-sm text-slate-400">
+                    {leads.length === 0
+                      ? "No leads yet. They appear when a user clicks Contact."
+                      : "No leads match your search or filters."}
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => (
+                pagedLeads.map((lead) => {
+                  const careLabel = normalizeCareTypeDisplay(lead.careType);
+                  const facilityEmail = String(lead.facilityEmail || "").trim();
+                  const facilityPhone = String(lead.facilityPhone || "").trim();
+                  const hasFacilityEmail =
+                    facilityEmail &&
+                    !/@external\.carematch\.local$/i.test(facilityEmail);
+                  const hasFacilityPhone =
+                    facilityPhone &&
+                    facilityPhone.toUpperCase() !== "N/A" &&
+                    facilityPhone !== "—" &&
+                    facilityPhone !== "-";
+                  const missingContact = !hasFacilityEmail && !hasFacilityPhone;
+                  return (
                   <TableRow
                     key={lead.id}
-                    className="border-slate-100 transition-colors hover:bg-slate-50/80"
+                    className={`border-slate-100 transition-colors hover:bg-slate-50/80 ${
+                      missingContact ? "bg-red-50/70 hover:bg-red-50" : ""
+                    }`}
                   >
-                    <TableCell className="py-3 first:pl-5">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9 rounded-full border border-slate-100 bg-sky-50">
+                    <TableCell className="align-top py-4 first:pl-5">
+                      <div className="flex items-start gap-3">
+                        <Avatar className="mt-0.5 h-9 w-9 shrink-0 rounded-full border border-slate-100 bg-sky-50">
                           <AvatarFallback className="bg-[#00B8DB]/10 text-sm font-semibold text-[#00B8DB]">
                             {lead.initials}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="min-w-0">
-                          <p className="truncate font-bold text-slate-900">{lead.name}</p>
-                          <p className="truncate text-xs" style={{ color: "#90A1B9" }}>
+                        <div className="min-w-0 space-y-1">
+                          <p className="break-words font-bold leading-snug text-slate-900">
+                            {lead.name}
+                          </p>
+                          <p className="break-all text-xs leading-snug" style={{ color: "#90A1B9" }}>
                             {lead.email}
                           </p>
+                          {lead.createdAt && (
+                            <p className="text-[11px] text-slate-400">
+                              {formatEstDateTime(lead.createdAt)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="py-3 font-bold" style={{ color: "#45556C" }}>
-                      {lead.facility}
+                    <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
+                      <div className="min-w-[14rem] max-w-[22rem] space-y-2">
+                        <p
+                          className={`break-words font-bold leading-snug ${
+                            missingContact ? "text-red-700" : "text-slate-800"
+                          }`}
+                        >
+                          {lead.facility}
+                        </p>
+                        <div
+                          className={`space-y-1.5 rounded-xl border px-2.5 py-2 ${
+                            missingContact
+                              ? "border-red-200 bg-red-50"
+                              : "border-slate-100 bg-slate-50/80"
+                          }`}
+                        >
+                          <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                            <span className="min-w-0 break-words">
+                              {(() => {
+                                let addr = String(lead.facilityAddress || "")
+                                  .trim()
+                                  .replace(/\s+/g, " ")
+                                  .replace(/\s*[·|]\s*/g, ", ");
+                                const zipFromField = String(lead.facilityZip || "")
+                                  .replace(/\D/g, "")
+                                  .slice(0, 5);
+                                const zipFromAddr =
+                                  (addr.match(/\b(\d{5})(?:-\d{4})?\b/) || [])[1] || "";
+                                const zip = zipFromField || zipFromAddr;
+                                if (zip) {
+                                  const leading = addr.match(new RegExp(`^${zip}\\s+`));
+                                  if (
+                                    leading &&
+                                    new RegExp(`\\b${zip}\\b`).test(addr.slice(leading[0].length))
+                                  ) {
+                                    addr = addr.slice(leading[0].length).trim();
+                                  }
+                                  const firstIdx = addr.search(new RegExp(`\\b${zip}\\b`));
+                                  if (firstIdx >= 0) {
+                                    let end = firstIdx + 5;
+                                    const after = addr.slice(end);
+                                    const usaMatch = after.match(/^\s*,?\s*USA\b/i);
+                                    if (usaMatch) end += usaMatch[0].length;
+                                    addr = addr.slice(0, end).trim().replace(/[,\s]+$/g, "");
+                                  }
+                                }
+                                if (!addr && !zip) return "Address not available";
+                                if (!addr) return zip;
+                                if (!zip) return addr;
+                                if (new RegExp(`\\b${zip}\\b`).test(addr)) return addr;
+                                return `${addr}, ${zip}`;
+                              })()}
+                            </span>
+                          </p>
+                          {hasFacilityEmail && (
+                            <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                              <span className="min-w-0 break-all">{facilityEmail}</span>
+                            </p>
+                          )}
+                          {hasFacilityPhone && (
+                            <p className="flex items-start gap-2 text-xs leading-snug text-slate-600">
+                              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#00B8DB]" />
+                              <span className="min-w-0 break-all">{facilityPhone}</span>
+                            </p>
+                          )}
+                          {missingContact && (
+                            <p className="flex items-start gap-2 text-xs font-semibold leading-snug text-red-600">
+                              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-500" />
+                              <span className="min-w-0 break-all">Contact not available</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </TableCell>
-                    <TableCell className="py-3 font-bold" style={{ color: "#45556C" }}>
-                      {lead.careType}
+                    <TableCell className="align-top py-4" style={{ color: "#45556C" }}>
+                      <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold leading-snug text-slate-700">
+                        {careLabel}
+                      </span>
                     </TableCell>
-                    <TableCell className="py-3">
+                    <TableCell className="align-top py-4">
                       <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                        className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${
                           STATUS_STYLES[lead.status] || "bg-slate-100 text-slate-700"
                         }`}
                       >
                         {lead.status}
                       </span>
                     </TableCell>
-                    <TableCell className="py-3 font-semibold text-[#00B8DB]">
-                      {lead.score}
-                    </TableCell>
-                    <TableCell className="py-3 last:pr-5">
+                    <TableCell className="align-top py-4 last:pr-5">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
@@ -373,9 +649,7 @@ export default function Residents() {
                           >
                             Mark as Contacted
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => navigate("/admin/messages")}
-                          >
+                          <DropdownMenuItem onClick={() => navigate("/admin/messages")}>
                             Send message
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -389,12 +663,41 @@ export default function Residents() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {!loading && filtered.length > 0 && (
+        <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:flex-row">
+          <p className="text-sm text-slate-600">
+            Page {safePage} of {totalPages}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

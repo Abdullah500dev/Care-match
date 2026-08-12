@@ -80,6 +80,10 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    saved_facility_details: {
+      type: [Object],
+      default: [],
+    },
   },
   {
     timestamps: true,

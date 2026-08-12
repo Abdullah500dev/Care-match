@@ -1,7 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { ChevronDown, ChevronUp, Info, MessageCircle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Compass,
+  Info,
+  MapPin,
+  MessageCircle,
+  Search,
+  SlidersHorizontal,
+} from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { apiClient } from "../../../services/api";
@@ -10,11 +21,16 @@ import SEO from "../../../components/common/SEO";
 import CareExplorerBar from "../../../components/client/CareExplorer/CareExplorerBar";
 import FiltersSidebar from "../../../components/client/CareExplorer/FiltersSidebar";
 import FacilityCard from "../../../components/client/CareExplorer/FacilityCard";
+import LoadingOverlay from "../../../components/client/LoadingOverlay";
 import {
   getGoogleMapsApiKey,
   loadGoogleMapsScript,
 } from "../../../lib/loadGoogleMaps";
 import { scrollToCarrieHeroThenOpenChat } from "../../../utils/scrollToCarrieHeroTagline";
+import {
+  isAggregatorListingUrl,
+  normalizeFacilityWebsite,
+} from "../../../lib/facilityWebsite";
 
 const API_BASE =
   typeof import.meta.env.VITE_REACT_APP_API_BASE_URL === "string"
@@ -29,11 +45,12 @@ function resolveFacilityImageUrl(path) {
 }
 
 const DEFAULT_CARD_IMAGE = "/assets/images/imgForFindCare.svg";
-const DEFAULT_PRICE_RANGE = "Price on call";
+const DEFAULT_PRICE_RANGE = "";
 const DEFAULT_MAP_CENTER = { lat: 40.7128, lng: -74.006 };
 const DEFAULT_NEARBY_RADIUS_MILES = 30;
-const FAVORITE_FACILITY_IDS_STORAGE_KEY = "carematch_favorite_facility_ids";
 const AUTO_APPLY_FILTERS = false;
+const ZIP_ONLY_DISCOVERY_MODE = true;
+const DISCOVER_DUPLICATE_WINDOW_MS = 1200;
 const FIXED_AMENITY_OPTIONS = [
   "Private room preferred",
   "Pet-friendly",
@@ -95,12 +112,43 @@ function parsePriceRangeNumbers(rawPricing) {
   return { min: Math.min(...nums), max: Math.max(...nums) };
 }
 
+/** Cards with no numeric monthly price — skip strict budget range matching. */
+function facilityHasCallForPricingDisplay(facility) {
+  const display = String(facility?.priceRange || "").trim();
+  if (!display || /^price\s+on\s+call$/i.test(display)) return true;
+  const { min, max } = parsePriceRangeNumbers(display);
+  return min == null && max == null;
+}
+
 function averagePriceFromText(rawPricing) {
   const { min, max } = parsePriceRangeNumbers(rawPricing);
   if (min != null && max != null) return Math.round((min + max) / 2);
   if (min != null) return min;
   if (max != null) return max;
   return null;
+}
+
+/** Admin/provider listings created in CareMatch (not external API scrapes). */
+function isCareMatchPartnerListing(facility) {
+  if (!facility || typeof facility !== "object") return false;
+  if (facility.isExternal === false) return true;
+  const platform = String(facility.sourcePlatform || "").toLowerCase();
+  if (platform === "carematch") return true;
+  const key = String(facility.key || facility.facilityId || "");
+  return key.startsWith("owned-");
+}
+
+function partnerMatchesSearchArea(facility, { zipCode = "", locationQuery = "" } = {}) {
+  if (!isCareMatchPartnerListing(facility)) return false;
+  const zipFromLocation =
+    String(locationQuery || "").match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] || "";
+  const searchZip =
+    String(zipCode || "").replace(/\D/g, "").slice(0, 5) || zipFromLocation;
+  const facilityZip = String(facility.zipCode || "").replace(/\D/g, "").slice(0, 5);
+  if (searchZip && facilityZip && searchZip === facilityZip) return true;
+  const loc = String(locationQuery || "").trim();
+  if (loc && addressMatchesLocation(facility.address, loc.toLowerCase())) return true;
+  return false;
 }
 
 function distanceMiles(a, b) {
@@ -123,6 +171,11 @@ function titleCase(s) {
     .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+function extractFiveDigitZip(text) {
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] : "";
 }
 
 function normalizeToken(value) {
@@ -149,6 +202,22 @@ function mapSelectionsToOptions(incomingValues, options, aliases = {}) {
   });
 
   return [...new Set(selected)];
+}
+
+function parseDistanceMiles(value) {
+  if (value == null) return null;
+  const parsed = Number.parseFloat(String(value).replace(/[^0-9.]+/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveCarrieMaxMiles(filters) {
+  if (!filters) return null;
+  const candidate =
+    filters.maxDistanceMiles ??
+    filters.max_distance_miles ??
+    filters.maxMiles ??
+    filters.max_miles;
+  return parseDistanceMiles(candidate);
 }
 
 // US state name → abbreviation lookup for location filter
@@ -193,10 +262,23 @@ function addressMatchesLocation(fullAddress, locationQuery) {
   // 3. Handle "City, State" queries e.g. "Newark, NJ" or "Newark, New Jersey"
   if (query.includes(",")) {
     const [city, stateRaw] = query.split(",").map((s) => s.trim());
-    const stateAbbr = US_STATE_ABBR[stateRaw] || stateRaw;
+    const zipInQuery = String(stateRaw || "").match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] || "";
+    const stateOnly = String(stateRaw || "")
+      .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+      .trim();
+    const stateAbbr = US_STATE_ABBR[stateOnly] || stateOnly;
+
+    // If ZIP is provided, accept exact ZIP match.
+    if (zipInQuery && addr.includes(zipInQuery)) return true;
+
+    // City + state match should still pass even if ZIP differs within same city/state.
     if (city && addr.includes(city)) {
-      if (addr.includes(stateAbbr)) return true;
-      if (stateRaw && addr.includes(stateRaw)) return true;
+      if (stateAbbr && new RegExp(`\\b${String(stateAbbr).toLowerCase()}\\b`).test(addr)) {
+        return true;
+      }
+      if (stateOnly && addr.includes(stateOnly.toLowerCase())) return true;
+      // When user gives only city and no parseable state, allow city-only match.
+      if (!stateOnly) return true;
     }
   }
 
@@ -260,18 +342,12 @@ function normalizeFacilityForCard(m) {
           ? Number(m.longitude)
           : null;
 
-  const firstImg =
-    Array.isArray(m.images) && m.images.length ? m.images[0] : null;
-  let imageSrc = resolveFacilityImageUrl(firstImg) || null;
-  if (!imageSrc && Array.isArray(m.images) && m.images.length > 1) {
-    for (let i = 1; i < m.images.length; i += 1) {
-      const u = resolveFacilityImageUrl(m.images[i]);
-      if (u) {
-        imageSrc = u;
-        break;
-      }
-    }
-  }
+  const normalizedImageUrls = Array.isArray(m.images)
+    ? m.images
+        .map((img) => resolveFacilityImageUrl(img))
+        .filter((img) => typeof img === "string" && img.trim().length > 0)
+    : [];
+  let imageSrc = normalizedImageUrls[0] || null;
   const placeId =
     typeof googlePlaces.place_id === "string" ? googlePlaces.place_id.trim() : "";
   if (!imageSrc && placeId) {
@@ -291,10 +367,7 @@ function normalizeFacilityForCard(m) {
     imageSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${latForMap},${lngForMap}&zoom=16&size=600x360&scale=2&maptype=roadmap&markers=color:0x14b8a6%7C${latForMap},${lngForMap}&key=${encodeURIComponent(mapsKey)}`;
   }
   if (!imageSrc) imageSrc = DEFAULT_CARD_IMAGE;
-  const category =
-    Array.isArray(m.care_levels) && m.care_levels.length
-      ? m.care_levels.join(" · ").toUpperCase()
-      : "SENIOR LIVING";
+  const category = "ASSISTED LIVING";
   const features =
     Array.isArray(m.reasons) && m.reasons.length
       ? m.reasons.map((r) =>
@@ -355,6 +428,7 @@ function normalizeFacilityForCard(m) {
       ? Number(reviewCountRaw)
       : null;
   const providerUrl = String(externalData.provider_url || "").trim();
+  const googlePlacesWebsite = String(externalData?.google_places?.website || "").trim();
   const phone =
     String(
       m.phone ||
@@ -380,6 +454,7 @@ function normalizeFacilityForCard(m) {
     key: m.facilityId || m._id || m.name,
     matchPercent: typeof m.score === "number" ? m.score : 0,
     imageSrc,
+    imageUrls: normalizedImageUrls,
     category,
     name: m.name || "Community",
     priceRange,
@@ -390,7 +465,13 @@ function normalizeFacilityForCard(m) {
     address: m.address || "",
     zipCode,
     phone,
-    website: m.website || "",
+    email: String(m.email || externalData.email || "").trim(),
+    website: (() => {
+      const top = String(m.website || "").trim();
+      const gpSite = String(googlePlacesWebsite || "").trim();
+      const candidate = top && !isAggregatorListingUrl(top) ? top : gpSite;
+      return normalizeFacilityWebsite(candidate);
+    })(),
     rating: overallRating != null ? overallRating : 4.8,
     reviewCount: reviewCountValue,
     ratingLabel: overallRating != null ? "CMS rating" : "family reviews",
@@ -402,15 +483,84 @@ function normalizeFacilityForCard(m) {
     careLevels: Array.isArray(m.care_levels) ? m.care_levels : [],
     amenities: Array.isArray(m.amenities) ? m.amenities : [],
     services: Array.isArray(m.services) ? m.services : [],
-    availability: m.availability || "Within 30 Days",
+    availability: m.availability || "",
     lat: googlePlaces.latitude ?? externalData.latitude ?? m.latitude ?? null,
     lng: googlePlaces.longitude ?? externalData.longitude ?? m.longitude ?? null,
+    distanceMiles:
+      m.distance_miles != null && Number.isFinite(Number(m.distance_miles))
+        ? Number(m.distance_miles)
+        : null,
   };
 }
 
-function extractFiveDigitZip(text) {
-  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
-  return m ? m[1] : "";
+function normalizeSavedFacilityDetail(detail) {
+  const src = detail && typeof detail === "object" ? detail : {};
+  const key = String(src.facilityId || src.id || src._id || src.name || "").trim();
+  const normalizedImageUrls = Array.isArray(src.imageUrls)
+    ? src.imageUrls
+        .map((img) => resolveFacilityImageUrl(img))
+        .filter((img) => typeof img === "string" && img.trim().length > 0)
+    : [];
+  const imageSrc = resolveFacilityImageUrl(src.imageSrc) || normalizedImageUrls[0] || DEFAULT_CARD_IMAGE;
+  const pricingText = String(src.priceRange || src.pricing || "").trim();
+  const numericPrice = parsePriceRangeNumbers(pricingText);
+  const parsedRating = Number(src.rating);
+  const parsedReviewCount = Number(src.reviewCount);
+  const rawLat = src.lat ?? src.latitude;
+  const rawLng = src.lng ?? src.longitude;
+  const parsedLat = Number(rawLat);
+  const parsedLng = Number(rawLng);
+  const lat =
+    rawLat != null &&
+    String(rawLat).trim() !== "" &&
+    Number.isFinite(parsedLat) &&
+    !(Math.abs(parsedLat) < 0.01 && Math.abs(Number(rawLng)) < 0.01)
+      ? parsedLat
+      : null;
+  const lng =
+    rawLng != null &&
+    String(rawLng).trim() !== "" &&
+    Number.isFinite(parsedLng) &&
+    lat != null
+      ? parsedLng
+      : null;
+  return {
+    key: key || String(src.name || "saved-facility"),
+    matchPercent: Number.isFinite(Number(src.matchPercent)) ? Number(src.matchPercent) : 0,
+    imageSrc,
+    imageUrls: normalizedImageUrls,
+    category: "ASSISTED LIVING",
+    name: String(src.name || "Community"),
+    priceRange: formatPriceRange(pricingText),
+    priceMin: numericPrice.min,
+    priceMax: numericPrice.max,
+    distance: String(src.distance || "Saved facility"),
+    features: Array.isArray(src.features) ? src.features : [],
+    address: String(src.address || ""),
+    zipCode: String(src.zipCode || src.zip_code || ""),
+    phone: String(src.phone || ""),
+    email: String(src.email || ""),
+    website: String(src.website || ""),
+    rating: Number.isFinite(parsedRating) ? parsedRating : 4.8,
+    reviewCount: Number.isFinite(parsedReviewCount) ? parsedReviewCount : null,
+    ratingLabel: "family reviews",
+    specialty: Array.isArray(src.specialty) ? src.specialty : [],
+    description: String(src.description || ""),
+    sourcePlatform: String(src.sourcePlatform || src.source_platform || ""),
+    isExternal: Boolean(src.isExternal ?? src.is_external),
+    externalSourceUrl: String(src.externalSourceUrl || src.external_source_url || ""),
+    careLevels: Array.isArray(src.careLevels) ? src.careLevels : [],
+    amenities: Array.isArray(src.amenities) ? src.amenities : [],
+    services: Array.isArray(src.services) ? src.services : [],
+    availability: String(src.availability || ""),
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+    distanceMiles:
+      src.distanceMiles != null && Number.isFinite(Number(src.distanceMiles))
+        ? Number(src.distanceMiles)
+        : null,
+    savedAt: src.savedAt || null,
+  };
 }
 
 /** Normalize for fuzzy checkbox / listing match (hyphens, case). */
@@ -447,6 +597,40 @@ function amenityMatchVariants(selectedLower) {
     }
   }
   return [key];
+}
+
+/** Searchable text pool for must-have amenity matching on a facility card. */
+function buildFacilityAmenitySearchPool(facility) {
+  const specialty = Array.isArray(facility?.specialty) ? facility.specialty : [];
+  return [
+    ...(facility?.amenities || []).map(amenityText),
+    ...(facility?.services || []).map(amenityText),
+    ...(facility?.features || []).map(amenityText),
+    ...(facility?.careLevels || []).map(amenityText),
+    ...specialty.map(amenityText),
+    String(facility?.description || ""),
+    String(facility?.name || ""),
+    String(facility?.category || ""),
+    String(facility?.priceRange || ""),
+    String(facility?.address || ""),
+  ]
+    .map((x) => normMatchToken(x))
+    .filter(Boolean);
+}
+
+function amenityPreferenceMatches(pool, selectedLower) {
+  const variants = amenityMatchVariants(selectedLower);
+  if (variants.length === 0) return true;
+  return variants.some((want) =>
+    pool.some((p) => p.includes(want) || want.includes(p)),
+  );
+}
+
+/** All selected must-haves must match (AND). Empty selection = no filter. */
+function facilityMeetsMustHaveAmenities(facility, selectedAmenities) {
+  if (!selectedAmenities.length) return true;
+  const pool = buildFacilityAmenitySearchPool(facility);
+  return selectedAmenities.every((want) => amenityPreferenceMatches(pool, want));
 }
 
 function deriveServicesFromPreferencePhrases(values) {
@@ -558,31 +742,45 @@ function inferCityStateFromMatches(matches) {
   return "";
 }
 
+function hasValidFacilityCoords(facility) {
+  const rawLat = facility?.lat;
+  const rawLng = facility?.lng;
+  if (rawLat == null || rawLng == null) return false;
+  if (String(rawLat).trim() === "" || String(rawLng).trim() === "") return false;
+  const lat = Number(rawLat);
+  const lng = Number(rawLng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+  // Missing geocode often collapses to Null Island (0,0) — treat as invalid.
+  if (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01) return false;
+  return true;
+}
+
 function computeFacilityMiles(facility, locationCenterCoords) {
-  if (
-    locationCenterCoords &&
-    Number.isFinite(Number(facility?.lat)) &&
-    Number.isFinite(Number(facility?.lng))
-  ) {
+  // Important: Number(null) === 0, so never coerce null coords before validating.
+  if (locationCenterCoords && hasValidFacilityCoords(facility)) {
     return distanceMiles(locationCenterCoords, {
       lat: Number(facility.lat),
       lng: Number(facility.lng),
     });
   }
-  if (
-    Number.isFinite(Number(facility?.distanceMiles)) &&
-    Number(facility.distanceMiles) >= 0
-  ) {
-    return Number(facility.distanceMiles);
+  const apiMiles = Number(facility?.distanceMiles);
+  const apiMilesTrusted =
+    Number.isFinite(apiMiles) &&
+    apiMiles >= 0 &&
+    apiMiles <= 500 &&
+    (!isCareMatchPartnerListing(facility) || apiMiles <= 200);
+  if (apiMilesTrusted) {
+    return apiMiles;
   }
   const parsed = Number.parseFloat(
     String(facility?.distance || "").match(/(\d+(?:\.\d+)?)\s*miles?/i)?.[1],
   );
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
+  return Number.isFinite(parsed) && parsed <= 500 ? parsed : Number.NaN;
 }
 
 function formatDistanceLabel(distanceInMiles, zipCode) {
   if (Number.isFinite(distanceInMiles) && distanceInMiles >= 0) {
+    if (distanceInMiles < 0.5) return "In your ZIP";
     const rounded =
       distanceInMiles < 10
         ? distanceInMiles.toFixed(1)
@@ -664,6 +862,16 @@ function dedupeFacilities(facilities) {
       return;
     }
 
+    const existingIsPartner = isCareMatchPartnerListing(existing);
+    const incomingIsPartner = isCareMatchPartnerListing(facility);
+    if (incomingIsPartner && !existingIsPartner) {
+      selected.set(dedupKey, facility);
+      return;
+    }
+    if (existingIsPartner && !incomingIsPartner) {
+      return;
+    }
+
     const existingMatch = Number(existing?.matchPercent) || 0;
     const incomingMatch = Number(facility?.matchPercent) || 0;
     const existingRichness = facilityCompletenessScore(existing);
@@ -707,56 +915,251 @@ function sanitizeMonthlyBudgetValue(value) {
   return parsed;
 }
 
-/** Build POST /api/facilities/discover body from sidebar + optional Carrie intake. */
-function buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery) {
-  const locRaw = String(filters.locationQuery || carrieLocationQuery || "").trim();
+function extractBudgetBoundsFromText(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return { min: null, max: null };
+  const nums = [...raw.matchAll(/(\d[\d,]*)/g)]
+    .map((m) => Number.parseInt(String(m[1] || "").replace(/,/g, ""), 10))
+    .filter((n) => Number.isFinite(n) && n > 0 && n <= 100000);
+  if (nums.length === 0) return { min: null, max: null };
+  if (nums.length === 1) return { min: null, max: nums[0] };
+  return { min: Math.min(...nums), max: Math.max(...nums) };
+}
+
+function resolveCarrieBudgetRange(carrieFilters) {
+  const cf = carrieFilters && typeof carrieFilters === "object" ? carrieFilters : {};
+  const directMinCandidates = [
+    cf.budgetMinMonthly,
+    cf.budget_min_monthly,
+    cf.budgetMin,
+    cf.budget_min,
+    cf.minBudget,
+    cf.minimumBudget,
+  ];
+  const directMaxCandidates = [
+    cf.budgetMaxMonthly,
+    cf.budget_max_monthly,
+    cf.budgetMax,
+    cf.budget_max,
+    cf.maxBudget,
+    cf.maximumBudget,
+  ];
+
+  const parsedMin = directMinCandidates
+    .map((v) => sanitizeMonthlyBudgetValue(v))
+    .find((v) => v != null);
+  const parsedMax = directMaxCandidates
+    .map((v) => sanitizeMonthlyBudgetValue(v))
+    .find((v) => v != null);
+
+  const textCandidates = [
+    cf.budgetRange,
+    cf.budget_range,
+    cf.monthlyBudgetRange,
+    cf.monthly_budget_range,
+    cf.budget,
+  ];
+  const fromText = textCandidates
+    .map((v) => extractBudgetBoundsFromText(v))
+    .find((x) => x.min != null || x.max != null) || { min: null, max: null };
+
+  const min = parsedMin ?? fromText.min ?? null;
+  const max = parsedMax ?? fromText.max ?? null;
+  return { min, max };
+}
+
+function resolveBudgetRangeFromCarrieMatches(carrieMatches) {
+  const rows = Array.isArray(carrieMatches) ? carrieMatches : [];
+  if (rows.length === 0) return { min: null, max: null };
+
+  let min = null;
+  let max = null;
+  for (const row of rows) {
+    const candidates = [
+      row?.budget?.min_monthly,
+      row?.budget?.max_monthly,
+      row?.external_data?.budget?.min_monthly,
+      row?.external_data?.budget?.max_monthly,
+      row?.external_data?.pricing,
+      row?.pricing,
+    ];
+    for (const c of candidates) {
+      const parsed = sanitizeMonthlyBudgetValue(c);
+      if (parsed != null) {
+        if (min == null || parsed < min) min = parsed;
+        if (max == null || parsed > max) max = parsed;
+      } else if (typeof c === "string") {
+        const parsedRange = extractBudgetBoundsFromText(c);
+        if (parsedRange.min != null) {
+          if (min == null || parsedRange.min < min) min = parsedRange.min;
+        }
+        if (parsedRange.max != null) {
+          if (max == null || parsedRange.max > max) max = parsedRange.max;
+        }
+      }
+    }
+  }
+
+  return { min, max };
+}
+
+/** Extract state abbreviation from "City, ST" or "City, ST XXXXX" pattern */
+function extractStateFromLocation(locStr) {
+  const m = String(locStr || "").match(/,\s*([A-Za-z]{2})\b/);
+  return m ? m[1].toUpperCase() : "";
+}
+
+/**
+ * Build POST /api/facilities/discover body from sidebar (+ optional Carrie intake).
+ * @param {{ sidebarOnly?: boolean }} [options] — when true (Apply Filters), use only sidebar fields.
+ */
+function buildDiscoverRequestBody(
+  filters,
+  carrieFilters,
+  carrieLocationQuery,
+  options = {},
+) {
+  const sidebarOnly = options.sidebarOnly === true;
+  const locRaw = sidebarOnly
+    ? String(filters.locationQuery || "").trim()
+    : String(filters.locationQuery || carrieLocationQuery || "").trim();
   const explicitZip = String(filters.zipCode || "")
     .replace(/\D/g, "")
     .slice(0, 5);
-  const zipFromPrefs = String(carrieFilters?.searchZipCode || "")
-    .replace(/\D/g, "")
-    .slice(0, 5);
-  const zip =
-    explicitZip ||
-    extractFiveDigitZip(locRaw) ||
-    extractFiveDigitZip(String(carrieLocationQuery || "")) ||
-    extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
-    (zipFromPrefs.length === 5 ? zipFromPrefs : "");
-  const baseLocation =
-    locRaw || String(carrieFilters?.searchLocation || "").trim();
-  const location = buildEffectiveLocationQuery(baseLocation, zip);
+  const zipFromPrefs = sidebarOnly
+    ? ""
+    : String(carrieFilters?.searchZipCode || "")
+        .replace(/\D/g, "")
+        .slice(0, 5);
+  const zip = sidebarOnly
+    ? explicitZip || extractFiveDigitZip(locRaw)
+    : explicitZip ||
+      extractFiveDigitZip(locRaw) ||
+      extractFiveDigitZip(String(carrieLocationQuery || "")) ||
+      extractFiveDigitZip(String(carrieFilters?.searchLocation || "")) ||
+      (zipFromPrefs.length === 5 ? zipFromPrefs : "");
+  const baseLocation = sidebarOnly
+    ? locRaw
+    : locRaw || String(carrieFilters?.searchLocation || "").trim();
+
+  // Keep the location scoped to the city/state even when max distance changes,
+  // so increasing radius never narrows the base discovery query.
+  let location = normalizeLocationFieldValue(baseLocation, zip) || baseLocation;
+  if (!location) {
+    location = zip;
+  }
 
   const care_levels = ["assisted living"];
 
-  const amenities = [
-    ...(Array.isArray(filters.selectedAmenities)
-      ? filters.selectedAmenities.map((x) => String(x))
-      : []),
-    ...(Array.isArray(carrieFilters?.amenityMustHaves)
-      ? carrieFilters.amenityMustHaves.map((x) => String(x))
-      : []),
-  ]
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const amenities = ZIP_ONLY_DISCOVERY_MODE
+    ? []
+    : [
+      ...(Array.isArray(filters.selectedAmenities)
+        ? filters.selectedAmenities.map((x) => String(x))
+        : []),
+      ...(Array.isArray(carrieFilters?.amenityMustHaves)
+        ? carrieFilters.amenityMustHaves.map((x) => String(x))
+        : []),
+    ]
+      .map((x) => x.trim())
+      .filter(Boolean);
 
-  const services = deriveServicesFromPreferencePhrases(amenities);
-  const keywords = deriveDiscoverKeywords(filters);
+  const services = ZIP_ONLY_DISCOVERY_MODE ? [] : deriveServicesFromPreferencePhrases(amenities);
+  const keywords = ZIP_ONLY_DISCOVERY_MODE ? [] : deriveDiscoverKeywords(filters);
   const maxDistanceMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
 
-  return {
+  const body = {
     zip_code: zip,
     location,
     care_levels,
     amenities: [...new Set(amenities)],
     services: [...new Set(services)],
     keywords,
-    budget_min: Number(filters.budgetMin),
-    budget_max: Number(filters.budgetMax),
     max_distance_miles:
       Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
         ? Math.round(maxDistanceMiles)
         : null,
   };
+
+  // With live filters, budget is applied client-side so the slider does not wipe the
+  // candidate set when the external API has nothing strictly in-band (common in NYC).
+  if (!AUTO_APPLY_FILTERS) {
+    body.budget_min = Number(filters.budgetMin);
+    body.budget_max = Number(filters.budgetMax);
+  }
+
+  return body;
+}
+
+/** Zip + normalized location — radius widen merge only when this matches the last completed discover. */
+function discoverMergeContextKey(body) {
+  const zip = String(body?.zip_code || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  const loc = String(body?.location || "").trim().toLowerCase();
+  return `${zip}|${loc}`;
+}
+
+function buildDiscoverRequestSignature(body) {
+  const toSortedLowerArray = (value) =>
+    (Array.isArray(value) ? value : [])
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+
+  const nBudgetMin = Number(body?.budget_min);
+  const nBudgetMax = Number(body?.budget_max);
+  const nMaxDistance = Number(body?.max_distance_miles);
+
+  return JSON.stringify({
+    zip_code: String(body?.zip_code || "").trim(),
+    location: String(body?.location || "").trim().toLowerCase(),
+    care_levels: toSortedLowerArray(body?.care_levels),
+    amenities: toSortedLowerArray(body?.amenities),
+    services: toSortedLowerArray(body?.services),
+    keywords: toSortedLowerArray(body?.keywords),
+    budget_min: Number.isFinite(nBudgetMin) ? Math.round(nBudgetMin) : null,
+    budget_max: Number.isFinite(nBudgetMax) ? Math.round(nBudgetMax) : null,
+    max_distance_miles: Number.isFinite(nMaxDistance) ? Math.round(nMaxDistance) : null,
+  });
+}
+
+function normalizeFilterStateForCompare(filters) {
+  const f = filters && typeof filters === "object" ? filters : {};
+  const toSortedLowerArray = (value) =>
+    (Array.isArray(value) ? value : [])
+      .map((x) => String(x || "").trim().toLowerCase())
+      .filter(Boolean)
+      .sort();
+
+  const budgetMin = Number(f.budgetMin);
+  const budgetMax = Number(f.budgetMax);
+
+  return {
+    locationQuery: String(f.locationQuery || "").trim().toLowerCase(),
+    zipCode: String(f.zipCode || "").replace(/\D/g, "").slice(0, 5),
+    searchQuery: String(f.searchQuery || "").trim().toLowerCase(),
+    maxMiles: String(f.maxMiles || "").trim(),
+    budgetMin: Number.isFinite(budgetMin) ? Math.round(budgetMin) : 1000,
+    budgetMax: Number.isFinite(budgetMax) ? Math.round(budgetMax) : 15000,
+    selectedCareTypes: toSortedLowerArray(f.selectedCareTypes),
+    selectedAvailability: toSortedLowerArray(f.selectedAvailability),
+    selectedAmenities: toSortedLowerArray(f.selectedAmenities),
+    sortBy: String(f.sortBy || "bestMatch").trim().toLowerCase(),
+  };
+}
+
+/** Draft vs applied for “needs Apply” — sort, budget, and amenities refine the list live (client-side). */
+function filterStateForApplyPendingCompare(filters) {
+  const norm = normalizeFilterStateForCompare(filters);
+  const {
+    sortBy: _sort,
+    selectedAmenities: _amenities,
+    budgetMin: _budgetMin,
+    budgetMax: _budgetMax,
+    ...rest
+  } = norm;
+  return rest;
 }
 
 const CareExplorer = () => {
@@ -768,7 +1171,8 @@ const CareExplorer = () => {
   const carrieLocationQuery = String(
     carrieFilters?.locationQuery || carrieFilters?.searchLocation || "",
   ).trim();
-  const carrieZipCode = String(carrieFilters?.searchZipCode || "")
+  const carrieZipFromLocation = extractFiveDigitZip(carrieLocationQuery);
+  const carrieZipCode = String(carrieFilters?.searchZipCode || carrieZipFromLocation || "")
     .replace(/\D/g, "")
     .slice(0, 5);
   const normalizedCarrieLocationQueryRaw = normalizeLocationFieldValue(
@@ -783,12 +1187,21 @@ const CareExplorer = () => {
   const [scope, setScope] = useState("all");
   const [mobileFiltersCollapsed, setMobileFiltersCollapsed] = useState(true);
   const [page, setPage] = useState(1);
+  const initialMaxMiles = useMemo(() => {
+    const parsedCandidate = resolveCarrieMaxMiles(carrieFilters);
+    if (parsedCandidate != null) {
+      return String(parsedCandidate);
+    }
+    if (fromCarrie) return String(DEFAULT_NEARBY_RADIUS_MILES);
+    return "";
+  }, [carrieFilters, fromCarrie]);
+
   const initialFilters = useMemo(
     () => ({
     locationQuery: inferredCarrieLocationQuery,
     zipCode: carrieZipCode,
     searchQuery: "",
-    maxMiles: "",
+    maxMiles: initialMaxMiles,
     budgetMin: 1000,
     budgetMax: 15000,
     selectedCareTypes: [],
@@ -796,29 +1209,46 @@ const CareExplorer = () => {
     selectedAmenities: [],
     sortBy: "bestMatch",
     }),
-    [inferredCarrieLocationQuery, carrieZipCode],
+    [inferredCarrieLocationQuery, carrieZipCode, initialMaxMiles],
   );
 
   // `filters` are the draft values (typing/selecting in the sidebar)
   const [filters, setFilters] = useState(initialFilters);
-  // `appliedFilters` are what the listing uses (updated only on Apply)
+  // `filters` = sidebar draft. When AUTO_APPLY_FILTERS is true, `appliedFilters` mirrors `filters`
+  // and `activeFilters` is the draft; when false, `activeFilters` is last-applied until user clicks Apply.
   const [appliedFilters, setAppliedFilters] = useState(initialFilters);
+  const hasPendingFilterChanges = useMemo(() => {
+    const draft = filterStateForApplyPendingCompare(filters);
+    const applied = filterStateForApplyPendingCompare(appliedFilters);
+    return JSON.stringify(draft) !== JSON.stringify(applied);
+  }, [filters, appliedFilters]);
 
   const activeFilters = AUTO_APPLY_FILTERS ? filters : appliedFilters;
+
+  useEffect(() => {
+    if (!AUTO_APPLY_FILTERS) return;
+    setAppliedFilters(filters);
+  }, [filters]);
+
   const mapContainerRef = useRef(null);
   const listingTopRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const mapMarkersRef = useRef([]);
+  const mapCardsScrollRef = useRef(null);
   const geocoderRef = useRef(null);
+  const [selectedFacilityKey, setSelectedFacilityKey] = useState(null);
+  const cardRefsMap = useRef({});
   const [mapError, setMapError] = useState("");
   const [mapsReady, setMapsReady] = useState(false);
   const [currentCoords, setCurrentCoords] = useState(null);
   const [locationCenterCoords, setLocationCenterCoords] = useState(null);
   const [nearbyMapFacilityKeys, setNearbyMapFacilityKeys] = useState([]);
+  const [mapCardsNav, setMapCardsNav] = useState({ canLeft: false, canRight: false });
   const [directoryFacilities, setDirectoryFacilities] = useState([]);
   /** `undefined` = use Carrie / directory; array = last live discover from filters (may be empty). */
   const [discoverOverrideRows, setDiscoverOverrideRows] = useState(undefined);
   const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [liveFilterLoading, setLiveFilterLoading] = useState(false);
   const discoverThinkingMessages = useMemo(
     () => [
       "Reviewing care preferences",
@@ -830,25 +1260,83 @@ const CareExplorer = () => {
   );
   const [discoverThinkingIndex, setDiscoverThinkingIndex] = useState(0);
   const discoverRunIdRef = useRef(0);
+  const discoverAbortControllerRef = useRef(null);
+  /** Same discover body in flight — share one promise so callers never get `undefined`. */
+  const discoverInflightPromiseBySignatureRef = useRef(new Map());
+  /** Recent successful normalized rows keyed by request signature (short TTL). */
+  const discoverCachedRowsBySignatureRef = useRef(new Map());
+  /** Last discover listing snapshot — merge fallback when React state `prev` is briefly empty. */
+  const lastDiscoverSnapshotForMergeRef = useRef([]);
+  const carrieBootstrapDiscoverDoneRef = useRef(false);
+  /** After Apply Filters, listings come from POST /api/facilities/discover (Caring/SilverAssist), not Carrie results.js. */
+  const discoverApplyCompletedRef = useRef(false);
   const hasUserTouchedFiltersRef = useRef(false);
   const skipDiscoverMountRef = useRef(true);
+  /** Last completed discover `maxMiles` string — used to merge when the user widens radius. */
+  const lastDiscoverMaxMilesRef = useRef("");
+  /** Last discover zip+location — do not merge widen results across different searches. */
+  const lastDiscoverMergeContextKeyRef = useRef("");
+  const liveFilterLoaderTimeoutRef = useRef(null);
+  const skipLiveFilterLoaderMountRef = useRef(true);
   const skipQueryLogMountRef = useRef(true);
   const { isAuthenticated, userData } = useSelector(getUser);
   const [favoriteFacilityIds, setFavoriteFacilityIds] = useState([]);
+  const [favoriteFacilityDetails, setFavoriteFacilityDetails] = useState([]);
+  const showResultsLoading = discoverLoading || liveFilterLoading;
+
+  const liveRefinementFilterKey = useMemo(
+    () =>
+      JSON.stringify({
+        sortBy: String(filters.sortBy || "bestMatch"),
+        budgetMin: Number(filters.budgetMin) || 1000,
+        budgetMax: Number(filters.budgetMax) || 15000,
+        selectedAmenities: [...(filters.selectedAmenities || [])]
+          .map((x) => String(x || "").trim().toLowerCase())
+          .filter(Boolean)
+          .sort(),
+      }),
+    [filters.sortBy, filters.budgetMin, filters.budgetMax, filters.selectedAmenities],
+  );
+
+  useEffect(() => {
+    if (skipLiveFilterLoaderMountRef.current) {
+      skipLiveFilterLoaderMountRef.current = false;
+      return;
+    }
+    if (discoverLoading) return;
+
+    setLiveFilterLoading(true);
+    if (liveFilterLoaderTimeoutRef.current) {
+      clearTimeout(liveFilterLoaderTimeoutRef.current);
+    }
+    liveFilterLoaderTimeoutRef.current = setTimeout(() => {
+      setLiveFilterLoading(false);
+      liveFilterLoaderTimeoutRef.current = null;
+    }, 240);
+  }, [liveRefinementFilterKey, discoverLoading]);
+
+  useEffect(
+    () => () => {
+      if (liveFilterLoaderTimeoutRef.current) {
+        clearTimeout(liveFilterLoaderTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
 
   const scrollToListingTop = () => {
-    if (listingTopRef.current) {
-      listingTopRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.dispatchEvent(new CustomEvent("carematch:scroll-to-top"));
   };
 
   const handlePageChange = (nextPage) => {
     setPage(nextPage);
-    scrollToListingTop();
   };
+
+  useEffect(() => {
+    const t = setTimeout(() => scrollToListingTop(), 0);
+    return () => clearTimeout(t);
+  }, [page]);
 
   // Preload Google Maps + Places so the location autocomplete works immediately
   useEffect(() => {
@@ -856,33 +1344,39 @@ const CareExplorer = () => {
     if (apiKey) loadGoogleMapsScript(apiKey).catch(() => { });
   }, []);
 
-  // Load initial favorites from backend or local storage
+  // Load favorites strictly from backend for authenticated users.
   useEffect(() => {
     const loadFavorites = async () => {
-      if (isAuthenticated) {
-        try {
-          const response = await apiClient.get("/api/auth/favorites");
-          if (response.data.success) {
-            setFavoriteFacilityIds(response.data.favorites.map(id => String(id)));
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to fetch favorites from database", error);
-        }
+      if (!isAuthenticated) {
+        setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
+        return;
       }
 
-      // Fallback to local storage if not authenticated or API fails
       try {
-        const raw = localStorage.getItem(FAVORITE_FACILITY_IDS_STORAGE_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        setFavoriteFacilityIds(Array.isArray(parsed) ? parsed.map((id) => String(id)) : []);
-      } catch {
+        const response = await apiClient.get("/api/auth/favorites");
+        if (response.data.success) {
+          setFavoriteFacilityIds(
+            (response.data.favorites || []).map((id) => String(id)),
+          );
+          setFavoriteFacilityDetails(
+            Array.isArray(response.data.facilityDetails)
+              ? response.data.facilityDetails
+              : [],
+          );
+          return;
+        }
         setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
+      } catch (error) {
+        console.error("Failed to fetch favorites from database", error);
+        setFavoriteFacilityIds([]);
+        setFavoriteFacilityDetails([]);
       }
     };
 
     loadFavorites();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userData?._id, userData?.id]);
 
   const handleAskCarrie = () => {
     if (location.pathname !== "/") {
@@ -895,9 +1389,10 @@ const CareExplorer = () => {
     scrollToCarrieHeroThenOpenChat({ source: "care-explorer" });
   };
 
-  const handleToggleFavorite = async (facilityId) => {
+  const handleToggleFavorite = async (facilityId, facilityData) => {
     const safeId = String(facilityId || "").trim();
-    if (!safeId) return;
+    if (!safeId || !isAuthenticated) return;
+    const wasFavorite = favoriteFacilityIds.includes(safeId);
 
     // Optimistic UI update
     setFavoriteFacilityIds((prev) =>
@@ -905,23 +1400,51 @@ const CareExplorer = () => {
         ? prev.filter((id) => id !== safeId)
         : [...prev, safeId],
     );
+    setFavoriteFacilityDetails((prev) => {
+      const existing = Array.isArray(prev) ? prev : [];
+      if (wasFavorite) {
+        return existing.filter(
+          (item) => String(item?.facilityId || item?.id || "") !== safeId,
+        );
+      }
+      if (!facilityData || typeof facilityData !== "object") return existing;
+      const alreadyExists = existing.some(
+        (item) => String(item?.facilityId || item?.id || "") === safeId,
+      );
+      if (alreadyExists) return existing;
+      return [...existing, { ...facilityData, facilityId: safeId, savedAt: new Date().toISOString() }];
+    });
 
-    if (isAuthenticated) {
+    try {
+      const response = await apiClient.post("/api/auth/toggle-favorite", {
+        facilityId: safeId,
+        facilityData: facilityData || null,
+      });
+      if (response?.data?.success) {
+        setFavoriteFacilityIds((response.data.favorites || []).map((id) => String(id)));
+        setFavoriteFacilityDetails(
+          Array.isArray(response.data.facilityDetails)
+            ? response.data.facilityDetails
+            : [],
+        );
+      }
+    } catch (error) {
+      console.error("Failed to sync favorite with database", error);
       try {
-        await apiClient.post("/api/auth/toggle-favorite", { facilityId: safeId });
-      } catch (error) {
-        console.error("Failed to sync favorite with database", error);
-        // Rollback on failure if you want to be strict, but for likes usually it's fine
+        const response = await apiClient.get("/api/auth/favorites");
+        if (response?.data?.success) {
+          setFavoriteFacilityIds((response.data.favorites || []).map((id) => String(id)));
+          setFavoriteFacilityDetails(
+            Array.isArray(response.data.facilityDetails)
+              ? response.data.facilityDetails
+              : [],
+          );
+        }
+      } catch {
+        // Keep optimistic state if recovery fetch fails.
       }
     }
   };
-
-  useEffect(() => {
-    localStorage.setItem(
-      FAVORITE_FACILITY_IDS_STORAGE_KEY,
-      JSON.stringify(favoriteFacilityIds),
-    );
-  }, [favoriteFacilityIds]);
 
   const liveFacilities = useMemo(() => {
     if (!Array.isArray(carrieMatches) || carrieMatches.length === 0)
@@ -933,14 +1456,21 @@ const CareExplorer = () => {
     if (discoverOverrideRows !== undefined) {
       return Array.isArray(discoverOverrideRows) ? discoverOverrideRows : [];
     }
-    if (liveFacilities?.length) return liveFacilities;
+    // Before the first Apply, Carrie may show chat matches (results.js). After Apply, only API/directory.
+    if (fromCarrie && liveFacilities?.length && !discoverApplyCompletedRef.current) {
+      return liveFacilities;
+    }
     if (directoryFacilities.length) return directoryFacilities;
     return [];
-  }, [discoverOverrideRows, liveFacilities, directoryFacilities]);
+  }, [discoverOverrideRows, fromCarrie, liveFacilities, directoryFacilities]);
   const uniqueBaseFacilities = useMemo(
     () => dedupeFacilities(baseFacilities),
     [baseFacilities],
   );
+  const uniqueBaseFacilitiesForMergeRef = useRef(uniqueBaseFacilities);
+  useEffect(() => {
+    uniqueBaseFacilitiesForMergeRef.current = uniqueBaseFacilities;
+  }, [uniqueBaseFacilities]);
 
   const careTypeOptions = useMemo(() => {
     return FIXED_CARE_TYPE_OPTIONS;
@@ -960,13 +1490,42 @@ const CareExplorer = () => {
 
   useEffect(() => {
     if (!fromCarrie || !carrieFilters) return;
-    console.log("[CareExplorer] carrieFilters budget:", { budgetMinMonthly: carrieFilters.budgetMinMonthly, budgetMaxMonthly: carrieFilters.budgetMaxMonthly });
-    const parsedMaxBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMaxMonthly);
-    const parsedMinBudget = sanitizeMonthlyBudgetValue(carrieFilters.budgetMinMonthly);
-    const effectiveMaxBudget = parsedMaxBudget ?? parsedMinBudget ?? 15000;
-    const safeMax = Math.min(15000, Math.max(1000, Math.round(effectiveMaxBudget)));
-    const effectiveMinBudget = parsedMinBudget ?? Math.min(1000, safeMax);
-    const safeMin = Math.min(safeMax, Math.max(1000, Math.round(effectiveMinBudget)));
+    if (discoverApplyCompletedRef.current || hasUserTouchedFiltersRef.current) return;
+    const fromFilters = resolveCarrieBudgetRange(carrieFilters);
+    const fromMatches = resolveBudgetRangeFromCarrieMatches(carrieMatches);
+    const parsedMinBudget = fromFilters.min ?? fromMatches.min;
+    const parsedMaxBudget = fromFilters.max ?? fromMatches.max;
+    const shouldPrefillBudget = carrieFilters?.skipInitialBudgetPrefill !== true;
+    console.log("[CareExplorer] carrieFilters budget:", {
+      budgetMinMonthly: carrieFilters.budgetMinMonthly,
+      budgetMaxMonthly: carrieFilters.budgetMaxMonthly,
+      budgetFromMatches: fromMatches,
+      resolvedMin: parsedMinBudget,
+      resolvedMax: parsedMaxBudget,
+      shouldPrefillBudget,
+    });
+    const effectiveMaxBudget = shouldPrefillBudget
+      ? parsedMaxBudget ?? parsedMinBudget ?? 15000
+      : 15000;
+    const safeMax = Math.min(15000, Math.max(500, Math.round(effectiveMaxBudget)));
+    const effectiveMinBudget = shouldPrefillBudget
+      ? parsedMinBudget ?? Math.min(500, safeMax)
+      : 1000;
+    const safeMin = Math.min(safeMax, Math.max(500, Math.round(effectiveMinBudget)));
+    const intakeAmenitySelections = [
+      ...(Array.isArray(carrieFilters?.displayCriteria?.mustHaveNeeds)
+        ? carrieFilters.displayCriteria.mustHaveNeeds
+        : []),
+      ...(Array.isArray(carrieFilters?.amenityMustHaves)
+        ? carrieFilters.amenityMustHaves
+        : []),
+      ...(Array.isArray(carrieFilters?.amenities) ? carrieFilters.amenities : []),
+    ];
+    const mappedAmenitySelections = mapSelectionsToOptions(
+      intakeAmenitySelections,
+      amenityOptions,
+      AMENITY_ALIASES,
+    );
 
     const nextFilters = {
       ...initialFilters,
@@ -984,23 +1543,19 @@ const CareExplorer = () => {
           CARE_TYPE_ALIASES,
         )
         : initialFilters.selectedCareTypes,
-      selectedAmenities: Array.isArray(carrieFilters.amenityMustHaves)
-        ? mapSelectionsToOptions(
-          carrieFilters.amenityMustHaves.map((x) => String(x).trim()),
-          amenityOptions,
-          AMENITY_ALIASES,
-        )
-        : initialFilters.selectedAmenities,
+      selectedAmenities:
+        mappedAmenitySelections.length > 0
+          ? mappedAmenitySelections
+          : initialFilters.selectedAmenities,
       selectedAvailability:
         typeof carrieFilters.availability === "string" &&
           carrieFilters.availability.trim()
           ? [carrieFilters.availability.trim()]
           : initialFilters.selectedAvailability,
-      maxMiles:
-        carrieFilters.maxDistanceMiles != null &&
-          !Number.isNaN(Number(carrieFilters.maxDistanceMiles))
-          ? String(carrieFilters.maxDistanceMiles)
-          : initialFilters.maxMiles,
+      maxMiles: (() => {
+        const parsed = resolveCarrieMaxMiles(carrieFilters);
+        return parsed != null ? String(parsed) : initialFilters.maxMiles;
+      })(),
     };
 
     setFilters(nextFilters);
@@ -1017,13 +1572,18 @@ const CareExplorer = () => {
 
   useEffect(() => {
     const query = buildEffectiveLocationQuery(
-      String(filters.locationQuery || carrieLocationQuery || "").trim(),
-      filters.zipCode,
+      String(appliedFilters.locationQuery || "").trim(),
+      appliedFilters.zipCode,
     );
     if (!query) {
       setLocationCenterCoords(null);
       return;
     }
+
+    // Clear anchor immediately when ZIP/location change so we never filter a fresh discover
+    // response against the *previous* geocode (async gap). Otherwise almost every row looks
+    // "outside" the new radius and the list collapses to 0–1 facilities until geocode finishes.
+    setLocationCenterCoords(null);
 
     let cancelled = false;
     const apiKey = getGoogleMapsApiKey();
@@ -1057,7 +1617,7 @@ const CareExplorer = () => {
     return () => {
       cancelled = true;
     };
-  }, [filters.locationQuery, filters.zipCode, carrieLocationQuery]);
+  }, [appliedFilters.locationQuery, appliedFilters.zipCode, carrieLocationQuery]);
 
   useEffect(() => {
     if (fromCarrie || !API_BASE) return;
@@ -1090,7 +1650,100 @@ const CareExplorer = () => {
     console.log("[CareExplorer] Updated discover query:", query);
   }, [filters, carrieFilters, carrieLocationQuery]);
 
-  // Debounced live discover when filters change (same engine as Carrie / results.js).
+  useEffect(() => {
+    carrieBootstrapDiscoverDoneRef.current = false;
+  }, [fromCarrie, carrieLocationQuery, carrieZipCode, carrieMatches?.length]);
+
+  const runDiscoverRequest = useCallback(async (body, options = {}) => {
+    const silent =
+      typeof options.silent === "boolean" ? options.silent : AUTO_APPLY_FILTERS;
+    const signature = buildDiscoverRequestSignature(body);
+    const now = Date.now();
+    console.log(
+      "[CareExplorer] discover request (POST /api/facilities/discover → Caring.com + SilverAssist, not results.js):",
+      body,
+    );
+
+    const inflight = discoverInflightPromiseBySignatureRef.current.get(signature);
+    if (inflight) return inflight;
+
+    const cached = discoverCachedRowsBySignatureRef.current.get(signature);
+    if (
+      cached &&
+      Array.isArray(cached.rows) &&
+      now - cached.at < DISCOVER_DUPLICATE_WINDOW_MS
+    ) {
+      return cached.rows;
+    }
+
+    const runId = ++discoverRunIdRef.current;
+
+    if (discoverAbortControllerRef.current) {
+      discoverAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    discoverAbortControllerRef.current = controller;
+
+    const promise = (async () => {
+      if (!silent) {
+        setDiscoverLoading(true);
+      }
+      try {
+        const { data } = await apiClient.post("/api/facilities/discover", body, {
+          signal: controller.signal,
+        });
+        if (runId !== discoverRunIdRef.current) return null;
+        const rows = Array.isArray(data?.facilities) ? data.facilities : [];
+        console.log("[CareExplorer] discover response:", {
+          count: rows.length,
+          success: Boolean(data?.success),
+        });
+        const center = data?.search_center;
+        if (
+          center &&
+          Number.isFinite(Number(center.lat)) &&
+          Number.isFinite(Number(center.lng))
+        ) {
+          setLocationCenterCoords({
+            lat: Number(center.lat),
+            lng: Number(center.lng),
+          });
+        }
+        const normalized = rows.map(normalizeFacilityForCard);
+        discoverCachedRowsBySignatureRef.current.set(signature, {
+          at: Date.now(),
+          rows: normalized,
+        });
+        return normalized;
+      } catch (err) {
+        const cancelled =
+          axios.isCancel?.(err) || err?.name === "CanceledError" || err?.code === "ERR_CANCELED";
+        if (cancelled || runId !== discoverRunIdRef.current) return null;
+        const msg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          err?.message ||
+          "Request failed";
+        toast.error("Could not refresh listings", { description: String(msg) });
+        return null;
+      } finally {
+        if (discoverAbortControllerRef.current === controller) {
+          discoverAbortControllerRef.current = null;
+        }
+        discoverInflightPromiseBySignatureRef.current.delete(signature);
+        if (runId === discoverRunIdRef.current) {
+          if (!silent) {
+            setDiscoverLoading(false);
+          }
+        }
+      }
+    })();
+
+    discoverInflightPromiseBySignatureRef.current.set(signature, promise);
+    return promise;
+  }, []);
+
+  // Debounced live discover when filters change (POST /api/facilities/discover — external APIs only).
   useEffect(() => {
     if (skipDiscoverMountRef.current) {
       skipDiscoverMountRef.current = false;
@@ -1111,33 +1764,58 @@ const CareExplorer = () => {
       return;
     }
 
-    const runId = ++discoverRunIdRef.current;
     const timer = window.setTimeout(async () => {
-      setDiscoverLoading(true);
-      try {
-        const { data } = await apiClient.post("/api/facilities/discover", body);
-        if (runId !== discoverRunIdRef.current) return;
-        const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-        setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
-      } catch (err) {
-        if (runId !== discoverRunIdRef.current) return;
-        const msg =
-          err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          err?.message ||
-          "Request failed";
-        toast.error("Could not refresh listings", { description: String(msg) });
-      } finally {
-        if (runId === discoverRunIdRef.current) {
-          setDiscoverLoading(false);
-        }
+      const rows = await runDiscoverRequest(body);
+      if (!Array.isArray(rows)) return;
+      if (rows.length === 0) {
+        setDiscoverOverrideRows((prev) =>
+          Array.isArray(prev) && prev.length > 0 ? prev : [],
+        );
+        lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+        return;
       }
+      const nextMaxMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
+      const prevMaxMiles = Number.parseFloat(String(lastDiscoverMaxMilesRef.current || "").trim());
+      const nextIsFinite = Number.isFinite(nextMaxMiles);
+      const prevIsFinite = Number.isFinite(prevMaxMiles);
+      const ctxKey = discoverMergeContextKey(body);
+      const sameSearchPlace = lastDiscoverMergeContextKeyRef.current === ctxKey;
+      // Only merge when the user widens an already-applied radius (e.g. 25→50) for the **same**
+      // zip/location. First search with miles must replace — never merge into the public directory.
+      const shouldExpand =
+        sameSearchPlace &&
+        nextIsFinite &&
+        prevIsFinite &&
+        nextMaxMiles > prevMaxMiles;
+      const mergeOutcomeRef = { kind: "replace" };
+      setDiscoverOverrideRows((prev) => {
+        if (shouldExpand) {
+          const previousRows =
+            Array.isArray(prev) && prev.length > 0
+              ? prev
+              : lastDiscoverSnapshotForMergeRef.current.length > 0
+                ? lastDiscoverSnapshotForMergeRef.current
+                : [];
+          if (Array.isArray(previousRows) && previousRows.length > 0) {
+            mergeOutcomeRef.kind = "merge";
+            const merged = dedupeFacilities([...previousRows, ...rows]);
+            lastDiscoverSnapshotForMergeRef.current = merged;
+            return merged;
+          }
+        }
+        lastDiscoverSnapshotForMergeRef.current = rows;
+        return rows;
+      });
+      lastDiscoverMergeContextKeyRef.current = ctxKey;
+      if (mergeOutcomeRef.kind !== "merge") {
+        setPage(1);
+      }
+      lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
     }, 650);
 
     return () => window.clearTimeout(timer);
   }, [
-    filters.budgetMin,
-    filters.budgetMax,
+    ...(AUTO_APPLY_FILTERS ? [] : [filters.budgetMin, filters.budgetMax]),
     filters.zipCode,
     filters.locationQuery,
     filters.searchQuery,
@@ -1149,102 +1827,187 @@ const CareExplorer = () => {
     carrieFilters,
     carrieLocationQuery,
     fromCarrie,
+    runDiscoverRequest,
+  ]);
+
+  // One-time bootstrap when user comes from Carrie without precomputed matches.
+  useEffect(() => {
+    if (!fromCarrie) return;
+    if (carrieBootstrapDiscoverDoneRef.current) return;
+    if (Array.isArray(carrieMatches) && carrieMatches.length > 0) return;
+
+    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
+    const hasLocation = String(body.location || "").trim().length > 0;
+    const hasZip = String(body.zip_code || "").trim().length > 0;
+    if (!hasLocation && !hasZip) return;
+    if (!body.zip_code && hasLocation) {
+      body.zip_code = body.location;
+    }
+
+    carrieBootstrapDiscoverDoneRef.current = true;
+    runDiscoverRequest(body).then((rows) => {
+      if (Array.isArray(rows) && rows.length > 0) {
+        lastDiscoverSnapshotForMergeRef.current = rows;
+        lastDiscoverMergeContextKeyRef.current = discoverMergeContextKey(body);
+        setDiscoverOverrideRows(rows);
+        lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+        setPage(1);
+      }
+    });
+  }, [
+    fromCarrie,
+    carrieMatches,
+    filters,
+    carrieFilters,
+    carrieLocationQuery,
+    runDiscoverRequest,
   ]);
 
   const handleApplyFilters = async () => {
+    if (!hasPendingFilterChanges) return;
     hasUserTouchedFiltersRef.current = true;
-    setAppliedFilters(filters);
-    const body = buildDiscoverRequestBody(filters, carrieFilters, carrieLocationQuery);
-    if (!body.zip_code || !String(body.location || "").trim()) {
-      toast.error("Please provide a city/state and ZIP code to search.");
+
+    const zipDigits = String(filters.zipCode || "").replace(/\D/g, "").slice(0, 5);
+    if (zipDigits.length !== 5) {
+      toast.error("Please enter a valid 5-digit ZIP code, then click Apply Filters.");
       return;
     }
 
-    const runId = ++discoverRunIdRef.current;
+    setAppliedFilters(filters);
+    setLocationCenterCoords(null);
+    setDiscoverOverrideRows([]);
     setDiscoverLoading(true);
-    try {
-      const { data } = await apiClient.post("/api/facilities/discover", body);
-      if (runId !== discoverRunIdRef.current) return;
-      const rows = Array.isArray(data?.facilities) ? data.facilities : [];
-      setDiscoverOverrideRows(rows.map(normalizeFacilityForCard));
-    } catch (err) {
-      if (runId !== discoverRunIdRef.current) return;
-      const msg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        err?.message ||
-        "Request failed";
-      toast.error("Could not refresh listings", { description: String(msg) });
-    } finally {
-      if (runId === discoverRunIdRef.current) {
-        setDiscoverLoading(false);
+    discoverCachedRowsBySignatureRef.current.clear();
+    lastDiscoverMergeContextKeyRef.current = "";
+    lastDiscoverMaxMilesRef.current = "";
+
+    const body = buildDiscoverRequestBody(filters, {}, "", { sidebarOnly: true });
+    body.zip_code = zipDigits;
+    if (!String(body.location || "").trim()) {
+      body.location = zipDigits;
+    }
+
+    const rows = await runDiscoverRequest(body, { silent: false });
+    if (!rows) {
+      setDiscoverLoading(false);
+      return;
+    }
+
+    discoverApplyCompletedRef.current = true;
+    const appliedCarrieFilters = {
+      ...(location.state?.carrieFilters ?? carrieFilters ?? {}),
+      searchZipCode: zipDigits,
+      searchLocation: String(filters.locationQuery || "").trim() || zipDigits,
+      locationQuery: String(filters.locationQuery || "").trim(),
+    };
+    navigate(
+      { pathname: location.pathname, search: location.search },
+      {
+        replace: true,
+        state: {
+          fromCarrie: Boolean(fromCarrie),
+          carrieFilters: appliedCarrieFilters,
+        },
+      },
+    );
+
+    const ctxKey = discoverMergeContextKey(body);
+    const sameSearchPlace = lastDiscoverMergeContextKeyRef.current === ctxKey;
+    const nextMaxMiles = Number.parseFloat(String(filters.maxMiles || "").trim());
+    const prevMaxMiles = Number.parseFloat(String(appliedFilters.maxMiles || "").trim());
+    const nextIsFinite = Number.isFinite(nextMaxMiles);
+    const prevIsFinite = Number.isFinite(prevMaxMiles);
+    // Widen radius only for the same ZIP/location; a new ZIP always replaces results from the API.
+    const shouldExpand =
+      sameSearchPlace &&
+      nextIsFinite &&
+      prevIsFinite &&
+      nextMaxMiles > prevMaxMiles;
+    if (shouldExpand) {
+      const previousRows =
+        Array.isArray(discoverOverrideRows) && discoverOverrideRows.length > 0
+          ? discoverOverrideRows
+          : lastDiscoverSnapshotForMergeRef.current.length > 0
+            ? lastDiscoverSnapshotForMergeRef.current
+            : [];
+      if (Array.isArray(previousRows) && previousRows.length > 0) {
+        const merged = dedupeFacilities([...previousRows, ...rows]);
+        lastDiscoverSnapshotForMergeRef.current = merged;
+        lastDiscoverMergeContextKeyRef.current = ctxKey;
+        setDiscoverOverrideRows(merged);
+        lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+        return;
       }
     }
+    lastDiscoverSnapshotForMergeRef.current = rows;
+    lastDiscoverMergeContextKeyRef.current = ctxKey;
+    setDiscoverOverrideRows(rows);
+    lastDiscoverMaxMilesRef.current = String(filters.maxMiles || "").trim();
+    setPage(1);
   };
 
-  useEffect(() => {
-    if (discoverOverrideRows !== undefined) {
-      setPage(1);
-    }
-  }, [discoverOverrideRows]);
+  useEffect(
+    () => () => {
+      if (discoverAbortControllerRef.current) {
+        discoverAbortControllerRef.current.abort();
+      }
+    },
+    [],
+  );
 
   const scopedFacilities = useMemo(() => {
     if (scope !== "saved") return uniqueBaseFacilities;
     const favoriteSet = new Set(favoriteFacilityIds.map((id) => String(id)));
-    return uniqueBaseFacilities.filter((f) =>
+    const savedFromCurrentResults = uniqueBaseFacilities.filter((f) =>
       favoriteSet.has(String(f.key ?? f.facilityId ?? f.name)),
     );
-  }, [scope, uniqueBaseFacilities, favoriteFacilityIds]);
+    const savedFromDatabase = (favoriteFacilityDetails || [])
+      .filter((item) =>
+        favoriteSet.has(String(item?.facilityId || item?.id || item?.name || "")),
+      )
+      .map(normalizeSavedFacilityDetail);
+    return dedupeFacilities([...savedFromDatabase, ...savedFromCurrentResults]);
+  }, [scope, uniqueBaseFacilities, favoriteFacilityIds, favoriteFacilityDetails]);
 
   const filteredFacilities = useMemo(() => {
+    if (scope === "saved") return scopedFacilities;
     const q = String(activeFilters.searchQuery || "")
       .trim()
       .toLowerCase();
-    const locationQuery = String(activeFilters.locationQuery || carrieLocationQuery || "")
+    const effectiveLocation = buildEffectiveLocationQuery(
+      String(activeFilters.locationQuery || "").trim(),
+      activeFilters.zipCode,
+    )
+      .trim()
+      .toLowerCase();
+    const locationQuery = String(
+      activeFilters.locationQuery || carrieLocationQuery || "",
+    )
       .trim()
       .toLowerCase();
     const isZipOnlyLocationQuery = /^\d{5}$/.test(locationQuery);
     const maxMilesNum = Number.parseFloat(
       String(activeFilters.maxMiles || "").trim(),
     );
-    const budgetMin = Number(activeFilters.budgetMin) || 1000;
-    const budgetMax = Number(activeFilters.budgetMax) || 15000;
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
+    const budgetFilterActive = budgetMin !== 1000 || budgetMax < 15000;
     const selectedCare = new Set(
       (activeFilters.selectedCareTypes || []).map((x) => String(x).toLowerCase()),
     );
-    const selectedAmenities = (activeFilters.selectedAmenities || []).map((x) =>
+    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
       String(x).toLowerCase(),
     );
     const selectedAvailability = new Set(
       (activeFilters.selectedAvailability || []).map((x) => String(x).toLowerCase()),
     );
 
-    const getAmenityHits = (facility) => {
-      if (selectedAmenities.length === 0) return 0;
-      const pool = [
-        ...(facility.amenities || []).map(amenityText),
-        ...(facility.services || []).map(amenityText),
-        ...(facility.features || []).map(amenityText),
-        String(facility.description || ""),
-        String(facility.name || ""),
-      ]
-        .map((x) => normMatchToken(x))
-        .filter(Boolean);
-
-      return selectedAmenities.filter((a) => {
-        const variants = amenityMatchVariants(a);
-        if (variants.length === 0) return true;
-        return variants.some((want) =>
-          pool.some((p) => p.includes(want) || want.includes(p)),
-        );
-      }).length;
-    };
-
-    const matchesFacility = (facility, { amenityMode }) => {
+    const matchesFacility = (facility) => {
       const assistedOnlyLevels = [
         ...(facility.careLevels || []).map((x) => normMatchToken(x)),
         normMatchToken(facility.category),
       ].filter(Boolean);
+      const isPartner = isCareMatchPartnerListing(facility);
       const hasAssistedLiving = assistedOnlyLevels.some(
         (level) =>
           level.includes("assisted living") ||
@@ -1252,29 +2015,64 @@ const CareExplorer = () => {
           level.includes("retirement community") ||
           level.includes("assisted living facility"),
       );
-      if (!hasAssistedLiving) return false;
-
-      if (locationQuery && !isZipOnlyLocationQuery) {
-        // Use improved location matching that handles state names and abbreviations
-        if (!addressMatchesLocation(facility.address, locationQuery)) return false;
+      if (!hasAssistedLiving) {
+        const isCarrieResult =
+          fromCarrie ||
+          String(facility.sourcePlatform || "").toLowerCase().includes("ai discovery");
+        if (!isCarrieResult && !isPartner) return false;
       }
 
-      if (q) {
+      // Strict radius: only show communities with a verified distance <= max miles from search center.
+      // Partner (admin/CareMatch) listings in the searched ZIP stay visible even without map coords.
+      if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery: effectiveLocation || locationQuery,
+        });
+        if (!locationCenterCoords) {
+          if (!partnerInArea) return false;
+        } else {
+          const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
+          if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) {
+            if (!partnerInArea) return false;
+          }
+        }
+      } else if (effectiveLocation) {
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery: effectiveLocation || locationQuery,
+        });
+        if (!partnerInArea && !addressMatchesLocation(facility.address, effectiveLocation)) {
+          return false;
+        }
+      } else if (locationQuery && !isZipOnlyLocationQuery) {
+        const partnerInArea = partnerMatchesSearchArea(facility, {
+          zipCode: activeFilters.zipCode,
+          locationQuery,
+        });
+        if (!partnerInArea && !addressMatchesLocation(facility.address, locationQuery)) {
+          return false;
+        }
+      }
+
+      if (!ZIP_ONLY_DISCOVERY_MODE && q) {
         const text =
           `${facility.name || ""} ${facility.category || ""} ${facility.address || ""} ${(facility.features || []).join(" ")}`.toLowerCase();
         if (!text.includes(q)) return false;
       }
 
-      if (facility.priceMin != null || facility.priceMax != null) {
+      if (budgetFilterActive) {
         const low = facility.priceMin ?? facility.priceMax;
         const high = facility.priceMax ?? facility.priceMin;
-        if (low != null && high != null) {
-          const overlaps = low <= budgetMax && high >= budgetMin;
-          if (!overlaps) return false;
+        if (low == null || high == null) {
+          if (facilityHasCallForPricingDisplay(facility)) return true;
+          return false;
         }
+        const overlaps = low <= budgetMax && high >= budgetMin;
+        if (!overlaps) return false;
       }
 
-      if (selectedCare.size > 0) {
+      if (!ZIP_ONLY_DISCOVERY_MODE && selectedCare.size > 0) {
         const levels = [
           ...(facility.careLevels || []).map((x) => normMatchToken(x)),
           normMatchToken(facility.category),
@@ -1287,54 +2085,58 @@ const CareExplorer = () => {
         if (!hasCare) return false;
       }
 
-      if (selectedAmenities.length > 0) {
-        const hits = getAmenityHits(facility);
-        if (amenityMode === "all") {
-          if (hits !== selectedAmenities.length) return false;
-        } else if (amenityMode === "half") {
-          const threshold = Math.max(1, Math.ceil(selectedAmenities.length * 0.5));
-          if (hits < threshold) return false;
-        }
+      if (!facilityMeetsMustHaveAmenities(facility, selectedAmenities)) {
+        return false;
       }
 
-      if (selectedAvailability.size > 0) {
+      // Intake / Carrie pass move-in timing into discovery; facility rows rarely use the same
+      // labels ("Immediate" vs "Within 30 Days" vs empty). Filtering here zeroes the list.
+      if (!ZIP_ONLY_DISCOVERY_MODE && !fromCarrie && selectedAvailability.size > 0) {
         const a = String(facility.availability || "").toLowerCase();
         if (a && !selectedAvailability.has(a)) return false;
-      }
-
-      if (!Number.isNaN(maxMilesNum) && maxMilesNum > 0) {
-        const facilityMiles = computeFacilityMiles(facility, locationCenterCoords);
-        if (!Number.isNaN(facilityMiles) && facilityMiles > maxMilesNum)
-          return false;
       }
 
       return true;
     };
 
-    const strict = scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "all" }));
-    if (selectedAmenities.length > 0 && strict.length === 0) {
-      return scopedFacilities.filter((f) => matchesFacility(f, { amenityMode: "half" }));
-    }
-    return strict;
-  }, [activeFilters, scopedFacilities, carrieLocationQuery, locationCenterCoords]);
+    return scopedFacilities.filter((f) => matchesFacility(f));
+  }, [
+    activeFilters,
+    filters.budgetMin,
+    filters.budgetMax,
+    filters.selectedAmenities,
+    scopedFacilities,
+    scope,
+    carrieLocationQuery,
+    locationCenterCoords,
+    fromCarrie,
+  ]);
 
   const rankedFacilities = useMemo(() => {
-    const locationQuery = String(activeFilters.locationQuery || carrieLocationQuery || "")
+    const rankLocationText = buildEffectiveLocationQuery(
+      String(activeFilters.locationQuery || "").trim(),
+      activeFilters.zipCode,
+    )
       .trim()
       .toLowerCase();
+    const locationQuery =
+      rankLocationText ||
+      String(activeFilters.locationQuery || carrieLocationQuery || "")
+        .trim()
+        .toLowerCase();
     const searchQuery = String(activeFilters.searchQuery || "").trim().toLowerCase();
     const selectedCare = (activeFilters.selectedCareTypes || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const selectedAmenities = (activeFilters.selectedAmenities || []).map((x) =>
+    const selectedAmenities = (filters.selectedAmenities || []).map((x) =>
       String(x).toLowerCase(),
     );
     const selectedAvailability = (activeFilters.selectedAvailability || []).map((x) =>
       String(x).toLowerCase(),
     );
-    const budgetMin = Number(activeFilters.budgetMin) || 1000;
-    const budgetMax = Number(activeFilters.budgetMax) || 15000;
-    const sortBy = String(activeFilters.sortBy || "bestMatch");
+    const budgetMin = Number(filters.budgetMin) || 1000;
+    const budgetMax = Number(filters.budgetMax) || 15000;
+    const sortBy = String(filters.sortBy || "bestMatch");
 
     const getRelevanceScore = (facility) => {
       let score = 0;
@@ -1362,21 +2164,10 @@ const CareExplorer = () => {
       }
 
       if (selectedAmenities.length > 0) {
-        const pool = [
-          ...(facility.amenities || []).map(amenityText),
-          ...(facility.services || []).map(amenityText),
-          ...(facility.features || []).map(amenityText),
-          String(facility.description || ""),
-          String(facility.name || ""),
-        ]
-          .map((x) => normMatchToken(x))
-          .filter(Boolean);
-        const amenityHits = selectedAmenities.filter((want) => {
-          const variants = amenityMatchVariants(want);
-          return variants.some((v) =>
-            pool.some((p) => p.includes(v) || v.includes(p)),
-          );
-        }).length;
+        const pool = buildFacilityAmenitySearchPool(facility);
+        const amenityHits = selectedAmenities.filter((want) =>
+          amenityPreferenceMatches(pool, want),
+        ).length;
         score += (amenityHits / selectedAmenities.length) * 12;
       } else {
         score += 6;
@@ -1404,7 +2195,22 @@ const CareExplorer = () => {
 
     return filteredFacilities
       .map((facility) => {
-        const computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
+        let computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
+        const searchZip = String(activeFilters.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        const facilityZip = String(facility.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        // Same ZIP search: missing/bogus coords should read as local, not ~5000 miles to (0,0).
+        if (
+          searchZip &&
+          facilityZip &&
+          searchZip === facilityZip &&
+          (!Number.isFinite(computedDistanceMiles) || computedDistanceMiles > 50)
+        ) {
+          computedDistanceMiles = 0;
+        }
         return {
           ...facility,
           distanceMiles: Number.isFinite(computedDistanceMiles)
@@ -1433,6 +2239,10 @@ const CareExplorer = () => {
           const relevanceDiff = b.relevanceScore - a.relevanceScore;
           if (relevanceDiff !== 0) return relevanceDiff;
         } else {
+          // bestMatch: personalized % is the primary signal (matches card badge), then composite fit.
+          const matchDiff =
+            (Number(b.matchPercent) || 0) - (Number(a.matchPercent) || 0);
+          if (matchDiff !== 0) return matchDiff;
           const scoreDiff = b.relevanceScore - a.relevanceScore;
           if (scoreDiff !== 0) return scoreDiff;
           const qualityDiff = b.qualityScore - a.qualityScore;
@@ -1443,34 +2253,94 @@ const CareExplorer = () => {
         if (backendDiff !== 0) return backendDiff;
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
-  }, [filteredFacilities, activeFilters, carrieLocationQuery, locationCenterCoords]);
+  }, [
+    filteredFacilities,
+    activeFilters,
+    filters.sortBy,
+    filters.budgetMin,
+    filters.budgetMax,
+    filters.selectedAmenities,
+    carrieLocationQuery,
+    locationCenterCoords,
+  ]);
+
+  /** When these change, reset listing pagination. Budget is live-only and omitted so the slider does not jump pages. */
+  const listingPagingResetKey = useMemo(() => {
+    const a = appliedFilters;
+    const care = JSON.stringify([...(a.selectedCareTypes || [])].map(String).sort());
+    const avail = JSON.stringify([...(a.selectedAvailability || [])].map(String).sort());
+    const parts = [
+      String(a.locationQuery || "").trim().toLowerCase(),
+      String(a.zipCode || "").trim(),
+      String(a.maxMiles || "").trim(),
+      String(a.searchQuery || "").trim().toLowerCase(),
+      care,
+      avail,
+    ];
+    return parts.join("|");
+  }, [
+    appliedFilters.locationQuery,
+    appliedFilters.zipCode,
+    appliedFilters.maxMiles,
+    appliedFilters.searchQuery,
+    JSON.stringify([...(appliedFilters.selectedCareTypes || [])].map(String).sort()),
+    JSON.stringify([...(appliedFilters.selectedAvailability || [])].map(String).sort()),
+    ...(AUTO_APPLY_FILTERS ? [] : [appliedFilters.budgetMin, appliedFilters.budgetMax]),
+  ]);
+
+  const mustHaveAmenitiesPagingKey = useMemo(
+    () => JSON.stringify([...(filters.selectedAmenities || [])].map(String).sort()),
+    [filters.selectedAmenities],
+  );
 
   const mapFacilities = useMemo(
-    () =>
-      view === "map"
-        ? fromCarrie && liveFacilities
-          ? filteredFacilities
-          : scopedFacilities
-        : [],
-    [view, fromCarrie, liveFacilities, filteredFacilities, scopedFacilities],
+    () => (view === "map" ? rankedFacilities : []),
+    [view, rankedFacilities],
   );
 
   const visibleMapFacilities = useMemo(() => {
     if (!Array.isArray(mapFacilities)) return [];
-    if (
-      !Array.isArray(nearbyMapFacilityKeys) ||
-      nearbyMapFacilityKeys.length === 0
-    )
-      return [];
-    const allowed = new Set(nearbyMapFacilityKeys);
-    return mapFacilities.filter((f) => allowed.has(f.key));
-  }, [mapFacilities, nearbyMapFacilityKeys]);
+    return mapFacilities;
+  }, [mapFacilities]);
 
-  const pageSize = 5;
+  const updateMapCardsNavState = useCallback(() => {
+    const el = mapCardsScrollRef.current;
+    if (!el) {
+      setMapCardsNav({ canLeft: false, canRight: false });
+      return;
+    }
+    const maxScrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+    const canLeft = el.scrollLeft > 4;
+    const canRight = el.scrollLeft < maxScrollLeft - 4;
+    setMapCardsNav({ canLeft, canRight });
+  }, []);
+
+  useEffect(() => {
+    if (view !== "map") return;
+    const el = mapCardsScrollRef.current;
+    if (!el) return;
+    const onScroll = () => updateMapCardsNavState();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    updateMapCardsNavState();
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [view, visibleMapFacilities, updateMapCardsNavState]);
+
+  const scrollMapCardsBy = useCallback((direction) => {
+    const el = mapCardsScrollRef.current;
+    if (!el) return;
+    const delta = Math.max(260, Math.floor(el.clientWidth * 0.72));
+    el.scrollBy({ left: direction * delta, behavior: "smooth" });
+  }, []);
+
+  const pageSize = layout === "grid" ? 16 : 12;
   const matchCountForHeader = rankedFacilities.length;
   const locationLabelForHeader =
     buildEffectiveLocationQuery(
-      String(appliedFilters.locationQuery || "").trim() || carrieLocationQuery,
+      String(appliedFilters.locationQuery || "").trim(),
       appliedFilters.zipCode,
     ) ||
     String(appliedFilters.searchQuery || "").trim() ||
@@ -1481,8 +2351,8 @@ const CareExplorer = () => {
       : "senior living";
   const summaryBudgetText = `$${Number(appliedFilters.budgetMin || 1000).toLocaleString()}-$${Number(appliedFilters.budgetMax || 15000).toLocaleString()}/mo`;
   const summaryNeedsText =
-    appliedFilters.selectedAmenities.length > 0
-      ? appliedFilters.selectedAmenities.slice(0, 2).join(", ")
+    filters.selectedAmenities.length > 0
+      ? filters.selectedAmenities.slice(0, 2).join(", ")
       : "your selected preferences";
   const hasNonDefaultAvailability =
     appliedFilters.selectedAvailability.length > 0 &&
@@ -1516,10 +2386,10 @@ const CareExplorer = () => {
       value: `Within ${String(appliedFilters.maxMiles).trim()} miles`,
     });
   }
-  if (appliedFilters.selectedAmenities.length > 0) {
+  if (filters.selectedAmenities.length > 0) {
     promptCriteria.push({
       label: "Must-Have Needs",
-      value: appliedFilters.selectedAmenities.join(", "),
+      value: filters.selectedAmenities.join(", "),
     });
   }
   if (hasNonDefaultAvailability) {
@@ -1576,7 +2446,7 @@ const CareExplorer = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [filters]);
+  }, [listingPagingResetKey, filters.sortBy, mustHaveAmenitiesPagingKey]);
 
   useEffect(() => {
     if (view !== "map") {
@@ -1635,7 +2505,20 @@ const CareExplorer = () => {
     mapMarkersRef.current = [];
     setNearbyMapFacilityKeys([]);
 
-    const candidates = (mapFacilities || []).filter((f) => f.address).slice(0, 15);
+    const withCoords = [...(mapFacilities || [])].filter(
+      (f) =>
+        Number.isFinite(Number(f?.lat)) &&
+        Number.isFinite(Number(f?.lng)),
+    );
+    const withoutCoords = [...(mapFacilities || [])]
+      .filter(
+        (f) =>
+          (!Number.isFinite(Number(f?.lat)) ||
+            !Number.isFinite(Number(f?.lng))) &&
+          String(f?.address || "").trim(),
+      )
+      .slice(0, 40);
+    const candidates = [...withCoords, ...withoutCoords];
     if (candidates.length === 0) return;
 
     let cancelled = false;
@@ -1665,8 +2548,11 @@ const CareExplorer = () => {
           : f.address;
 
         let loc = null;
-        if (f.lat && f.lng) {
-          loc = { lat: () => f.lat, lng: () => f.lng };
+        if (
+          Number.isFinite(Number(f?.lat)) &&
+          Number.isFinite(Number(f?.lng))
+        ) {
+          loc = { lat: () => Number(f.lat), lng: () => Number(f.lng) };
         } else {
           let locFromCache = cache[queryStr];
           if (!locFromCache) {
@@ -1699,6 +2585,16 @@ const CareExplorer = () => {
               : undefined,
           });
 
+          marker.addListener("click", () => {
+            setSelectedFacilityKey(f.key);
+            mapInstanceRef.current?.panTo(latLng);
+            mapInstanceRef.current?.setZoom(15);
+            const cardEl = cardRefsMap.current[f.key];
+            if (cardEl) {
+              cardEl.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+            }
+          });
+
           placed.push({ marker, loc, key: f.key, latLng });
         }
       }
@@ -1712,7 +2608,11 @@ const CareExplorer = () => {
       setNearbyMapFacilityKeys(valid.map((x) => x.key));
       valid.forEach((x) => mapMarkersRef.current.push({ marker: x.marker, key: x.key }));
 
-      if (valid.length === 0) return;
+      if (valid.length === 0) {
+        mapInstanceRef.current.setCenter(DEFAULT_MAP_CENTER);
+        mapInstanceRef.current.setZoom(11);
+        return;
+      }
 
       const bounds = new window.google.maps.LatLngBounds();
       valid.forEach((x) => bounds.extend(x.latLng));
@@ -1724,7 +2624,21 @@ const CareExplorer = () => {
     return () => {
       cancelled = true;
     };
-  }, [view, mapsReady, mapFacilities, currentCoords, filters.maxMiles]);
+  }, [view, mapsReady, mapFacilities, currentCoords, appliedFilters.maxMiles]);
+
+  useEffect(() => {
+    if (!mapMarkersRef.current.length) return;
+    mapMarkersRef.current.forEach(({ marker, key }) => {
+      if (!marker) return;
+      if (key === selectedFacilityKey) {
+        marker.setZIndex(999);
+        marker.setAnimation(window.google?.maps?.Animation?.BOUNCE);
+        setTimeout(() => marker.setAnimation(null), 1400);
+      } else {
+        marker.setZIndex(undefined);
+      }
+    });
+  }, [selectedFacilityKey]);
 
   return (
     <>
@@ -1738,71 +2652,10 @@ const CareExplorer = () => {
           backgroundPosition: "145% 100%, center",
         }}
       >
-        {discoverLoading && (
-          <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white/60 px-4 py-8 backdrop-blur-sm">
-            <div
-              className="w-full max-w-lg rounded-3xl border border-[#E2E8F0] bg-white px-8 py-10 text-center shadow-xl sm:px-10 sm:py-12"
-              style={{
-                boxShadow:
-                  "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
-              }}
-            >
-              <div className="relative mb-8 flex h-24 items-center justify-center">
-                <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] animate-pulse">
-                  <MessageCircle className="h-9 w-9" />
-                </div>
-                <div
-                  className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "0ms" }}
-                >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
-                </div>
-                <div
-                  className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "180ms" }}
-                >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
-                </div>
-                <div
-                  className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "360ms" }}
-                >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
-                </div>
-                <div
-                  className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right"
-                  style={{ animationDelay: "540ms" }}
-                >
-                  <span className="h-2 w-2 rounded-full bg-[#00CFF4]" />
-                </div>
-              </div>
-              <h1 className="mb-3 text-2xl font-bold italic text-[#1D293D] sm:text-3xl">
-                Finding Your Matches...
-              </h1>
-              <p className="mx-auto mb-6 max-w-sm text-base text-[#64748b]">
-                {discoverThinkingMessages[discoverThinkingIndex]}
-              </p>
-              <ul className="mx-auto max-w-xs space-y-2 text-left text-[#334155]">
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Matching care needs...
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Checking availability...
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00CFF4]" aria-hidden />
-                  Calculating match scores....
-                </li>
-              </ul>
-              <div className="mt-7 flex items-center justify-center gap-2 text-sm text-slate-600">
-                <span className="h-4 w-4 rounded-full border-2 border-[#94a3b8]/40 border-t-[#00CFF4] animate-spin" />
-                Please wait
-              </div>
-            </div>
-          </div>
-        )}
+        <LoadingOverlay
+          open={discoverLoading}
+          subtitle={discoverThinkingMessages[discoverThinkingIndex]}
+        />
         <style jsx global>{`
           @keyframes careExplorerFloatLeftRight {
             0%, 100% {
@@ -1811,6 +2664,114 @@ const CareExplorer = () => {
             50% {
               transform: translateX(3px) translateY(-2px);
             }
+          }
+
+          @keyframes careExplorerIconFloatStrong {
+            0%, 100% {
+              transform: translateY(0px) translateX(0px) scale(1);
+            }
+            25% {
+              transform: translateY(-6px) translateX(2px) scale(1.05);
+            }
+            50% {
+              transform: translateY(-2px) translateX(5px) scale(1.1);
+            }
+            75% {
+              transform: translateY(4px) translateX(-1px) scale(1.03);
+            }
+          }
+
+          @keyframes careExplorerIconBounceStrong {
+            0%, 100% {
+              transform: translateY(0px) scale(1);
+            }
+            20% {
+              transform: translateY(-7px) scale(1.06);
+            }
+            40% {
+              transform: translateY(1px) scale(0.98);
+            }
+            60% {
+              transform: translateY(-4px) scale(1.04);
+            }
+            80% {
+              transform: translateY(0px) scale(1);
+            }
+          }
+
+          @keyframes careExplorerIconSpinStrong {
+            0% {
+              transform: rotate(0deg) scale(1);
+            }
+            40% {
+              transform: rotate(160deg) scale(1.08);
+            }
+            70% {
+              transform: rotate(280deg) scale(1.02);
+            }
+            100% {
+              transform: rotate(360deg) scale(1);
+            }
+          }
+
+          @keyframes careExplorerIconWobble {
+            0%, 100% {
+              transform: rotate(0deg) translateY(0px) scale(1);
+            }
+            15% {
+              transform: rotate(-12deg) translateY(-2px) scale(1.05);
+            }
+            30% {
+              transform: rotate(10deg) translateY(2px) scale(1.02);
+            }
+            45% {
+              transform: rotate(-8deg) translateY(-1px) scale(1.06);
+            }
+            60% {
+              transform: rotate(6deg) translateY(2px) scale(1.03);
+            }
+            75% {
+              transform: rotate(-4deg) translateY(-1px) scale(1.01);
+            }
+          }
+
+          @keyframes careExplorerIconRipple {
+            0% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0.45);
+            }
+            70% {
+              box-shadow: 0 0 0 14px rgba(0, 207, 244, 0);
+            }
+            100% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0);
+            }
+          }
+
+          .animate-icon-float-strong {
+            animation: careExplorerIconFloatStrong 1.45s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-bounce-strong {
+            animation: careExplorerIconBounceStrong 1.2s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-spin-strong {
+            animation: careExplorerIconSpinStrong 1.3s linear infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-wobble {
+            animation: careExplorerIconWobble 1.1s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-icon-ripple {
+            animation:
+              careExplorerIconFloatStrong 1.45s ease-in-out infinite,
+              careExplorerIconRipple 1.7s ease-out infinite;
+            will-change: transform, box-shadow;
           }
 
           .animate-float-left-right {
@@ -1827,7 +2788,7 @@ const CareExplorer = () => {
           onScopeChange={setScope}
           matchCount={matchCountForHeader}
           locationLabel={locationLabelForHeader}
-          isDiscoverLoading={discoverLoading}
+          isDiscoverLoading={showResultsLoading}
         />
 
         {/* How we matched - bordered card; responsive */}
@@ -1883,11 +2844,11 @@ const CareExplorer = () => {
                     <span className="font-semibold text-[#132329]">
                       {summaryBudgetText}
                     </span>
-                    {String(filters.maxMiles || "").trim() && (
+                    {String(appliedFilters.maxMiles || "").trim() && (
                       <>
                         , within{" "}
                         <span className="font-semibold text-[#132329]">
-                          {String(filters.maxMiles).trim()} miles
+                          {String(appliedFilters.maxMiles).trim()} miles
                         </span>
                       </>
                     )}
@@ -1930,10 +2891,20 @@ const CareExplorer = () => {
                   setFilters(nextFilters);
                 }}
                 onReset={() => {
+                  if (discoverAbortControllerRef.current) {
+                    discoverAbortControllerRef.current.abort();
+                    discoverAbortControllerRef.current = null;
+                  }
+                  discoverInflightPromiseBySignatureRef.current.clear();
+                  discoverCachedRowsBySignatureRef.current.clear();
+                  lastDiscoverSnapshotForMergeRef.current = [];
+                  lastDiscoverMergeContextKeyRef.current = "";
+                  carrieBootstrapDiscoverDoneRef.current = false;
                   discoverRunIdRef.current += 1;
                   hasUserTouchedFiltersRef.current = false;
                   setDiscoverLoading(false);
                   setDiscoverOverrideRows(undefined);
+                  lastDiscoverMaxMilesRef.current = "";
                   setFilters(initialFilters);
                   setAppliedFilters(initialFilters);
                 }}
@@ -1942,6 +2913,8 @@ const CareExplorer = () => {
                 onAskCarrie={handleAskCarrie}
                 onApplyFilters={handleApplyFilters}
                 isApplying={discoverLoading}
+                canApplyFilters={hasPendingFilterChanges}
+                hideApplyFiltersButton={AUTO_APPLY_FILTERS}
               />
             </div>
           </div>
@@ -1949,19 +2922,23 @@ const CareExplorer = () => {
           {view === "listing" ? (
             <div
               ref={listingTopRef}
-              className={`flex-1 min-w-0 w-full max-w-full lg:max-w-5xl ${layout === "single"
+              className={`flex-1 min-w-0 w-full max-w-full ${layout === "grid" ? "lg:max-w-none" : "lg:max-w-5xl"} ${layout === "single"
                 ? "space-y-3 sm:space-y-4"
                 : layout === "two"
-                  ? "grid grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
-                  : "grid grid-cols-2 min-[500px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 justify-items-center"
+                  ? "grid content-start items-start grid-cols-2 md:grid-cols-2 gap-3 sm:gap-4"
+                  : "grid content-start items-start grid-cols-1 min-[520px]:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4"
                 }`}
             >
-              {discoverLoading ? (
+              {showResultsLoading ? (
                 <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-8">
                   <div className="mx-auto max-w-xl rounded-3xl border border-[#00CFF4]/20 bg-gradient-to-br from-white to-[#F0FBFF] px-5 py-5 shadow-[0_12px_30px_rgba(15,23,42,0.08)] sm:px-6">
                     <div className="flex items-start gap-4">
                       <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#00CFF4]/15 text-[#00A8C8] shadow-[0_10px_24px_rgba(0,207,244,0.16)]">
-                        <MessageCircle className="h-5 w-5" aria-hidden />
+                        <img
+                          src="/assets/images/favicon/favicon.svg"
+                          alt="CareMatch"
+                          className="h-5 w-5 object-contain"
+                        />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
@@ -1979,7 +2956,9 @@ const CareExplorer = () => {
                           </div>
                         </div>
                         <p className="mt-1 text-sm text-slate-600">
-                          {discoverThinkingMessages[discoverThinkingIndex]}
+                          {discoverLoading
+                            ? discoverThinkingMessages[discoverThinkingIndex]
+                            : "Applying your filters and refreshing listings..."}
                         </p>
                         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[#E2E8F0]">
                           <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-[#00CFF4] via-[#60A5FA] to-[#818CF8] animate-pulse" />
@@ -1993,13 +2972,18 @@ const CareExplorer = () => {
                 <div
                   key={f.key ?? f.matchPercent}
                   className={
-                    layout !== "single" ? "min-w-0 overflow-hidden" : undefined
+                    layout === "grid"
+                      ? "min-w-0 w-full overflow-hidden"
+                      : layout !== "single"
+                        ? "min-w-0 overflow-hidden"
+                        : undefined
                   }
                 >
                   <FacilityCard
                     facilityId={f.key ?? f.facilityId ?? f.name}
                     matchPercent={f.matchPercent}
                     imageSrc={f.imageSrc}
+                    imageUrls={f.imageUrls}
                     name={f.name}
                     category={f.category}
                     rating={f.rating}
@@ -2011,10 +2995,15 @@ const CareExplorer = () => {
                     address={f.address}
                     zipCode={f.zipCode}
                     phone={f.phone}
+                    email={f.email}
                     website={f.website}
                     sourcePlatform={f.sourcePlatform}
                     isExternal={Boolean(f.isExternal)}
                     externalSourceUrl={f.externalSourceUrl}
+                    description={f.description}
+                    careLevels={f.careLevels}
+                    amenities={f.amenities}
+                    services={f.services}
                     compact={layout !== "single"}
                     gridView={layout === "grid"}
                     isFavorite={favoriteFacilityIds.includes(
@@ -2026,7 +3015,7 @@ const CareExplorer = () => {
                 ))
               )}
 
-              {!discoverLoading && listingItems.length === 0 && (
+              {!showResultsLoading && listingItems.length === 0 && (
                 <div className="col-span-full rounded-xl border border-[#E2E8F0] bg-white p-6 text-center text-sm text-[#64748b]">
                   No facilities available yet for the selected filters.
                 </div>
@@ -2092,25 +3081,47 @@ const CareExplorer = () => {
                     <div ref={mapContainerRef} className="flex-1 w-full min-h-[520px]" />
                   )}
                 </div>
-                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-hidden">
-                  <p className="text-sm font-semibold text-[#132329] mb-4">
+                <div className="rounded-2xl border border-[#E2E8F0] bg-white p-4 w-full overflow-x-hidden">
+                  <p className="text-sm font-semibold text-[#132329] mb-1">
                     Recommended Matches
                   </p>
-                  <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 snap-x scrollbar-hide">
-                    {(visibleMapFacilities || []).map((f) => (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => scrollMapCardsBy(-1)}
+                      disabled={!mapCardsNav.canLeft}
+                      className="absolute -left-2 sm:-left-3 top-1/2 z-30 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#00CFF4] bg-white text-[#00CFF4] shadow-[0_2px_10px_rgba(15,23,42,0.1)] transition-all hover:scale-105 hover:bg-[#F0FDFF] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#F1F5F9] disabled:text-[#94A3B8] disabled:opacity-70"
+                      aria-label="Show previous cards"
+                    >
+                      <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollMapCardsBy(1)}
+                      disabled={!mapCardsNav.canRight}
+                      className="absolute -right-2 sm:-right-3 top-1/2 z-30 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#00CFF4] bg-white text-[#00CFF4] shadow-[0_2px_10px_rgba(15,23,42,0.1)] transition-all hover:scale-105 hover:bg-[#F0FDFF] disabled:cursor-not-allowed disabled:border-[#CBD5E1] disabled:bg-[#F1F5F9] disabled:text-[#94A3B8] disabled:opacity-70"
+                      aria-label="Show next cards"
+                    >
+                      <ChevronRight className="h-4 w-4" strokeWidth={2.25} />
+                    </button>
+                    <div
+                      ref={mapCardsScrollRef}
+                      className="flex gap-3 sm:gap-4 overflow-x-auto pt-3 pb-4 snap-x scrollbar-hide"
+                    >
+                    {(visibleMapFacilities || []).map((f) => {
+                      const isSelected = selectedFacilityKey === f.key;
+                      return (
                       <div
                         key={`map-${f.key ?? f.matchPercent}`}
-                        className="w-[320px] snap-start flex-shrink-0 cursor-pointer transition-transform hover:scale-[1.03]"
+                        ref={(el) => { if (el) cardRefsMap.current[f.key] = el; }}
+                        className={`w-[320px] snap-start flex-shrink-0 cursor-pointer transition-all hover:scale-[1.03] rounded-2xl ${isSelected ? "ring-2 ring-[#00CFF4] ring-offset-2 scale-[1.02] shadow-lg" : ""}`}
                         onClick={(e) => {
                           if (e.target.closest('button') || e.target.closest('a')) return;
+                          setSelectedFacilityKey(f.key);
                           const markerObj = mapMarkersRef.current.find(m => m.key === f.key);
                           if (markerObj && markerObj.marker && mapInstanceRef.current) {
                             mapInstanceRef.current.panTo(markerObj.marker.getPosition());
                             mapInstanceRef.current.setZoom(15);
-                            markerObj.marker.setAnimation(window.google.maps.Animation.BOUNCE);
-                            setTimeout(() => {
-                              markerObj.marker.setAnimation(null);
-                            }, 2100);
                           }
                         }}
                       >
@@ -2118,6 +3129,7 @@ const CareExplorer = () => {
                           facilityId={f.key ?? f.facilityId ?? f.name}
                           matchPercent={f.matchPercent}
                           imageSrc={f.imageSrc}
+                          imageUrls={f.imageUrls}
                           name={f.name}
                           category={f.category}
                           rating={f.rating}
@@ -2129,10 +3141,15 @@ const CareExplorer = () => {
                           address={f.address}
                           zipCode={f.zipCode}
                           phone={f.phone}
+                          email={f.email}
                           website={f.website}
                           sourcePlatform={f.sourcePlatform}
                           isExternal={Boolean(f.isExternal)}
                           externalSourceUrl={f.externalSourceUrl}
+                          description={f.description}
+                          careLevels={f.careLevels}
+                          amenities={f.amenities}
+                          services={f.services}
                           compact
                           isFavorite={favoriteFacilityIds.includes(
                             String(f.key ?? f.facilityId ?? f.name),
@@ -2140,7 +3157,9 @@ const CareExplorer = () => {
                           onToggleFavorite={handleToggleFavorite}
                         />
                       </div>
-                    ))}
+                    );
+                    })}
+                    </div>
                   </div>
                 </div>
               </div>

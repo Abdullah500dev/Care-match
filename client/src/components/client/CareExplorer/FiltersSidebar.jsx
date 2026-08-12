@@ -12,66 +12,192 @@ import {
 
 // ─── Google Places Autocomplete Input ───────────────────────────────────────
 
+const getScrollParent = (node) => {
+  let parent = node?.parentElement;
+  while (parent && parent !== document.body) {
+    const style = window.getComputedStyle(parent);
+    const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
+    if (/(auto|scroll|overlay)/.test(overflow)) return parent;
+    parent = parent.parentElement;
+  }
+  return window;
+};
+
+const pickPacContainer = (inputEl) => {
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  if (pacContainers.length === 0) return null;
+  const visible = pacContainers.filter(
+    (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+  );
+  if (visible.length === 1) return visible[0];
+  if (visible.length > 1) {
+    const inputRect = inputEl.getBoundingClientRect();
+    return visible.reduce((best, pac) => {
+      const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+      const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+      return distance < bestDistance ? pac : best;
+    }, visible[0]);
+  }
+  return pacContainers[pacContainers.length - 1];
+};
+
+const syncPacContainer = (inputEl) => {
+  if (!inputEl) return;
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  const pac = pickPacContainer(inputEl);
+  if (!pac) return;
+  const rect = inputEl.getBoundingClientRect();
+  const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+  if (!isInViewport) {
+    hidePacContainers();
+    return;
+  }
+  // Keep dropdown aligned with input while page scrolls.
+  pac.style.position = "absolute";
+  pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+  pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+  pac.style.width = `${Math.round(rect.width)}px`;
+  pac.style.zIndex = "1001";
+  pac.style.display = "block";
+  pac.style.visibility = "visible";
+  pac.style.pointerEvents = "auto";
+  pac.dataset.owner = inputEl.id || "pac-input";
+  pacContainers.forEach((node) => {
+    if (node !== pac) {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    }
+  });
+};
+
+const hidePacContainers = () => {
+  const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+  pacContainers.forEach((node) => {
+    node.style.display = "none";
+    node.style.visibility = "hidden";
+    node.style.pointerEvents = "none";
+  });
+};
+
 function LocationAutocompleteInput({
   value,
   onChange,
   onPlaceSelected,
   placeholder,
   className,
+  onFocus,
 }) {
   const inputRef = useRef(null);
   const autocompleteRef = useRef(null);
-  const [ready, setReady] = useState(false);
+  const onChangeRef = useRef(onChange);
+  const onPlaceSelectedRef = useRef(onPlaceSelected);
 
-  // Load Maps + Places library once
+  // Keep refs fresh without re-running effects
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { onPlaceSelectedRef.current = onPlaceSelected; }, [onPlaceSelected]);
+
+  // Load Maps + attach autocomplete once
   useEffect(() => {
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) return;
-    loadGoogleMapsScript(apiKey)
-      .then(() => setReady(true))
-      .catch(() => {});
+
+    const attach = () => {
+      if (!inputRef.current || autocompleteRef.current) return;
+
+      const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
+        types: ["(regions)"],
+        fields: ["formatted_address", "name", "address_components", "geometry"],
+      });
+
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        const comps = place.address_components || [];
+        const locality    = comps.find((c) => c.types.includes("locality"))?.long_name || "";
+        const admin1Short = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
+        const admin1Long  = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name || "";
+        const country     = comps.find((c) => c.types.includes("country"))?.short_name || "";
+        let postalCode    = comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+
+        let label = "";
+        if (locality && admin1Short && country === "US") {
+          label = `${locality}, ${admin1Short}`;
+        } else if (admin1Long && country === "US") {
+          label = admin1Long;
+        } else {
+          label = place.name || place.formatted_address || "";
+        }
+
+        // Set label immediately
+        onChangeRef.current(label);
+
+        const finish = (zip) => {
+          onPlaceSelectedRef.current?.({
+            city: locality,
+            state: admin1Short || admin1Long,
+            zipCode: zip,
+            country,
+            label,
+          });
+        };
+
+        // Try to get ZIP via reverse geocode of place center
+        const latLng = place.geometry?.location;
+        if (!postalCode && latLng && country === "US") {
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode(
+            { location: { lat: latLng.lat(), lng: latLng.lng() } },
+            (results, status) => {
+              if (status === "OK" && results?.length) {
+                for (const r of results) {
+                  const z = r.address_components?.find((c) => c.types.includes("postal_code"))?.long_name || "";
+                  if (z.length === 5) { postalCode = z; break; }
+                }
+              }
+              finish(postalCode);
+              hidePacContainers();
+            }
+          );
+        } else {
+          finish(postalCode);
+          hidePacContainers();
+        }
+      });
+
+      autocompleteRef.current = ac;
+    };
+
+    if (window.google?.maps?.places?.Autocomplete) {
+      attach();
+    } else {
+      loadGoogleMapsScript(apiKey).then(attach).catch(() => {});
+    }
   }, []);
 
-  // Attach autocomplete once the library is ready and the input is mounted
   useEffect(() => {
-    if (!ready || !inputRef.current || autocompleteRef.current) return;
-
-    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
-      types: ["(regions)"],          // cities, states, countries
-      fields: ["formatted_address", "name", "address_components"],
-    });
-
-    ac.addListener("place_changed", () => {
-      const place = ac.getPlace();
-      // Build a clean "City, ST" or "State" string from components
-      let label = "";
-      const comps = place.address_components || [];
-      const locality      = comps.find((c) => c.types.includes("locality"))?.long_name;
-      const admin1Short   = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name;
-      const admin1Long    = comps.find((c) => c.types.includes("administrative_area_level_1"))?.long_name;
-      const country       = comps.find((c) => c.types.includes("country"))?.short_name;
-      const postalCode    = comps.find((c) => c.types.includes("postal_code"))?.long_name;
-
-      if (locality && admin1Short && country === "US") {
-        label = `${locality}, ${admin1Short}`;
-      } else if (admin1Long && country === "US") {
-        label = admin1Long;
-      } else {
-        label = place.name || place.formatted_address || "";
+    const inputEl = inputRef.current;
+    if (!inputEl) return undefined;
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
       }
-
-      onChange(label);
-
-      onPlaceSelected?.({
-        city: locality || "",
-        state: admin1Short || admin1Long || "",
-        zipCode: postalCode || "",
-        country: country || "",
-      });
-    });
-
-    autocompleteRef.current = ac;
-  }, [ready, onChange, onPlaceSelected]);
+      syncPacContainer(inputEl);
+    };
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
+    };
+  }, []);
 
   return (
     <div className="relative">
@@ -81,13 +207,21 @@ function LocationAutocompleteInput({
         type="text"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChangeRef.current(e.target.value);
+          syncPacContainer(inputRef.current);
+        }}
+        onFocus={() => {
+          onFocus?.(inputRef.current);
+          syncPacContainer(inputRef.current);
+        }}
+        onBlur={() => hidePacContainers()}
         className={`w-full pl-9 pr-8 h-10 rounded-lg border border-[#E2E8F0] bg-white text-sm text-[#364153] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40 focus:border-[#00CFF4] transition-colors ${className ?? ""}`}
       />
       {value && (
         <button
           type="button"
-          onClick={() => onChange("")}
+          onClick={() => onChangeRef.current("")}
           className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#94a3b8] hover:text-[#364153] transition-colors"
           aria-label="Clear location"
         >
@@ -144,6 +278,8 @@ const FiltersSidebar = ({
   onAskCarrie,
   onApplyFilters,
   isApplying = false,
+  canApplyFilters = true,
+  hideApplyFiltersButton = false,
 }) => {
   const DEFAULT_AMENITIES_VISIBLE = 12;
 
@@ -162,41 +298,218 @@ const FiltersSidebar = ({
   const [showAllAmenities, setShowAllAmenities] = useState(false);
   const lastAutofillZipRef = useRef("");
   const lastAutofillLocationRef = useRef("");
+  const lastAutofillZipFromLocationRef = useRef("");
+  const zipInputRef = useRef(null);
+  const maxMilesInputRef = useRef(null);
+  const zipAutocompleteRef = useRef(null);
+  const activePacInputRef = useRef(null);
+  const latestFiltersRef = useRef(filters);
 
+  useEffect(() => {
+    latestFiltersRef.current = filters;
+  }, [filters]);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (!activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        syncPacContainer(activePacInputRef.current);
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleDocumentMouseDown = (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".pac-container")) {
+        window.setTimeout(() => hidePacContainers(), 0);
+        return;
+      }
+      if (target.closest("#zipCode")) return;
+      hidePacContainers();
+    };
+    document.addEventListener("mousedown", handleDocumentMouseDown, true);
+    return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
+    };
+  }, []);
+
+  // ZIP input autocomplete (suggestions + autofill city/state)
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey || !zipInputRef.current) return;
+    let cancelled = false;
+
+    const attachAutocomplete = () => {
+      if (cancelled || !zipInputRef.current || !window.google?.maps?.places) return;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+      zipAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        zipInputRef.current,
+        {
+          types: ["geocode"],
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "formatted_address", "geometry", "name"],
+        },
+      );
+      zipAutocompleteRef.current.addListener("place_changed", () => {
+        if (cancelled) return;
+        const place = zipAutocompleteRef.current.getPlace();
+        const comps = place?.address_components || [];
+        const postalCode =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        const nextLocation = city && state ? `${city}, ${state}` : "";
+        if (postalCode.length === 5) {
+          lastAutofillZipRef.current = postalCode;
+        }
+        if (nextLocation) {
+          lastAutofillLocationRef.current = nextLocation;
+        }
+        setFilters({
+          ...(postalCode.length === 5 ? { zipCode: postalCode } : {}),
+          ...(nextLocation ? { locationQuery: nextLocation } : {}),
+        });
+        hidePacContainers();
+      });
+    };
+
+    if (window.google?.maps?.places?.Autocomplete) {
+      attachAutocomplete();
+    } else {
+      loadGoogleMapsScript(apiKey).then(attachAutocomplete).catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const inputEl = zipInputRef.current;
+    if (!inputEl) return undefined;
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer(inputEl);
+    };
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
+    };
+  }, []);
+
+  // ZIP → City/State (skip if locationQuery was just set by autocomplete selection)
   useEffect(() => {
     const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
     if (zip.length !== 5) return;
 
+    if (lastAutofillZipRef.current === zip) return;
+
+    // If the city field already has a value from autocomplete selection, don't overwrite it
+    const currentLocation = String(locationQuery || "").trim();
+    if (currentLocation && lastAutofillLocationRef.current === currentLocation) return;
+
     const apiKey = getGoogleMapsApiKey();
     if (!apiKey) return;
-    if (!window.google?.maps?.Geocoder) return;
-
-    const shouldAutofillLocation =
-      !String(locationQuery || "").trim() ||
-      (lastAutofillZipRef.current === zip &&
-        lastAutofillLocationRef.current === String(locationQuery || ""));
-    if (!shouldAutofillLocation) return;
 
     lastAutofillZipRef.current = zip;
 
-    const geocoder = new window.google.maps.Geocoder();
-    geocoder.geocode({ address: zip }, (results, status) => {
-      if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
-      const comps = results[0]?.address_components || [];
-      const city =
-        comps.find((c) => c.types.includes("locality"))?.long_name ||
-        comps.find((c) => c.types.includes("postal_town"))?.long_name ||
-        comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
-        "";
-      const state = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
-      const country = comps.find((c) => c.types.includes("country"))?.short_name || "";
+    const doGeocode = () => {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: zip }, (results, status) => {
+        if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
+        const comps = results[0]?.address_components || [];
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state = comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name || "";
+        const country = comps.find((c) => c.types.includes("country"))?.short_name || "";
 
-      if (!city || !state || country !== "US") return;
-      const nextLocation = `${city}, ${state}`;
-      lastAutofillLocationRef.current = nextLocation;
-      setFilters({ locationQuery: nextLocation });
-    });
-  }, [zipCode, locationQuery]);
+        if (!city || !state || country !== "US") return;
+        const nextLocation = `${city}, ${state}`;
+        lastAutofillLocationRef.current = nextLocation;
+        setFilters({ locationQuery: nextLocation });
+      });
+    };
+
+    if (window.google?.maps?.Geocoder) {
+      doGeocode();
+    } else {
+      loadGoogleMapsScript(apiKey).then(doGeocode).catch(() => {});
+    }
+  }, [zipCode]);
+
+  // City/State → ZIP (fill ZIP when user only provides a city)
+  useEffect(() => {
+    const locationValue = String(locationQuery || "").trim();
+    const zip = String(zipCode || "").replace(/\D/g, "").slice(0, 5);
+    if (!locationValue || zip.length === 5) return;
+
+    if (lastAutofillZipFromLocationRef.current === locationValue) return;
+
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey) return;
+
+    lastAutofillZipFromLocationRef.current = locationValue;
+
+    const doGeocode = () => {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: locationValue }, (results, status) => {
+        if (status !== "OK" || !Array.isArray(results) || results.length === 0) return;
+        for (const result of results) {
+          const postalCode =
+            result?.address_components?.find((c) => c.types.includes("postal_code"))
+              ?.long_name || "";
+          if (postalCode.length === 5) {
+            lastAutofillZipRef.current = postalCode;
+            setFilters({ zipCode: postalCode });
+            return;
+          }
+        }
+      });
+    };
+
+    if (window.google?.maps?.Geocoder) {
+      doGeocode();
+    } else {
+      loadGoogleMapsScript(apiKey).then(doGeocode).catch(() => {});
+    }
+  }, [locationQuery, zipCode]);
+
 
   const normalizedAmenityOptions = [...new Set(
     amenityOptions
@@ -212,7 +525,7 @@ const FiltersSidebar = ({
     );
 
   const setFilters = (patch) => {
-    onFiltersChange?.({ ...filters, ...patch });
+    onFiltersChange?.({ ...(latestFiltersRef.current || {}), ...patch });
   };
 
   return (
@@ -220,7 +533,9 @@ const FiltersSidebar = ({
       <div className="rounded-xl border border-[#F7F4EF] bg-white p-2.5 sm:p-4 font-['Rethink_Sans'] font-medium" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06), 0 0 0 1px rgba(230,225,215,0.15)" }}>
         <h3 className="hidden lg:block font-semibold text-sm text-[#364153] mb-1">Filters</h3>
         <p className="hidden lg:block text-xs text-[#64748b] mb-3 leading-relaxed">
-          Add a city plus ZIP for the strongest match, set a travel radius, and include custom needs like accessibility or lifestyle preferences to refresh ranked results automatically.
+          {hideApplyFiltersButton
+            ? "Location, ZIP, budget, and distance refresh results as you change them (brief pause while we search). Sort order and must-have amenities refine the list you already have."
+            : "Enter a 5-digit ZIP (city/state helps), set max distance (miles), then click Apply Filters to load communities for that ZIP from our live directory. Budget, sort, and must-have amenities refine those results as you change them."}
         </p>
 
         {/* Location autocomplete */}
@@ -229,14 +544,20 @@ const FiltersSidebar = ({
             placeholder="City or state"
             value={locationQuery}
             onChange={(val) => setFilters({ locationQuery: val })}
+            onFocus={(inputEl) => {
+              activePacInputRef.current = inputEl;
+            }}
             onPlaceSelected={(payload) => {
-              const incomingZip = String(payload?.zipCode || "")
-                .replace(/\D/g, "")
-                .slice(0, 5);
-              if (incomingZip.length === 5) {
-                lastAutofillZipRef.current = incomingZip;
-                setFilters({ zipCode: incomingZip });
-              }
+              const incomingZip = String(payload?.zipCode || "").replace(/\D/g, "").slice(0, 5);
+              const incomingLabel = String(payload?.label || "").trim();
+              // Mark refs FIRST so the ZIP→city useEffect skips overwriting
+              if (incomingZip.length === 5) lastAutofillZipRef.current = incomingZip;
+              if (incomingLabel) lastAutofillLocationRef.current = incomingLabel;
+              // Set both atomically in one filter update
+              setFilters({
+                ...(incomingZip.length === 5 ? { zipCode: incomingZip } : {}),
+                ...(incomingLabel ? { locationQuery: incomingLabel } : {}),
+              });
             }}
           />
         </div>
@@ -249,27 +570,54 @@ const FiltersSidebar = ({
             inputMode="numeric"
             maxLength={5}
             placeholder="e.g. 32811"
+            ref={zipInputRef}
             value={zipCode}
-            onChange={(e) =>
+            onFocus={() => {
+              activePacInputRef.current = zipInputRef.current;
+              syncPacContainer(zipInputRef.current);
+            }}
+            onBlur={() => hidePacContainers()}
+            onChange={(e) => {
+              activePacInputRef.current = zipInputRef.current;
+              lastAutofillLocationRef.current = "";
+              lastAutofillZipRef.current = "";
               setFilters({
                 zipCode: String(e.target.value || "")
                   .replace(/\D/g, "")
                   .slice(0, 5),
-              })}
+              });
+              syncPacContainer(zipInputRef.current);
+            }}
             className="h-10 rounded-lg border-[#E2E8F0]"
           />
         </div>
 
         <p className="text-xs text-[#20252c] font-bold mb-2">How far are you willing to travel?</p>
-        <Input
-          id="maxDistance"
-          type="text"
-          inputMode="numeric"
-          placeholder="Max distance (miles)"
-          value={maxMiles}
-          onChange={(e) => setFilters({ maxMiles: e.target.value })}
-          className="h-10 rounded-lg border-[#E2E8F0] mb-4"
-        />
+        <div
+          role="presentation"
+          className="mb-4 flex h-10 cursor-text items-center gap-1.5 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm focus-within:border-[#00CFF4] focus-within:ring-2 focus-within:ring-[#00CFF4]/40"
+          onMouseDown={(e) => {
+            // Focus the input when clicking empty padding or the "miles" label
+            if (e.target === maxMilesInputRef.current) return;
+            e.preventDefault();
+            maxMilesInputRef.current?.focus();
+          }}
+        >
+          <input
+            ref={maxMilesInputRef}
+            id="maxDistance"
+            type="text"
+            inputMode="numeric"
+            placeholder="25"
+            value={maxMiles}
+            onChange={(e) => setFilters({ maxMiles: e.target.value })}
+            className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-[#364153] outline-none placeholder:text-[#94a3b8]"
+            aria-label="Maximum travel distance in miles"
+          />
+          <span className="shrink-0 text-[#364153] pointer-events-none select-none">
+            miles
+          </span>
+        </div>
 
         <div className="mb-4">
           <p className="text-xs text-[#20252c] font-bold mb-2">Rank Results By</p>
@@ -289,7 +637,7 @@ const FiltersSidebar = ({
         <BudgetRangeSlider
           budgetMin={budgetMin}
           budgetMax={budgetMax}
-          min={1000}
+          min={500}
           max={15000}
           step={100}
           onRangeChange={(minVal, maxVal) => {
@@ -316,6 +664,9 @@ const FiltersSidebar = ({
             </span>
           )}
         </div>
+        <p className="text-[11px] text-[#64748b] mb-2 leading-snug">
+          Narrows the communities already on screen; does not fetch a new list.
+        </p>
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-2.5">
           {visibleAmenities.map((item) => (
             <label
@@ -347,10 +698,11 @@ const FiltersSidebar = ({
           </button>
         )}
 
+        {!hideApplyFiltersButton && (
         <button
           type="button"
           onClick={() => onApplyFilters?.()}
-          disabled={isApplying}
+          disabled={isApplying || !canApplyFilters}
           className="mt-5 w-full py-2.5 px-4 rounded-xl bg-[#00CFF4] hover:bg-[#00b8d8] text-white text-sm font-medium transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
         >
           {isApplying ? (
@@ -362,11 +714,12 @@ const FiltersSidebar = ({
             "Apply Filters"
           )}
         </button>
+        )}
 
         <button
           type="button"
           onClick={onReset}
-          className="mt-3 w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium"
+          className={`${hideApplyFiltersButton ? "mt-5" : "mt-3"} w-full py-2.5 px-4 rounded-xl border-[1.5px] border-[#00CFF4] bg-white text-[#00CFF4] text-sm font-medium`}
         >
           Reset All Filters
         </button>

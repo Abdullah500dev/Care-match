@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import SEO from "../../../components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,12 +12,14 @@ const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
 
 export default function Register() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [form, setForm] = useState({
     fullName: "",
     email: "",
     password: "",
     confirmPassword: "",
+    role: "user",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -28,14 +30,15 @@ export default function Register() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [errors, setErrors] = useState({});
   const showActivationCard = Boolean(pendingEmail);
+  const fromState = location.state?.from;
  
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
-    const emailFromQuery = (searchParams.get("email") || "").trim();
-    const codeFromQuery = (searchParams.get("code") || "").trim();
+    const emailFromQuery = (searchParams.get("email") || "").trim().toLowerCase();
+    const codeFromQuery = (searchParams.get("code") || "").replace(/\D/g, "").trim();
     const activateFromQuery = (searchParams.get("activate") || "").trim();
     const copyFromQuery = (searchParams.get("copy") || "").trim();
     if (!emailFromQuery && !codeFromQuery) return;
@@ -94,7 +97,14 @@ export default function Register() {
 
       copyWithFallback();
     }
-  }, [searchParams]);
+
+    // Remove code from the URL so an old link cannot overwrite a newly resent code.
+    if (codeFromQuery || activateFromQuery || copyFromQuery) {
+      navigate("/register", { replace: true, state: { from: fromState } });
+    }
+    // Run once on mount for the initial query string only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!pendingEmail) return;
@@ -124,7 +134,7 @@ export default function Register() {
             "Account activated",
             "Your account was activated successfully. Please sign in to continue."
           );
-          navigate("/signin", { state: nextState });
+          navigate("/signin", { state: { ...nextState, from: fromState } });
           return;
         }
       } catch {
@@ -155,6 +165,16 @@ export default function Register() {
     });
   };
 
+  const handleRoleChange = (role) => {
+    setForm((prev) => ({ ...prev, role }));
+    setErrors((prev) => {
+      if (!prev.role) return prev;
+      const next = { ...prev };
+      delete next.role;
+      return next;
+    });
+  };
+
   const validateForm = () => {
     const nextErrors = {};
 
@@ -163,6 +183,9 @@ export default function Register() {
       nextErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       nextErrors.email = "Enter a valid email address";
+    }
+    if (!["user", "facility"].includes(form.role)) {
+      nextErrors.role = "Please select an account type";
     }
     if (!form.password) nextErrors.password = "Password is required";
     if (!form.confirmPassword) nextErrors.confirmPassword = "Confirm password is required";
@@ -195,19 +218,27 @@ export default function Register() {
         email: form.email,
         password: form.password,
         confirmPassword: form.confirmPassword,
+        role: form.role === "facility" ? "facility" : "user",
       });
       sessionStorage.setItem(
         SIGNUP_PREFILL_KEY,
         JSON.stringify({
           email: form.email,
           password: form.password,
+          role: form.role,
         })
       );
       setPendingEmail(form.email);
+      const codeFromApi = String(response?.data?.verificationCode || "").trim();
+      if (codeFromApi) {
+        setActivationCode(codeFromApi);
+      }
       toastAuthSuccess(
         "Account created",
-        response?.data?.message ||
-          "We sent a 6-digit verification code to your email. Enter it below to activate your account."
+        codeFromApi
+          ? `Verification code ready: ${codeFromApi}. Enter it below (also check email / spam).`
+          : response?.data?.message ||
+              "We sent a 6-digit verification code to your email. Enter it below to activate your account."
       );
     } catch (error) {
       toastAuthError(error, {
@@ -222,7 +253,9 @@ export default function Register() {
 
   const handleActivateAccount = async (e) => {
     e.preventDefault();
-    if (!pendingEmail || !activationCode) {
+    const normalizedCode = String(activationCode || "").replace(/\D/g, "").trim();
+    const normalizedEmail = String(pendingEmail || "").trim().toLowerCase();
+    if (!normalizedEmail || !normalizedCode) {
       setActivationError("Verification code is required");
       toastAuthError(
         { response: { status: 400, data: { message: "Verification code is required." } } },
@@ -230,33 +263,45 @@ export default function Register() {
       );
       return;
     }
+    if (!/^\d{6}$/.test(normalizedCode)) {
+      setActivationError("Enter the latest 6-digit code");
+      toastAuthError(
+        { response: { status: 400, data: { message: "Verification code must be 6 digits." } } },
+        { fallbackTitle: "Invalid verification code" }
+      );
+      return;
+    }
 
     try {
       setActivationError("");
       setIsVerifying(true);
-      const response = await authServices.activate({ email: pendingEmail, code: activationCode });
+      const response = await authServices.activate({
+        email: normalizedEmail,
+        code: normalizedCode,
+      });
       toastAuthSuccess(
         "Account verified",
         response?.data?.message || "Your account is active. You can now sign in."
       );
       const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
-      let nextState = { email: pendingEmail };
+      let nextState = { email: normalizedEmail };
       if (savedPrefill) {
         try {
           const parsed = JSON.parse(savedPrefill);
           nextState = {
-            email: parsed?.email || pendingEmail,
+            email: parsed?.email || normalizedEmail,
             password: parsed?.password || "",
           };
         } catch {
           // Ignore parsing errors and continue with email only.
         }
       }
-      navigate("/signin", { state: nextState });
+      navigate("/signin", { state: { ...nextState, from: fromState } });
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Verification failed",
-        fallbackDescription: "Please check the 6-digit code and try again.",
+        fallbackDescription:
+          "Use the newest 6-digit code from your latest email. Older codes stop working after you resend.",
       });
     } finally {
       setIsVerifying(false);
@@ -266,10 +311,22 @@ export default function Register() {
   const handleResendCode = async () => {
     if (!pendingEmail) return;
     try {
-      const response = await authServices.resendVerificationCode({ email: pendingEmail });
+      const response = await authServices.resendVerificationCode({
+        email: String(pendingEmail).trim().toLowerCase(),
+      });
+      const codeFromApi = String(response?.data?.verificationCode || "")
+        .replace(/\D/g, "")
+        .trim();
+      // Clear any stale code so the user enters (or we prefill) the newest one only.
+      setActivationCode(codeFromApi || "");
+      setActivationError("");
+      navigate("/register", { replace: true, state: { from: fromState } });
       toastAuthSuccess(
         "Code resent",
-        response?.data?.message || "We sent a new verification code to your email."
+        codeFromApi
+          ? `New code: ${codeFromApi}. Older codes no longer work.`
+          : response?.data?.message ||
+              "We sent a new verification code. Use only the newest email — older codes expire when you resend."
       );
     } catch (error) {
       toastAuthError(error, {
@@ -295,7 +352,7 @@ export default function Register() {
                 Create Your Account
               </h1>
               <p className="mt-2 text-sm text-[#64748b] sm:text-base">
-                Join CareMatch AI to save preferences and track your search.
+                Join CareMatch AI as a family member or a facility partner.
               </p>
             </div>
 
@@ -311,6 +368,63 @@ export default function Register() {
                   }}
                 >
                   <form onSubmit={handleSubmit} className="space-y-5">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-normal text-[#314158]">
+                        Account Type
+                      </Label>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition ${
+                            form.role === "user"
+                              ? "border-[#00b8db] bg-[#00b8db]/5 ring-1 ring-[#00b8db]/40"
+                              : "border-[#E2E8F0] bg-white hover:border-[#cbd5e1]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="role"
+                            value="user"
+                            checked={form.role === "user"}
+                            onChange={() => handleRoleChange("user")}
+                            className="mt-1 h-4 w-4 accent-[#00b8db]"
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-[#0f172a]">
+                              User
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#64748b]">
+                              Search &amp; save communities
+                            </span>
+                          </span>
+                        </label>
+                        <label
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-3 transition ${
+                            form.role === "facility"
+                              ? "border-[#00b8db] bg-[#00b8db]/5 ring-1 ring-[#00b8db]/40"
+                              : "border-[#E2E8F0] bg-white hover:border-[#cbd5e1]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="role"
+                            value="facility"
+                            checked={form.role === "facility"}
+                            onChange={() => handleRoleChange("facility")}
+                            className="mt-1 h-4 w-4 accent-[#00b8db]"
+                          />
+                          <span>
+                            <span className="block text-sm font-semibold text-[#0f172a]">
+                              Facility
+                            </span>
+                            <span className="mt-0.5 block text-xs text-[#64748b]">
+                              Manage your community listing
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                      {errors.role && <p className="text-red-500 text-sm mt-1">{errors.role}</p>}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="fullName" className="text-sm font-normal text-[#314158]">
                         Full Name
@@ -414,7 +528,7 @@ export default function Register() {
 
                     <p className="text-center text-sm text-[#64748b]">
                       Already have an account?{" "}
-                      <Link to="/signin" className="underline text-[#00b8db]">
+                      <Link to="/signin" state={{ from: fromState }} className="underline text-[#00b8db]">
                         Sign In
                       </Link>
                     </p>
@@ -444,18 +558,24 @@ export default function Register() {
                         id="activationCode"
                         name="activationCode"
                         value={activationCode}
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
                         onChange={(e) => {
-                          setActivationCode(e.target.value);
+                          setActivationCode(e.target.value.replace(/\D/g, "").slice(0, 6));
                           if (activationError) setActivationError("");
                         }}
                         placeholder="123456"
-                        className={`h-11 rounded-xl border text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
+                        className={`h-11 rounded-xl border text-center text-lg tracking-[0.35em] text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329] ${
                           activationError ? "border-red-400 ring-1 ring-red-300" : "border-[#E2E8F0]"
                         }`}
                       />
                       {activationError && (
                         <p className="text-red-500 text-sm mt-1 text-left">{activationError}</p>
                       )}
+                      <p className="text-xs text-slate-500">
+                        After resend, only the newest code works. Ignore older emails.
+                      </p>
                     </div>
 
                     <Button

@@ -1,3 +1,7 @@
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+
 /** @type {import('tailwindcss').Config} */
 export default {
 	darkMode: ['class'],
@@ -78,16 +82,14 @@ export default {
 						height: '0'
 					}
 				},
-				/** 💡 ADDED: floatLeftRight keyframes */
 				'float-left-right': {
 					'0%, 100%': { transform: 'translateX(0)' },
-					'50%': { transform: 'translateX(20px)' } // adjust distance as needed
+					'50%': { transform: 'translateX(20px)' }
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				/** 💡 ADDED: floatLeftRight animation */
 				'float-left-right': 'float-left-right 2s ease-in-out infinite'
 			}
 		}

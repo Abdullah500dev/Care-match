@@ -3,54 +3,17 @@ import { Bot, Circle, MessageSquare, Search, Send, User } from "lucide-react";
 import { toast } from "sonner";
 import SEO from "@/components/common/SEO";
 import { sendChatMessages } from "@/services/chatService";
+import {
+  loadMessageThreads,
+  saveMessageThreads,
+} from "@/lib/userDashboardMessages";
 
 const CARRIE_WELCOME =
   "Hi — I’m Carrie. I’ll walk through care level, amenities, budget, how far you can go, visitation, and personality, then show ranked options with plain-English ✓ reasons.";
 
-const THREADS = [
-  {
-    id: 1,
-    name: "Carrie — AI Advisor",
-    subtitle: "CareMatch Assistant",
-    preview: "OpenAI-powered — sign in required",
-    time: "Live",
-    unread: 0,
-    color: "#00B8DB",
-    isAi: true,
-    messages: [],
-  },
-  {
-    id: 2,
-    name: "Sunrise Care Community",
-    subtitle: "Facility Partner",
-    preview: "We have one suite available next month.",
-    time: "1h ago",
-    unread: 1,
-    color: "#8b5cf6",
-    messages: [
-      { from: "them", text: "Hello! We have one suite available starting next month.", time: "8:20 AM" },
-      { from: "me", text: "Great! Can we schedule a tour this week?", time: "8:30 AM" },
-      { from: "them", text: "Yes — Thursday at 10 AM or Friday at 2 PM works for us.", time: "8:32 AM" },
-    ],
-  },
-  {
-    id: 3,
-    name: "CareMatch Support",
-    subtitle: "Support Team",
-    preview: "Your account has been verified.",
-    time: "Yesterday",
-    unread: 0,
-    color: "#10b981",
-    messages: [
-      { from: "them", text: "Welcome to CareMatch! Your account has been verified and you're all set.", time: "Yesterday 10:00 AM" },
-      { from: "me", text: "Thank you! Looking forward to finding the right care.", time: "Yesterday 10:15 AM" },
-    ],
-  },
-];
-
 export default function UserDashboardMessages() {
-  const [threads, setThreads] = useState(THREADS);
-  const [activeId, setActiveId] = useState(THREADS[0].id);
+  const [threads, setThreads] = useState(() => loadMessageThreads());
+  const [activeId, setActiveId] = useState(() => loadMessageThreads()[0]?.id ?? 1);
   const [message, setMessage] = useState("");
   const [search, setSearch] = useState("");
   const [aiMessages, setAiMessages] = useState([
@@ -62,13 +25,17 @@ export default function UserDashboardMessages() {
   const activeThread = threads.find((t) => t.id === activeId) ?? threads[0];
 
   useEffect(() => {
-    if (activeThread.isAi) {
+    saveMessageThreads(threads);
+  }, [threads]);
+
+  useEffect(() => {
+    if (activeThread?.isAi) {
       const container = aiScrollContainerRef.current;
       if (container) {
         container.scrollTop = container.scrollHeight;
       }
     }
-  }, [activeThread.isAi, aiMessages, aiSending]);
+  }, [activeThread?.isAi, aiMessages, aiSending]);
 
   const filteredThreads = threads.filter(
     (t) =>

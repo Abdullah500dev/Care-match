@@ -9,7 +9,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import { ChevronUp } from "lucide-react";
+import { ChevronUp, X } from "lucide-react";
 import { toast } from "sonner";
 
 import ScrollToTop from "../utils/scroll-top";
@@ -139,7 +139,7 @@ const getHomeByRole = (userData) => {
   if (["admin", "authenticator", "moderator"].includes(userType))
     return "/admin";
   if (role === "facility") return "/facility";
-  if (role === "user") return "/";
+  if (role === "user") return "/portal";
   // Default unknown/non-staff users to website home to avoid accidental admin redirects.
   return "/";
 };
@@ -255,19 +255,28 @@ const Layout = ({ children }) => {
     const onScroll = () => {
       const top = Math.max(getCurrentScrollTop(), getDashboardScrollTop());
       const percent = getCurrentScrollPercent();
-      const homeThresholdPercent = 0.12; // show around 10-15% page scroll
-      setScrollPastThreshold(top > 24 && percent >= homeThresholdPercent);
+      const dashMain = document.querySelector("main");
+      const dashScrollTop = dashMain?.scrollTop || 0;
+      const homeThresholdPercent = 0.12;
+      setScrollPastThreshold(
+        top > 24 ||
+        dashScrollTop > 120 ||
+        percent >= homeThresholdPercent
+      );
     };
 
+    const dashMain = document.querySelector("main");
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll);
+    dashMain?.addEventListener("scroll", onScroll, { passive: true });
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
+      dashMain?.removeEventListener("scroll", onScroll);
     };
   }, [location.pathname]);
 
@@ -285,14 +294,24 @@ const Layout = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    const INACTIVITY_MS = 30 * 1000;
-    const activityEvents = [
-      "mousemove",
-      "mousedown",
-      "keydown",
-      "touchstart",
-      "scroll",
-    ];
+    const onScrollToTop = () => scrollToTop();
+    window.addEventListener("carematch:scroll-to-top", onScrollToTop);
+    return () => window.removeEventListener("carematch:scroll-to-top", onScrollToTop);
+  }, []);
+
+  const openCarrieChat = () => {
+    navigate("/", { state: { scrollTo: "search-bar" } });
+    // Fire twice so the request is not missed during route transitions.
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+    }, 250);
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
+    }, 800);
+  };
+
+  useEffect(() => {
+    const REMINDER_MS = 5 * 60 * 1000;
 
     const clearInactivityTimer = () => {
       if (inactivityTimerRef.current) {
@@ -301,37 +320,30 @@ const Layout = ({ children }) => {
       }
     };
 
-    const openChatFromReminder = () => {
-      navigate("/", { state: { scrollTo: "search-bar" } });
-      window.setTimeout(() => {
-        window.dispatchEvent(new CustomEvent("carematch:open-chat-request"));
-      }, 250);
-    };
-
     const showHelpReminder = () => {
-      if (isChatOpen) return;
+      if (isChatOpen) {
+        scheduleReminder();
+        return;
+      }
       reminderToastIdRef.current = toast.custom(
         () => (
-          <div className="relative -mr-6 mb-24 w-[340px] pb-8 animate-[carrieReminderIn_420ms_ease-out]">
+          <div className="pointer-events-auto relative mb-4 mr-[4.8rem] w-[300px] mt-4 animate-[carrieReminderIn_420ms_ease-out]">
             <button
               type="button"
-              onClick={openChatFromReminder}
-              className="relative ml-auto w-[calc(100%-2rem)] rounded-2xl bg-white px-5 py-4 text-left text-[15px] font-medium text-slate-900 shadow-[0_18px_40px_rgba(0,0,0,0.22)] outline-none ring-1 ring-black/5 transition hover:shadow-[0_22px_46px_rgba(0,0,0,0.26)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
+              onClick={() => toast.dismiss("carematch-help-reminder")}
+              className="absolute right-2 top-2 z-10 rounded-md p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Dismiss Carrie reminder"
             >
-              Hi, I’m Carrie. What can I help you with?
+              <X className="h-4 w-4" />
             </button>
-
             <button
               type="button"
-              onClick={openChatFromReminder}
-              className="absolute -bottom-8 right-8 flex h-14 w-14 items-center justify-center rounded-full bg-white shadow-[0_14px_28px_rgba(0,0,0,0.22)] ring-1 ring-black/10 transition hover:scale-105 hover:shadow-[0_18px_34px_rgba(0,0,0,0.26)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] animate-[carrieIconBounce_2.2s_ease-in-out_infinite]"
+              onClick={openCarrieChat}
+              className="relative ml-auto w-full rounded-2xl bg-white/95 px-4 py-3 pr-10 text-left text-[14px] font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.16)] backdrop-blur-sm outline-none ring-1 ring-[#00CFF4]/18 transition hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus-visible:ring-2 focus-visible:ring-[#00CFF4]"
               aria-label="Open Carrie chat"
             >
-              <img
-                src="/assets/images/favicon/favicon.svg"
-                alt="CareMatch"
-                className="h-9 w-9 object-contain"
-              />
+              <span className="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 translate-x-1/2 rotate-45 border-r border-b border-[#00CFF4]/18 bg-white/95" />
+              Hi, I&apos;m Carrie. What can I help you with?
             </button>
           </div>
         ),
@@ -339,40 +351,34 @@ const Layout = ({ children }) => {
           id: "carematch-help-reminder",
           duration: 10000,
           position: "bottom-right",
+          className: "pointer-events-none",
         },
       );
+      scheduleReminder();
     };
 
     const scheduleReminder = () => {
       clearInactivityTimer();
-      inactivityTimerRef.current = window.setTimeout(showHelpReminder, INACTIVITY_MS);
+      inactivityTimerRef.current = window.setTimeout(showHelpReminder, REMINDER_MS);
     };
 
-    // Trigger reminder 1 minute after landing and also after fresh inactivity windows.
+    // Trigger reminder every 5 minutes while chat stays closed.
     scheduleReminder();
-    for (const eventName of activityEvents) {
-      window.addEventListener(eventName, scheduleReminder, { passive: true });
-    }
 
     return () => {
       clearInactivityTimer();
       if (reminderToastIdRef.current) {
         toast.dismiss(reminderToastIdRef.current);
       }
-      for (const eventName of activityEvents) {
-        window.removeEventListener(eventName, scheduleReminder);
-      }
     };
   }, [isChatOpen, navigate, location.pathname]);
 
   const scrollToTop = () => {
-    topAnchorRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    document
-      .getElementById("page-top")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Scroll the dashboard <main> container first (covers portal/dashboard routes)
+    const dashMain = document.querySelector("main");
+    if (dashMain) dashMain.scrollTo({ top: 0, behavior: "smooth" });
+    topAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("page-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
     document.scrollingElement?.scrollTo({ top: 0, behavior: "smooth" });
     document.documentElement.scrollTo({ top: 0, behavior: "smooth" });
     document.body.scrollTo?.({ top: 0, behavior: "smooth" });
@@ -388,7 +394,25 @@ const Layout = ({ children }) => {
       </div>
       {children}
       {!isDashboardRoute && <Footer />}
+      {!isChatOpen &&
+        createPortal(
+          <button
+            type="button"
+            onClick={openCarrieChat}
+            className="group fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] carrie-icon-bounce"
+            style={{ "--carrie-bounce-duration": "3s" }}
+            aria-label="Open Carrie chat"
+          >
+            <img
+              src="/assets/images/favicon/favicon.svg"
+              alt="CareMatch"
+              className="h-9 w-9 object-contain transition-transform duration-300 group-hover:scale-110"
+            />
+          </button>,
+          document.body,
+        )}
       {/* Scroll to top - visible across the entire site */}
+      {/*
       {createPortal(
         <button
           type="button"
@@ -405,6 +429,7 @@ const Layout = ({ children }) => {
         </button>,
         document.body,
       )}
+      */}
       <style>
         {`
           @keyframes floatUp {
@@ -429,14 +454,6 @@ const Layout = ({ children }) => {
             }
           }
 
-          @keyframes carrieIconBounce {
-            0%, 100% {
-              transform: translateY(0);
-            }
-            50% {
-              transform: translateY(-6px);
-            }
-          }
         `}
       </style>
     </>

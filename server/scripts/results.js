@@ -37,6 +37,44 @@ const GOOGLE_MAPS_PLACES_API_KEY = String(
     ""
 ).trim();
 const DISCOVERY_IMAGE_DEBUG = process.env.CAREMATCH_DISCOVERY_IMAGE_DEBUG === "1";
+const DISCOVERY_CALL_DEBUG = process.env.CAREMATCH_DISCOVERY_CALL_DEBUG === "1";
+const DISCOVERY_ENABLE_GEO_RETRY = process.env.CAREMATCH_DISCOVERY_ENABLE_GEO_RETRY === "1";
+
+const MANUAL_TIMELINE_TO_KEYWORDS = {
+  immediately: "Immediate move-in preferred",
+  within30: "Needs move-in within 30 days",
+  within60: "Planning within 60 days",
+  noRush: "Planning ahead for future care",
+};
+const MANUAL_LEVEL_TO_CARE_LEVEL = {
+  assisted: "assisted living",
+  independent: "independent living",
+  memory: "memory care",
+  snf: "skilled nursing",
+};
+const MANUAL_CARE_TO_AMENITY = {
+  dailyActivities: "24/7 Care",
+  memoryCare: "Memory Care",
+  medication: "Medication Management",
+  mobilityAssist: "Mobility Assistance",
+  medicalMonitoring: "Medical Monitoring",
+  socialEngagement: "Social Engagement",
+};
+const MANUAL_SPECIAL_NEED_TO_AMENITY = {
+  privateRoom: "Private Rooms",
+  petFriendly: "Pet Friendly",
+  couples: "Couples Accommodation",
+  cultural: "Cultural or Language-specific Care",
+  faithBased: "Faith-based Community",
+  lgbtq: "LGBTQ+ Welcoming",
+  diabetes: "Diabetes Management",
+  physicalTherapy: "Physical Therapy",
+  hospice: "Hospice Care",
+  respiratory: "Respiratory Support",
+  dialysis: "Dialysis Access Nearby",
+};
+
+const discoveryInFlight = new Map();
 
 const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spelling):
 - care_levels: string[]
@@ -61,9 +99,9 @@ const FACILITY_SHAPE = `Each facility object MUST include these keys (exact spel
 function validatePayload(body) {
   if (!body || typeof body !== "object") return "Body must be a JSON object.";
   const { zip_code, location, care_levels } = body;
-  if (typeof zip_code !== "string" || !zip_code.trim()) return "zip_code is required (string).";
-  if (typeof location !== "string" || !location.trim())
-    return "location is required (string) — city, state, or county.";
+  const hasZip = typeof zip_code === "string" && zip_code.trim().length > 0;
+  const hasLocation = typeof location === "string" && location.trim().length > 0;
+  if (!hasZip && !hasLocation) return "Either zip_code or location is required.";
   if (!Array.isArray(care_levels) || care_levels.length === 0)
     return "care_levels is required (non-empty string array).";
   if (body.amenities != null && !Array.isArray(body.amenities)) return "amenities must be an array of strings if provided.";
@@ -213,7 +251,7 @@ function buildGooglePhotoUrlsFromRefs(refs) {
     );
 }
 
-async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
+async function enrichDiscoveryResultsWithRealPlacePhotos(results, stats = null) {
   if (!Array.isArray(results) || results.length === 0 || !GOOGLE_MAPS_PLACES_API_KEY) return;
 
   const needsPhoto = results.filter((f) => {
@@ -243,6 +281,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
           `[discovery:image] facility="${facilityName}" initial_place_id=${String(gp.place_id || "").trim() || "none"}`
         );
       }
+      if (stats && String(gp.place_id || "").trim()) stats.googlePlaceDetailsCalls += 1;
       let photoUrls = await fetchPlacePhotoUrls(gp.place_id, GOOGLE_MAPS_PLACES_API_KEY);
       if (photoUrls.length > 0) {
         f.images = photoUrls;
@@ -254,6 +293,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
         return;
       }
 
+      if (stats) stats.googleFindPlaceCalls += 1;
       const candidate = await findPlaceCandidateByText(f, GOOGLE_MAPS_PLACES_API_KEY);
       if (!candidate) {
         if (DISCOVERY_IMAGE_DEBUG) {
@@ -277,6 +317,7 @@ async function enrichDiscoveryResultsWithRealPlacePhotos(results) {
       photoUrls = buildGooglePhotoUrlsFromRefs(candidateRefs);
 
       if (photoUrls.length === 0 && candidate.place_id) {
+        if (stats) stats.googlePlaceDetailsCalls += 1;
         photoUrls = await fetchPlacePhotoUrls(candidate.place_id, GOOGLE_MAPS_PLACES_API_KEY);
       }
 
@@ -368,8 +409,8 @@ export function filterDiscoveryResultsByAnchor(results, anchor) {
 function buildPrompt(payload) {
   const anchor = parseGeoAnchorFromPayload(payload);
   const anchorNote = anchor.stateAbbr
-    ? `Anchor U.S. state: ${anchor.stateAbbr}. Anchor metro ZIP (must match all rows’ regions): ${anchor.zip}.`
-    : `Anchor metro ZIP: ${anchor.zip}.`;
+    ? `Anchor U.S. state: ${anchor.stateAbbr}. Anchor ZIP (reference only): ${anchor.zip}. Include nearby towns/suburbs within the requested radius, but keep everything in the same state/region.`
+    : `Anchor ZIP (reference only): ${anchor.zip}. Include nearby towns/suburbs within the requested radius.`;
 
   const acc =
     Array.isArray(payload.amenities) && payload.amenities.length
@@ -388,7 +429,7 @@ function buildPrompt(payload) {
   const maxDistanceMiles = Number(payload.max_distance_miles);
   const distanceLine =
     Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
-      ? `Distance constraint: prioritize communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Rank closer communities higher and avoid obviously farther results when possible.\n`
+      ? `Distance constraint: include communities within ${Math.round(maxDistanceMiles)} miles of the requested location/ZIP. Always keep the closest matches and then expand outward; do not swap out closer results when the radius increases.\n`
       : "";
   const keywords = Array.isArray(payload.keywords)
     ? payload.keywords.map((item) => String(item || "").trim()).filter(Boolean)
@@ -431,8 +472,9 @@ Rules:
 2. Names, addresses, coordinates, and ZIP codes must all be mutually consistent with the anchor location and zip_code.
 3. Rank higher (higher total_score / review.rating) communities that clearly document the requested accessibility, services, lifestyle fit, and overall quality in amenities or description.
 4. Vary facility names; do not copy one template 20 times.
-5. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
-6. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
+5. When the radius is larger, your result set should be a superset of the smaller radius (add more, do not replace closer matches).
+6. total_score and review.rating: numbers from 3.0 to 5.0; review_count / review.count: integers from 5 to 500.
+7. Every non-empty website and images[] URL must come from web-search-verified sources for that exact community name + metro (same legal operator).`;
 }
 
 function buildGeoRepairPrompt(payload) {
@@ -484,6 +526,13 @@ function extractJsonObject(text) {
 
 async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
   const anchor = parseGeoAnchorFromPayload(payload);
+  const stats = {
+    openaiResponseCalls: 0,
+    googleFindPlaceCalls: 0,
+    googlePlaceDetailsCalls: 0,
+    geoRepairAttempted: false,
+    geoRepairUsed: false,
+  };
 
   const discoveryTools =
     process.env.CAREMATCH_DISCOVERY_WEB_SEARCH === "0"
@@ -491,6 +540,7 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
       : [{ type: "web_search" }];
 
   const runOnce = async (input) => {
+    stats.openaiResponseCalls += 1;
     const response = await client.responses.create({
       model,
       input,
@@ -536,17 +586,18 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
     sanitizeDiscoveryResults(parsed.results);
     return parsed;
   };
-
   let parsed = await runOnce(buildPrompt(payload));
   let filtered = filterDiscoveryResultsByAnchor(parsed.results, anchor);
 
-  if (filtered.length < MIN_GEO_FILTERED) {
+  if (DISCOVERY_ENABLE_GEO_RETRY && filtered.length < MIN_GEO_FILTERED) {
+    stats.geoRepairAttempted = true;
     try {
       const parsed2 = await runOnce(buildGeoRepairPrompt(payload));
       const filtered2 = filterDiscoveryResultsByAnchor(parsed2.results, anchor);
       if (filtered2.length > filtered.length) {
         parsed = parsed2;
         filtered = filtered2;
+        stats.geoRepairUsed = true;
       }
     } catch {
       /* keep first pass */
@@ -558,8 +609,15 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
     if (fallback.length > 0) {
       parsed.results = fallback.slice(0, MAX_RESULTS);
       sanitizeDiscoveryResults(parsed.results);
-      await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
+      await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results, stats);
       sanitizeDiscoveryResults(parsed.results);
+      if (DISCOVERY_CALL_DEBUG) {
+        const totalExternal =
+          stats.openaiResponseCalls + stats.googleFindPlaceCalls + stats.googlePlaceDetailsCalls;
+        console.log(
+          `[discovery:calls] cache=miss openai=${stats.openaiResponseCalls} geo_repair_attempted=${stats.geoRepairAttempted} geo_repair_used=${stats.geoRepairUsed} google_findplace=${stats.googleFindPlaceCalls} google_place_details=${stats.googlePlaceDetailsCalls} total_external=${totalExternal}`
+        );
+      }
       return parsed;
     }
 
@@ -573,9 +631,25 @@ async function openaiCareSearch(client, payload, model = OPENAI_MODEL) {
 
   parsed.results = filtered;
   sanitizeDiscoveryResults(parsed.results);
-  await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results);
+  await enrichDiscoveryResultsWithRealPlacePhotos(parsed.results, stats);
   sanitizeDiscoveryResults(parsed.results);
+  if (DISCOVERY_CALL_DEBUG) {
+    const totalExternal =
+      stats.openaiResponseCalls + stats.googleFindPlaceCalls + stats.googlePlaceDetailsCalls;
+    console.log(
+      `[discovery:calls] cache=miss openai=${stats.openaiResponseCalls} geo_repair_attempted=${stats.geoRepairAttempted} geo_repair_used=${stats.geoRepairUsed} google_findplace=${stats.googleFindPlaceCalls} google_place_details=${stats.googlePlaceDetailsCalls} total_external=${totalExternal}`
+    );
+  }
   return parsed;
+}
+
+function cloneDiscoveryPayload(value) {
+  if (typeof structuredClone === "function") return structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+function buildDiscoveryCacheKey(payload, model) {
+  return JSON.stringify({ model, payload });
 }
 
 function normalizeSearchParams(userSearch) {
@@ -594,6 +668,65 @@ function normalizeSearchParams(userSearch) {
     max_distance_miles:
       Number.isFinite(maxDistanceMiles) && maxDistanceMiles > 0
         ? Math.round(maxDistanceMiles)
+        : null,
+  };
+}
+
+function normalizeManualSearchParams(manualIntake) {
+  const intake = manualIntake && typeof manualIntake === "object" ? manualIntake : {};
+
+  const location = typeof intake.location === "string" ? intake.location.trim() : "";
+  const locationZip = String(location || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  const zipFromLocation = locationZip ? locationZip[1] : "";
+  const explicitZip = typeof intake.zip_code === "string" ? intake.zip_code.trim() : "";
+  const zip_code = explicitZip || zipFromLocation || location;
+
+  const derivedCareLevel = MANUAL_LEVEL_TO_CARE_LEVEL[String(intake.levelOfCare || "").trim()];
+  const care_levels = derivedCareLevel ? [derivedCareLevel] : ["assisted living"];
+
+  const lovedOneCare = Array.isArray(intake.lovedOneCare) ? intake.lovedOneCare : [];
+  const specialNeeds = Array.isArray(intake.specialNeedsPreferences)
+    ? intake.specialNeedsPreferences
+    : [];
+  const amenityMustHaves = [
+    ...lovedOneCare.map((id) => MANUAL_CARE_TO_AMENITY[id]).filter(Boolean),
+    ...specialNeeds.map((id) => MANUAL_SPECIAL_NEED_TO_AMENITY[id]).filter(Boolean),
+  ];
+
+  const services = [...new Set(amenityMustHaves)].filter(Boolean);
+  const amenities = [...new Set(amenityMustHaves)].filter(Boolean);
+
+  const keywords = [
+    MANUAL_TIMELINE_TO_KEYWORDS[String(intake.careTimeline || "").trim()] || "",
+    String(intake.who || "").trim() ? `Care recipient: ${String(intake.who).trim()}` : "",
+    String(intake.parentAge || "").trim() ? `Age range: ${String(intake.parentAge).trim()}` : "",
+    String(intake.livingNow || "").trim()
+      ? `Current living situation: ${String(intake.livingNow).trim()}`
+      : "",
+    String(intake.mobility || "").trim()
+      ? `Mobility status: ${String(intake.mobility).trim()}`
+      : "",
+  ].filter(Boolean);
+
+  const budget_min = Number(intake.budgetMin);
+  const budget_max = Number(intake.budgetMax);
+  const max_distance_miles = Number(intake.maxTravelMiles ?? intake.maxMiles);
+
+  return {
+    zip_code,
+    location,
+    care_levels,
+    amenities,
+    services,
+    keywords,
+    budget_min: Number.isFinite(budget_min) && budget_min > 0 ? Math.round(budget_min) : null,
+    budget_max:
+      Number.isFinite(budget_max) && budget_max > 0 && budget_max >= budget_min
+        ? Math.round(budget_max)
+        : null,
+    max_distance_miles:
+      Number.isFinite(max_distance_miles) && max_distance_miles > 0
+        ? Math.round(max_distance_miles)
         : null,
   };
 }
@@ -627,7 +760,36 @@ export async function getCareMatchResults(userSearch, options = {}) {
   });
 
   const model = options.model || OPENAI_MODEL;
-  return openaiCareSearch(client, payload, model);
+  const cacheKey = buildDiscoveryCacheKey(payload, model);
+
+  const existing = discoveryInFlight.get(cacheKey);
+  if (existing) {
+    if (DISCOVERY_CALL_DEBUG) {
+      console.log("[discovery:calls] inflight_join");
+    }
+    const joined = await existing;
+    return cloneDiscoveryPayload(joined);
+  }
+
+  const requestPromise = openaiCareSearch(client, payload, model).finally(() => {
+      discoveryInFlight.delete(cacheKey);
+    });
+
+  discoveryInFlight.set(cacheKey, requestPromise);
+  const fresh = await requestPromise;
+  return cloneDiscoveryPayload(fresh);
+}
+
+/**
+ * Manual intake adapter for the 8-step flow.
+ * Accepts raw intake fields and routes through the same discovery engine.
+ * @param {object} manualIntake
+ * @param {object} [options]
+ * @returns {Promise<{results: Array}>}
+ */
+export async function getCareMatchResultsFromManualIntake(manualIntake, options = {}) {
+  const searchParams = normalizeManualSearchParams(manualIntake);
+  return getCareMatchResults(searchParams, options);
 }
 
 /**

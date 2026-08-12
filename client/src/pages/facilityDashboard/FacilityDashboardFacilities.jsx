@@ -4,12 +4,19 @@ import SEO from "@/components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/services/api";
+import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import FacilityImagesManager from "@/components/facilityDashboard/FacilityImagesManager";
+import { extractZipFromAddress, formatZipInput, validateAddressZipPair } from "@/lib/facilityAddressGeo";
+import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 const EMPTY_FORM = {
   name: "",
   email: "",
   phone: "",
+  website: "",
   address: "",
+  zip_code: "",
   pricing: "",
   services: "",
   amenities: "",
@@ -20,6 +27,27 @@ const EMPTY_FORM = {
 };
 
 const toCsv = (arr) => (Array.isArray(arr) ? arr.join(", ") : "");
+
+/** Format pricing as $4,500 or $4,500-$6,800 */
+function formatPricingInput(value) {
+  const raw = String(value || "");
+  let body = raw.replace(/\$/g, "").replace(/,/g, "");
+  body = body.replace(/[^\d\s-]/g, "");
+  const parts = body.split(/\s*-\s*/);
+  const leftDigits = (parts[0] ?? "").replace(/\D/g, "").slice(0, 8);
+  const rightDigits =
+    parts.length > 1 ? parts.slice(1).join("").replace(/\D/g, "").slice(0, 8) : "";
+  const fmt = (digits) => {
+    if (!digits) return "";
+    const num = Number.parseInt(digits, 10);
+    if (Number.isNaN(num)) return "";
+    return `$${num.toLocaleString("en-US")}`;
+  };
+  if (parts.length > 1) {
+    return rightDigits ? `${fmt(leftDigits)}-${fmt(rightDigits)}` : `${fmt(leftDigits)}-`;
+  }
+  return fmt(leftDigits);
+}
 
 export default function FacilityDashboardFacilities() {
   const [loading, setLoading] = useState(true);
@@ -40,9 +68,11 @@ export default function FacilityDashboardFacilities() {
     const nextForm = {
       name: doc?.name || "",
       email: doc?.email || "",
-      phone: doc?.phone || "",
+      phone: formatPhoneInput(doc?.phone || ""),
+      website: doc?.website || "",
       address: doc?.address || "",
-      pricing: doc?.pricing || "",
+      zip_code: formatZipInput(doc?.zip_code || doc?.external_data?.zip_code),
+      pricing: formatPricingInput(doc?.pricing || ""),
       services: toCsv(doc?.services),
       amenities: toCsv(doc?.amenities),
       care_levels: toCsv(doc?.care_levels),
@@ -63,11 +93,13 @@ export default function FacilityDashboardFacilities() {
       if (doc) fillForm(doc);
     } catch (error) {
       setFacility(null);
-      toast.error("Could not load facility profile", {
-        description:
-          error?.response?.data?.message ||
-          "Ask an admin to create/link your facility account first.",
-      });
+      if (error?.response?.status !== 404) {
+        toast.error("Could not load facility profile", {
+          description:
+            error?.response?.data?.message ||
+            "Ask an admin to create/link your facility account first.",
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -81,9 +113,8 @@ export default function FacilityDashboardFacilities() {
     () => [
       { label: "Units", value: form.units || 0 },
       { label: "Occupancy", value: form.occupancy || 0 },
-      { label: "Active Leads", value: form.active_leads || 0 },
     ],
-    [form.active_leads, form.occupancy, form.units]
+    [form.occupancy, form.units]
   );
   const isPristine = JSON.stringify(form) === lastSavedSnapshot;
 
@@ -95,10 +126,46 @@ export default function FacilityDashboardFacilities() {
       return;
     }
 
+    const phoneFormatted = formatPhoneInput(form.phone);
+    if (phoneDigitsOnly(phoneFormatted).length !== 10) {
+      toast.error("Invalid phone number", {
+        description: "Enter a 10-digit US phone number, e.g. (206) 555-0123.",
+      });
+      return;
+    }
+
+    const zipDigits =
+      formatZipInput(form.zip_code) || extractZipFromAddress(form.address);
+    if (zipDigits.length !== 5) {
+      toast.error("ZIP code required", {
+        description:
+          "Include a valid 5-digit US ZIP in the address (e.g. Avenel, NJ 07001).",
+      });
+      return;
+    }
+
+    const geoCheck = await validateAddressZipPair(form.address, zipDigits);
+    if (geoCheck.state === "mismatch") {
+      toast.error("Address ZIP could not be verified", {
+        description: geoCheck.message,
+      });
+      return;
+    }
+
+    const normalizedWebsite = normalizeFacilityWebsite(form.website);
+    if (String(form.website || "").trim() && !normalizedWebsite) {
+      toast.error("Invalid website", {
+        description: "Enter a valid URL (e.g. https://www.yourfacility.com).",
+      });
+      return;
+    }
+
     const payload = {
       name: String(form.name).trim(),
-      phone: String(form.phone).trim(),
+      phone: phoneFormatted,
+      website: normalizedWebsite,
       address: String(form.address).trim(),
+      zip_code: zipDigits,
       pricing: String(form.pricing || "").trim(),
       services: parseCsv(form.services),
       amenities: parseCsv(form.amenities),
@@ -174,24 +241,50 @@ export default function FacilityDashboardFacilities() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Phone</label>
                 <Input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, phone: formatPhoneInput(e.target.value) }))
+                  }
+                  placeholder="(206) 555-0123"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Pricing</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">Monthly Pricing</label>
                 <Input
                   value={form.pricing}
-                  onChange={(e) => setForm((p) => ({ ...p, pricing: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((p) => ({ ...p, pricing: formatPricingInput(e.target.value) }))
+                  }
+                  placeholder="$4,500 or $4,500-$6,800"
                 />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Website</label>
+                <Input
+                  type="url"
+                  inputMode="url"
+                  autoComplete="url"
+                  value={form.website}
+                  onChange={(e) => setForm((p) => ({ ...p, website: e.target.value }))}
+                  placeholder="https://www.yourfacility.com"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Optional. Opens when families click Contact on Care Explorer.
+                </p>
               </div>
             </div>
 
             <div className="mt-4">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Address</label>
-              <Input
-                value={form.address}
-                onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))}
+              <FacilityAddressZipFields
+                address={form.address}
+                zipCode={form.zip_code}
+                onAddressChange={(e) =>
+                  setForm((p) => ({ ...p, address: e.target.value }))
+                }
+                onZipCodeChange={(zip) => setForm((p) => ({ ...p, zip_code: zip }))}
               />
             </div>
 
@@ -225,7 +318,7 @@ export default function FacilityDashboardFacilities() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Units</label>
                 <Input
@@ -244,15 +337,6 @@ export default function FacilityDashboardFacilities() {
                   onChange={(e) => setForm((p) => ({ ...p, occupancy: e.target.value }))}
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">Active leads</label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={form.active_leads}
-                  onChange={(e) => setForm((p) => ({ ...p, active_leads: e.target.value }))}
-                />
-              </div>
             </div>
 
             <Button
@@ -263,6 +347,14 @@ export default function FacilityDashboardFacilities() {
               {saving ? "Saving..." : isPristine ? "Saved" : "Save facility profile"}
             </Button>
           </form>
+
+          <FacilityImagesManager
+            facility={facility}
+            onFacilityUpdated={(updated) => {
+              setFacility(updated);
+              fillForm(updated);
+            }}
+          />
         </>
       )}
     </div>

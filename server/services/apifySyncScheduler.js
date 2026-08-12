@@ -1,4 +1,5 @@
 import { syncFacilitiesFromApify } from "../controllers/facilityController.js";
+import { isApifyIntegrationEnabled } from "../config/apify.js";
 
 let timerId = null;
 let isRunning = false;
@@ -36,11 +37,12 @@ const parseActorInputFromEnv = () => {
   }
 };
 
-
 export const startApifySyncScheduler = () => {
-  const enabled = String(process.env.APIFY_SYNC_ENABLED || "").toLowerCase() === "true";
-  syncStatus.enabled = enabled;
-  if (!enabled) return;
+  syncStatus.enabled = isApifyIntegrationEnabled();
+  if (!syncStatus.enabled) {
+    console.log("[apify-sync] scheduler not started (Apify integration disabled)");
+    return;
+  }
 
   const everyMinutes = toPositiveInt(process.env.APIFY_SYNC_INTERVAL_MINUTES, 360);
   const initialDelaySeconds = toPositiveInt(process.env.APIFY_SYNC_INITIAL_DELAY_SECONDS, 20);
@@ -52,6 +54,12 @@ export const startApifySyncScheduler = () => {
 
   const runOnce = async () => {
     if (isRunning) return;
+    if (!isApifyIntegrationEnabled()) {
+      stopApifySyncScheduler();
+      syncStatus.enabled = false;
+      return;
+    }
+
     isRunning = true;
     syncStatus.isRunning = true;
     syncStatus.lastRunAt = new Date().toISOString();
@@ -61,6 +69,13 @@ export const startApifySyncScheduler = () => {
         ...actorInputFromEnv,
         maxItems,
       });
+
+      if (result?.disabled) {
+        stopApifySyncScheduler();
+        syncStatus.enabled = false;
+        return;
+      }
+
       syncStatus.lastSuccessAt = new Date().toISOString();
       syncStatus.lastErrorAt = null;
       syncStatus.lastErrorMessage = "";

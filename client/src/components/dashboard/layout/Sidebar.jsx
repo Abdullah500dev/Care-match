@@ -42,7 +42,12 @@ function NavContent({ onNavClick }) {
   const visibleItems = hideLeadsAndAnalytics
     ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
     : NAV_ITEMS;
-  const finalItems = visibleItems;
+  const finalItems = visibleItems.map((item) => {
+    if (isFacilityDashboard && item.label === "Facilities") {
+      return { ...item, label: "Facility" };
+    }
+    return item;
+  });
 
   const handleLogout = async () => {
     try {

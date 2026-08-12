@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Loader2, Mic, MessageCircle } from "lucide-react";
+import { ArrowRight, Loader2, MessageCircle, Mic } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -10,9 +10,16 @@ import {
   SheetDescription,
 } from "@/components/ui/sheet";
 import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
+import { postDiscoverFacilities } from "@/services/matchService";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
+import LoadingOverlay from "@/components/client/LoadingOverlay";
 
 export default function SearchBar() {
   const navigate = useNavigate();
+  const DEFAULT_SEARCH_MAX_MILES = 25;
+  /** Default Care Explorer slider after quick search (discover does not filter by this on the server). */
+  const DEFAULT_BUDGET_MIN = 3000;
+  const DEFAULT_BUDGET_MAX = 9000;
   const thinkingMessages = [
     "Reviewing care preferences",
     "Comparing nearby communities",
@@ -24,9 +31,11 @@ export default function SearchBar() {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatComposer, setChatComposer] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [isQuickSearching, setIsQuickSearching] = useState(false);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [queryCoords, setQueryCoords] = useState(null);
   const inputRef = useRef(null);
   const chatComposerRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -38,6 +47,9 @@ export default function SearchBar() {
   const transcribingToastIdRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const chatMessagesRef = useRef(chatMessages);
+  const locationAutocompleteRef = useRef(null);
+  const locationGeocoderRef = useRef(null);
+  const activePacInputRef = useRef(null);
 
   useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -64,6 +76,190 @@ export default function SearchBar() {
     }, 200);
     return () => window.clearTimeout(id);
   }, [isChatOpen]);
+
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey || !inputRef.current) return;
+    let cancelled = false;
+    const attachAutocomplete = () => {
+      if (cancelled || !inputRef.current || !window.google?.maps?.places) return;
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+      locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        inputRef.current,
+        {
+          types: ["geocode"],
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "formatted_address", "geometry", "name"],
+        },
+      );
+      locationGeocoderRef.current = new window.google.maps.Geocoder();
+      locationAutocompleteRef.current.addListener("place_changed", () => {
+        const place = locationAutocompleteRef.current.getPlace();
+        if (!place || cancelled) return;
+        const comps = place.address_components || [];
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        let zip =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        let label = "";
+        if (city && state) {
+          label = `${city}, ${state}`;
+        } else {
+          label = place.formatted_address || place.name || "";
+        }
+        const geocodeByLocation = (geoLocation, fallbackText = "") => {
+          const geocoder = locationGeocoderRef.current;
+          if (!geocoder || !geoLocation) return;
+          geocoder.geocode({ location: geoLocation }, (results, status) => {
+            if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
+            const zipComp =
+              results[0].address_components?.find((c) => c.types.includes("postal_code"))?.long_name ||
+              "";
+            if (zipComp) {
+              zip = zipComp;
+              setQuery(`${fallbackText} ${zipComp}`.trim());
+            } else {
+              setQuery(fallbackText.trim());
+            }
+          });
+        };
+        if (!zip && place?.geometry?.location) {
+          try {
+            setQueryCoords({
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng(),
+            });
+          } catch {
+            setQueryCoords(null);
+          }
+          geocodeByLocation(place.geometry.location, label);
+          return;
+        }
+        if (place?.geometry?.location) {
+          try {
+            setQueryCoords({
+              lat: place.geometry.location.lat(),
+              lng: place.geometry.location.lng(),
+            });
+          } catch {
+            setQueryCoords(null);
+          }
+        }
+        setQuery([label, zip].filter(Boolean).join(" ").trim());
+      });
+    };
+
+    loadGoogleMapsScript(apiKey)
+      .then(() => {
+        if (cancelled) return;
+        attachAutocomplete();
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+    };
+  }, []);
+
+  const pickPacContainer = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    if (pacContainers.length === 0) return null;
+    const visible = pacContainers.filter(
+      (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+    );
+    if (visible.length === 1) return visible[0];
+    if (visible.length > 1 && inputRef.current) {
+      const inputRect = inputRef.current.getBoundingClientRect();
+      return visible.reduce((best, pac) => {
+        const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+        const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+        return distance < bestDistance ? pac : best;
+      }, visible[0]);
+    }
+    return pacContainers[pacContainers.length - 1];
+  };
+
+  const hidePacContainers = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    pacContainers.forEach((node) => {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    });
+  };
+
+  const syncPacContainer = () => {
+    if (!inputRef.current) return;
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    const pac = pickPacContainer();
+    if (!pac) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+    if (!isInViewport) {
+      hidePacContainers();
+      return;
+    }
+    // Keep dropdown aligned with input while page scrolls.
+    pac.style.position = "absolute";
+    pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+    pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    pac.style.width = `${Math.round(rect.width)}px`;
+    pac.style.zIndex = "1001";
+    pac.style.display = "block";
+    pac.style.visibility = "visible";
+    pac.style.pointerEvents = "auto";
+    pacContainers.forEach((node) => {
+      if (node !== pac) {
+        node.style.display = "none";
+        node.style.visibility = "hidden";
+        node.style.pointerEvents = "none";
+      }
+    });
+  };
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (document.activeElement !== inputRef.current) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer();
+    };
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (document.activeElement !== activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        syncPacContainer();
+      });
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (!chatSending) {
@@ -108,6 +304,64 @@ export default function SearchBar() {
     { role: "user", content: userText },
   ];
 
+  const toFiveDigitZip = (value) =>
+    String(value || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+
+  const toPositiveNumberOrNull = (value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const parseBudgetNumber = (value) => {
+    if (value == null) return null;
+    const parsed = Number.parseInt(String(value).replace(/[^\d]+/g, ""), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  };
+
+  const hasBudgetRangeInCarriePrefs = (prefs) => {
+    const safePrefs = prefs && typeof prefs === "object" ? prefs : {};
+    const minBudget = parseBudgetNumber(
+      safePrefs.budgetMinMonthly ?? safePrefs.budgetMin ?? safePrefs.budget_min
+    );
+    const maxBudget = parseBudgetNumber(
+      safePrefs.budgetMaxMonthly ?? safePrefs.budgetMax ?? safePrefs.budget_max
+    );
+    return minBudget != null || maxBudget != null;
+  };
+
+  const buildDiscoverPayloadFromCarriePrefs = (prefs) => {
+    const safePrefs = prefs && typeof prefs === "object" ? prefs : {};
+    const rawLocation =
+      String(safePrefs.searchLocation || safePrefs.locationQuery || "").trim();
+    const zipFromPrefs = toFiveDigitZip(safePrefs.searchZipCode);
+    const zipFromLocation = toFiveDigitZip(rawLocation.match(/\b(\d{5})(?:-\d{4})?\b/)?.[1]);
+    const zipCode = zipFromPrefs || zipFromLocation;
+    const location = rawLocation || zipCode;
+    const careLevels = Array.isArray(safePrefs.careLevels)
+      ? safePrefs.careLevels.map((x) => String(x || "").trim()).filter(Boolean)
+      : [];
+    const maxDistance =
+      toPositiveNumberOrNull(
+        safePrefs.maxDistanceMiles ??
+          safePrefs.max_distance_miles ??
+          DEFAULT_SEARCH_MAX_MILES,
+      ) ?? DEFAULT_SEARCH_MAX_MILES;
+
+    return {
+      zip_code: zipCode || location,
+      location,
+      care_levels: careLevels.length > 0 ? careLevels : resolvedCareLevels,
+      amenities: Array.isArray(safePrefs.amenityMustHaves)
+        ? safePrefs.amenityMustHaves.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+      services: [],
+      keywords: [],
+      max_distance_miles: Math.round(maxDistance),
+    };
+  };
+
   const sendCarrieReply = async (text, { restoreToQuery, restoreToComposer } = {}) => {
     const trimmed = text.trim();
     if (!trimmed || chatSending) return;
@@ -121,19 +375,52 @@ export default function SearchBar() {
     try {
       const { data } = await sendChatMessages(apiPayload);
       const reply = data?.message;
+      let matches = Array.isArray(data?.matchedFacilities) ? data.matchedFacilities : [];
+      const matchedPreferences = data?.matchedPreferences;
+
+      if (matchedPreferences) {
+        const discoverPayload = buildDiscoverPayloadFromCarriePrefs(matchedPreferences);
+        const canRunDiscover =
+          String(discoverPayload?.location || "").trim().length > 0 ||
+          String(discoverPayload?.zip_code || "").trim().length > 0;
+
+        if (canRunDiscover) {
+          try {
+            const discoverRes = await postDiscoverFacilities(discoverPayload);
+            const discoverMatches = Array.isArray(discoverRes?.data?.facilities)
+              ? discoverRes.data.facilities
+              : [];
+            if (discoverMatches.length > 0 || matches.length === 0) {
+              matches = discoverMatches;
+            }
+          } catch (discoverErr) {
+            console.error(
+              "[SearchBar] discover fetch from chat preferences failed:",
+              discoverErr?.message || discoverErr
+            );
+          }
+        }
+
+        setIsChatOpen(false);
+        navigate("/care-explorer", {
+          state: {
+            carrieMatches: Array.isArray(matches) ? matches : [],
+            carrieFilters: {
+              ...(matchedPreferences || {}),
+              // Preserve user-entered budget range from chat when present; otherwise keep default slider.
+              skipInitialBudgetPrefill: !hasBudgetRangeInCarriePrefs(matchedPreferences),
+            },
+            fromCarrie: true,
+          },
+        });
+        return;
+      }
+
       if (reply?.role === "assistant" && reply?.content) {
         setChatMessages((prev) => [
           ...prev,
           { id: `${Date.now()}-a`, role: "assistant", text: reply.content },
         ]);
-        const matches = data?.matchedFacilities;
-        const matchedPreferences = data?.matchedPreferences;
-        if (Array.isArray(matches) && matches.length > 0) {
-          setIsChatOpen(false);
-          navigate("/care-explorer", {
-            state: { carrieMatches: matches, carrieFilters: matchedPreferences, fromCarrie: true },
-          });
-        }
       } else {
         toast.error("No reply from Carrie");
         setChatMessages((prev) => prev.filter((m) => m.id !== userEntry.id));
@@ -153,11 +440,109 @@ export default function SearchBar() {
     }
   };
 
-  const handleChatSubmit = () => {
-    const text = query.trim();
-    if (!text || chatSending) return;
+  const resolvedCareLevels = useMemo(() => ["assisted living"], []);
+
+  const runQuickSearch = async (text) => {
+    const trimmed = String(text || "").trim();
+    if (!trimmed || chatSending) {
+      if (!trimmed) {
+        toast.error("Enter a city or ZIP code to search.");
+      }
+      return;
+    }
+    const zipMatch = trimmed.match(/\b(\d{5})(?:-\d{4})?\b/);
+    const zipCode = zipMatch?.[1] || "";
+    setIsQuickSearching(true);
+    setChatSending(true);
     setQuery("");
-    sendCarrieReply(text, { restoreToQuery: true });
+    try {
+      const resolveCoordsForSearch = async () => {
+        if (
+          queryCoords &&
+          Number.isFinite(Number(queryCoords.lat)) &&
+          Number.isFinite(Number(queryCoords.lng))
+        ) {
+          return { latitude: Number(queryCoords.lat), longitude: Number(queryCoords.lng) };
+        }
+        if (!window.google?.maps?.Geocoder) return null;
+        const geocoder = locationGeocoderRef.current || new window.google.maps.Geocoder();
+        return new Promise((resolve) => {
+          geocoder.geocode({ address: trimmed }, (results, status) => {
+            if (status !== "OK" || !Array.isArray(results) || !results[0]?.geometry?.location) {
+              resolve(null);
+              return;
+            }
+            const loc = results[0].geometry.location;
+            resolve({ latitude: loc.lat(), longitude: loc.lng() });
+          });
+        });
+      };
+      const resolvedCoords = await resolveCoordsForSearch();
+      const payload = {
+        zip_code: zipCode || trimmed,
+        location: trimmed,
+        care_levels: resolvedCareLevels,
+        max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
+        ...(resolvedCoords || {}),
+      };
+      const { data } = await postDiscoverFacilities(payload);
+      const matches = Array.isArray(data?.facilities) ? data.facilities : [];
+      navigate("/care-explorer", {
+        state: {
+          fromCarrie: true,
+          carrieMatches: matches,
+          carrieFilters: {
+            source: "quickSearch",
+            locationQuery: trimmed,
+            searchLocation: trimmed,
+            searchZipCode: zipCode || undefined,
+            budgetMinMonthly: DEFAULT_BUDGET_MIN,
+            budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+            maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            careLevels: resolvedCareLevels,
+            displayCriteria: {
+              location: trimmed,
+              budgetMinMonthly: DEFAULT_BUDGET_MIN,
+              budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+              maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            },
+          },
+        },
+      });
+    } catch (err) {
+      const desc =
+        err?.response?.data?.message || err?.message || "Search request failed.";
+      toast.error("Search failed", { description: desc });
+      navigate("/care-explorer", {
+        state: {
+          fromCarrie: true,
+          carrieMatches: [],
+          carrieFilters: {
+            source: "quickSearch",
+            locationQuery: trimmed,
+            searchLocation: trimmed,
+            searchZipCode: zipCode || undefined,
+            budgetMinMonthly: DEFAULT_BUDGET_MIN,
+            budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+            maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            careLevels: resolvedCareLevels,
+            displayCriteria: {
+              location: trimmed,
+              budgetMinMonthly: DEFAULT_BUDGET_MIN,
+              budgetMaxMonthly: DEFAULT_BUDGET_MAX,
+              maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
+            },
+          },
+        },
+      });
+    } finally {
+      setChatSending(false);
+      setIsQuickSearching(false);
+    }
+  };
+
+  const handleChatSubmit = () => {
+    runQuickSearch(query);
   };
 
   const handlePanelSend = () => {
@@ -218,6 +603,20 @@ export default function SearchBar() {
   const handleChange = (e) => {
     clearTypingAnimation();
     setQuery(e.target.value);
+    setQueryCoords(null);
+    syncPacContainer();
+  };
+
+  const handleKeyDown = (e) => {
+    if (
+      e.key === "Shift" ||
+      e.key === "Control" ||
+      e.key === "Alt" ||
+      e.key === "Meta" ||
+      e.key === "Fn"
+    ) {
+      syncPacContainer();
+    }
   };
 
   const transcribeAudio = async (audioBlob) => {
@@ -374,89 +773,50 @@ export default function SearchBar() {
     startRecording();
   };
 
-  const showSendButton = query.trim().length > 0;
-
   return (
-    <div className="mx-auto mt-6 w-full max-w-4xl sm:mt-8 lg:mt-10 min-[1280px]:mt-8 min-[1280px]:max-w-3xl min-[1536px]:mt-10 min-[1536px]:max-w-4xl" id="search-bar">
-      <div
-        className="rounded-2xl p-[2px] shadow-sm min-[1280px]:rounded-3xl"
-        style={{
-          background: "linear-gradient(90deg, #00CFF4, #FECACB, #FCFCFC, #00CFF4, #00CFF4)",
-          backgroundSize: "300% 100%",
-          animation: "gradientShift 6s ease-in-out infinite",
-        }}
-      >
-        <div className="flex min-h-44 flex-col justify-between rounded-[14px] bg-white p-4 sm:min-h-48 sm:p-5 md:min-h-52 md:p-6 min-[1280px]:min-h-48 min-[1280px]:rounded-[22px] min-[1280px]:p-5 min-[1536px]:min-h-52 min-[1536px]:p-6">
-          <div className="flex items-center gap-2 rounded-lg">
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={handleChange}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  handleChatSubmit();
-                }
-              }}
-              placeholder="Try: 'Looking for Assisted living facilities in Los Angeles under $6000/month'"
-              className="min-w-0 flex-1 rounded-lg bg-transparent text-[#132329] placeholder:italic placeholder:text-[#0000004D] focus:outline-none text-sm placeholder:text-base sm:text-base sm:placeholder:text-lg min-[1280px]:text-base min-[1280px]:placeholder:text-base min-[1536px]:text-lg min-[1536px]:placeholder:text-lg"
-            />
-            {/* <Mic className="h-4 w-4 shrink-0 text-[#132329] sm:h-5 sm:w-5 min-[1280px]:h-4 min-[1280px]:w-4 min-[1536px]:h-5 min-[1536px]:w-5" strokeWidth={2} aria-hidden /> */}
-          </div>
+    <div className="w-full" id="search-bar">
+      <div className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 shadow-sm">
+        <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Location</label>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onFocus={() => {
+            activePacInputRef.current = inputRef.current;
+            syncPacContainer();
+          }}
+          onBlur={hidePacContainers}
+          onKeyDown={(e) => {
+            handleKeyDown(e);
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleChatSubmit();
+            }
+          }}
+          placeholder="City or ZIP code"
+          className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-[#132329] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40"
+        />
+      </div>
 
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={handleCarrieClick}
-              className="flex items-center gap-2 rounded-lg bg-[#132329] px-3 py-3.5 text-white font-medium hover:opacity-90 text-sm sm:rounded-xl sm:px-4 sm:py-4 sm:text-base min-[1280px]:rounded-xl min-[1280px]:px-4 min-[1280px]:py-4 min-[1536px]:py-5"
-            >
-              <span className="whitespace-nowrap">Carrie – AI Advisor</span>
-            </button>
-
-            {showSendButton ? (
-              <button
-                type="button"
-                className="flex items-center justify-center rounded-lg bg-[#00CFF4] px-3 py-3.5 text-white hover:opacity-90 disabled:opacity-40 sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5"
-                aria-label="Send"
-                onClick={handleChatSubmit}
-                disabled={chatSending}
-              >
-                {chatSending ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
-                ) : (
-                  <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={`flex items-center justify-center rounded-lg px-3 py-3.5 text-[#132329] sm:rounded-xl sm:px-4 sm:py-4 min-[1536px]:py-5 min-[1536px]:px-5 ${
-                  isRecording
-                    ? "bg-[#FEE2E2] text-[#B91C1C] shadow-[0_0_0_3px_rgba(239,68,68,0.35)] mic-recording-pulse"
-                    : isTranscribing
-                    ? "bg-[#DBEAFE] text-[#1D4ED8] mic-transcribing-pulse"
-                    : "bg-[#E2E8F0] hover:bg-[#CBD5F1]"
-                }`}
-                aria-label={
-                  isRecording
-                    ? "Stop recording"
-                    : isTranscribing
-                    ? "Transcribing voice"
-                    : "Start voice input"
-                }
-                onClick={handleMicClick}
-                disabled={isTranscribing}
-              >
-                {isTranscribing ? (
-                  <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" strokeWidth={2.5} />
-                ) : (
-                  <Mic className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.5} />
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-[#64748b]">
+          Within {DEFAULT_SEARCH_MAX_MILES} miles · ${DEFAULT_BUDGET_MIN.toLocaleString()}–$
+          {DEFAULT_BUDGET_MAX.toLocaleString()}/mo
+        </p>
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          onClick={handleChatSubmit}
+          disabled={chatSending}
+        >
+          {chatSending ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+          ) : (
+            <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+          )}
+          Search
+        </button>
       </div>
 
       <Sheet open={isChatOpen} onOpenChange={setIsChatOpen}>
@@ -598,22 +958,15 @@ export default function SearchBar() {
       </Sheet>
 
       {/* Subtext */}
-      <p className="mt-3 text-center text-sm font-medium italic text-[#132329B2] sm:mt-4 sm:text-base min-[1280px]:mt-4 min-[1280px]:text-sm min-[1536px]:text-base">
-        Verified Communities, 100% Free Service, Expert Guidance
+      <p className="mt-4 text-center text-xs font-medium text-[#94a3b8] sm:text-sm">
+        Verified communities · 100% free service · Expert guidance
       </p>
 
-      <div className="mt-4 flex justify-center sm:mt-5">
-        <button
-          type="button"
-          onClick={handleSearch}
-          className="rounded-xl px-5 py-3.5 text-sm font-semibold text-white transition hover:opacity-90 sm:px-6 sm:py-4 sm:text-base"
-          style={{ backgroundColor: "#00ccf4" }}
-        >
-          Find Facilities
-        </button>
-      </div>
-
       <style jsx global>{`
+        .pac-container {
+          z-index: 2000 !important;
+        }
+
         @keyframes gradientShift {
           0%, 100% {
             background-position: 0% 50%;
@@ -713,6 +1066,7 @@ export default function SearchBar() {
           animation: carrieThinkingProgress 1.8s ease-in-out infinite;
         }
       `}</style>
+      <LoadingOverlay open={isQuickSearching} />
     </div>
   );
 }

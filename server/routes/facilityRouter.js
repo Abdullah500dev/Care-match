@@ -15,12 +15,15 @@ import {
   getFacility,
   updateFacility,
   deleteFacility,
+  deleteAllFacilities,
   getMyFacility,
   importExternalFacilities,
   importFacilitiesFromApify,
   enrichFacilitiesWithGpt,
   updateMyFacility,
+  resolveAddressZip,
 } from "../controllers/facilityController.js";
+import { notifyExploreClick } from "../controllers/exploreNotifyController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
 import { getApifySchedulerStatus } from "../controllers/apifySyncController.js";
 
@@ -77,6 +80,9 @@ router.get("/", isAutheticated, listFacilities);
  *               address:
  *                 type: string
  *                 example: "123 Main St, Seattle, WA"
+ *               zip_code:
+ *                 type: string
+ *                 example: "98101"
  *               services:
  *                 oneOf:
  *                   - type: array
@@ -126,8 +132,50 @@ router.post("/import-external", isAutheticated, importExternalFacilities);
 router.post("/import-apify", isAutheticated, importFacilitiesFromApify);
 router.post("/enrich-gpt", isAutheticated, enrichFacilitiesWithGpt);
 
+router.get("/resolve-zip", isAutheticated, resolveAddressZip);
 router.get("/me", isAutheticated, getMyFacility);
-router.put("/me", isAutheticated, updateMyFacility);
+router.put(
+  "/me",
+  isAutheticated,
+  uploadFacilityImages.array("images", 8),
+  updateMyFacility
+);
+router.post("/explore-click", isAutheticated, notifyExploreClick);
+
+/**
+ * @swagger
+ * /api/facilities/all:
+ *   delete:
+ *     summary: Delete all facilities (admin only)
+ *     description: >
+ *       Permanently deletes every facility record and removes uploaded facility images.
+ *       Does not delete users, leads, or other collections.
+ *     tags: [Facility Management]
+ *     security:
+ *       - accessTokenAuth: []
+ *     responses:
+ *       200:
+ *         description: All facilities deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: All facilities deleted successfully.
+ *                 deletedCount:
+ *                   type: integer
+ *                   example: 42
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Only admin users can delete all facilities
+ */
+router.delete("/all", isAutheticated, deleteAllFacilities);
 
 /**
  * @swagger

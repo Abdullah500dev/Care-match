@@ -1,6 +1,23 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ArrowRight, Heart, Users, User, UsersRound, Zap, Signal, X, Check, Sparkles, Activity } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Compass,
+  Heart,
+  MapPin,
+  MessageCircle,
+  Search,
+  Signal,
+  SlidersHorizontal,
+  User,
+  Users,
+  UsersRound,
+  X,
+  Zap,
+} from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +26,14 @@ import { Progress } from "@/components/ui/progress";
 import { Slider, BudgetRangeSlider } from "@/components/ui/slider";
 import { TiltCard } from "@/components/ui/tilt-card";
 import { cn } from "@/lib/utils";
-import { postMatchRecommendations } from "@/services/matchService";
+import {
+  postDiscoverFacilities,
+} from "@/services/matchService";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
+import { getUser } from "@/store/auth/authSlice";
+import { toast } from "sonner";
 
-const BUDGET_SLIDER_MIN = 2000;
+const BUDGET_SLIDER_MIN = 500;
 const BUDGET_SLIDER_MAX = 15000;
 const BUDGET_SLIDER_STEP = 500;
 
@@ -19,7 +41,9 @@ const MILES_SLIDER_MIN = 5;
 const MILES_SLIDER_MAX = 100;
 const MILES_SLIDER_STEP = 5;
 
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 8;
+const INTAKE_DRAFT_STORAGE_KEY = "carematch_intake_draft_v1";
+const ZIP_CODE_REGEX = /\b(\d{5})(?:-\d{4})?\b/;
 
 const WHO_OPTIONS = [
   { id: "spouse", label: "My Spouse", desc: "Finding exceptional care for my lifelong partner.", Icon: Heart },
@@ -119,10 +143,12 @@ const defaultFormData = {
   mobility: "",
   lovedOneCare: [],
   location: "",
+  locationLat: null,
+  locationLng: null,
   budgetMin: 3000,
   budgetMax: 6000,
-  levelOfCare: "",
-  specialNeedsPreferences: ["privateRoom"],
+  levelOfCare: "assisted",
+  specialNeedsPreferences: [],
   careTypes: [],
   budget: "",
   urgency: "",
@@ -163,13 +189,81 @@ const SPECIAL_NEED_TO_AMENITY = {
   dialysis: "Dialysis Access",
 };
 
+function getStepValidationError(step, formData) {
+  if (step === 1 && !String(formData?.who || "").trim()) return "Please select who needs care.";
+  if (step === 2 && !String(formData?.parentAge || "").trim()) return "Please select an age range.";
+  if (step === 3 && !String(formData?.careTimeline || "").trim()) return "Please select a care timeline.";
+  if (step === 4 && !String(formData?.livingNow || "").trim()) return "Please select current living situation.";
+  if (step === 5 && !String(formData?.mobility || "").trim()) return "Please select mobility status.";
+  if (step === 6 && (!Array.isArray(formData?.lovedOneCare) || formData.lovedOneCare.length === 0)) {
+    return "Please choose at least one care need.";
+  }
+  if (step === 7 && !String(formData?.location || "").trim()) return "Please enter preferred location.";
+  return null;
+}
+
 export default function IntakeSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated } = useSelector(getUser);
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState(defaultFormData);
   const [isFindingMatches, setIsFindingMatches] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const locationInputRef = useRef(null);
+  const locationAutocompleteRef = useRef(null);
+  const locationGeocoderRef = useRef(null);
+  const activePacInputRef = useRef(null);
+  const lastAutocompleteSelectionRef = useRef(0);
+  const geocodeRequestIdRef = useRef(0);
+  const mapsApiKey = getGoogleMapsApiKey();
+  const requiresZipForStepSeven = Boolean(mapsApiKey);
+  const currentStepValidationError = getStepValidationError(step, formData);
+  const stepSevenZipError =
+    step === 7 &&
+    requiresZipForStepSeven &&
+    String(formData?.location || "").trim().length > 0 &&
+    !ZIP_CODE_REGEX.test(String(formData?.location || ""))
+      ? "Please select a city suggestion so ZIP can be auto-filled, or enter a valid ZIP code."
+      : null;
+  const effectiveValidationError =
+    currentStepValidationError || (step === 7 ? locationError || stepSevenZipError : null);
 
   const progressPercent = (step / TOTAL_STEPS) * 100;
+
+  useEffect(() => {
+    if (step !== 7) return;
+    if (!locationError) return;
+    if (ZIP_CODE_REGEX.test(String(formData?.location || ""))) {
+      setLocationError("");
+    }
+  }, [formData?.location, locationError, step]);
+
+  useEffect(() => {
+    let draft = null;
+    try {
+      const raw = sessionStorage.getItem(INTAKE_DRAFT_STORAGE_KEY);
+      if (raw) draft = JSON.parse(raw);
+    } catch {
+      draft = null;
+    }
+
+    if (!draft || typeof draft !== "object") return;
+    const hasResumeSignal = Boolean(location.state?.resumeIntake);
+    if (!hasResumeSignal && !isAuthenticated) return;
+
+    const savedStep = Number(draft.step);
+    const safeStep =
+      Number.isFinite(savedStep) && savedStep >= 1 && savedStep <= TOTAL_STEPS
+        ? Math.round(savedStep)
+        : 1;
+    const savedFormData =
+      draft.formData && typeof draft.formData === "object"
+        ? { ...defaultFormData, ...draft.formData }
+        : defaultFormData;
+    setStep(safeStep);
+    setFormData(savedFormData);
+  }, [location.state, isAuthenticated]);
 
   useEffect(() => {
     if (!isFindingMatches) return;
@@ -186,6 +280,9 @@ export default function IntakeSearch() {
           .map((id) => SPECIAL_NEED_TO_AMENITY[id])
           .filter(Boolean),
       ];
+      const finalScreenMustHaves = (formData.specialNeedsPreferences || [])
+        .map((id) => SPECIAL_NEEDS_PREFERENCES.find((option) => option.id === id)?.label)
+        .filter(Boolean);
 
       const matcherPayload = {
         careLevels: [...new Set(careLevels)],
@@ -197,26 +294,78 @@ export default function IntakeSearch() {
         personalityNotes: "",
         snfReadiness: formData.levelOfCare === "snf",
       };
+      const zipFromSearchLocation = String(matcherPayload.searchLocation || "").match(
+        /\b(\d{5})(?:-\d{4})?\b/,
+      )?.[1] || "";
+      const locationQueryForExplorer = zipFromSearchLocation
+        ? String(matcherPayload.searchLocation || "")
+            .replace(new RegExp(`\\b${zipFromSearchLocation}\\b`, "g"), "")
+            .replace(/\s+/g, " ")
+            .replace(/,\s*,/g, ", ")
+            .replace(/^,\s*|\s*,$/g, "")
+            .trim()
+        : String(matcherPayload.searchLocation || "").trim();
+      const mappedFilters = {
+        source: "manualIntake",
+        locationQuery: locationQueryForExplorer || matcherPayload.searchLocation,
+        searchZipCode: zipFromSearchLocation || undefined,
+        budgetMinMonthly: Number(formData.budgetMin) || null,
+        budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
+        maxDistanceMiles: matcherPayload.maxDistanceMiles,
+        careLevels: matcherPayload.careLevels,
+        amenityMustHaves: matcherPayload.amenityMustHaves,
+        availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+        displayCriteria: {
+          location: locationQueryForExplorer || matcherPayload.searchLocation,
+          budgetMinMonthly: Number(formData.budgetMin) || null,
+          budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
+          maxDistanceMiles: matcherPayload.maxDistanceMiles,
+          mustHaveNeeds: finalScreenMustHaves,
+          availability: formData.careTimeline
+            ? TIMELINE_TO_AVAILABILITY[formData.careTimeline] || ""
+            : "",
+        },
+      };
+      const discoverPayload = {
+        zip_code: zipFromSearchLocation,
+        location: String(
+          locationQueryForExplorer || matcherPayload.searchLocation || "",
+        ).trim(),
+        care_levels:
+          matcherPayload.careLevels.length > 0
+            ? matcherPayload.careLevels
+            : ["assisted living"],
+        amenities: [],
+        services: [],
+        keywords: [],
+        // Budget is enforced in Care Explorer (client-side) so strict server filtering
+        // does not zero out high-cost metros (e.g. SF) when every listing starts above max.
+        max_distance_miles: Number(formData.maxTravelMiles) || null,
+        latitude: Number.isFinite(Number(formData.locationLat))
+          ? Number(formData.locationLat)
+          : null,
+        longitude: Number.isFinite(Number(formData.locationLng))
+          ? Number(formData.locationLng)
+          : null,
+      };
 
       const startedAt = Date.now();
       try {
-        const { data } = await postMatchRecommendations(matcherPayload);
+        const { data } = await postDiscoverFacilities(discoverPayload);
+        const recs = Array.isArray(data?.facilities) ? data.facilities : [];
         if (cancelled) return;
+
+        if (recs.length === 0) {
+          toast.error("No matches found yet", {
+            description:
+              "We could not find facilities for the selected filters. Try expanding distance or budget.",
+          });
+        }
 
         const elapsed = Date.now() - startedAt;
         const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
         window.setTimeout(() => {
           if (cancelled) return;
-          const mappedFilters = {
-            locationQuery: matcherPayload.searchLocation,
-            budgetMinMonthly: Number(formData.budgetMin) || null,
-            budgetMaxMonthly: matcherPayload.budgetMaxMonthly,
-            maxDistanceMiles: matcherPayload.maxDistanceMiles,
-            careLevels: matcherPayload.careLevels,
-            amenityMustHaves: matcherPayload.amenityMustHaves,
-            availability: TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
-          };
-          const recs = Array.isArray(data?.recommendations) ? data.recommendations : [];
           navigate("/care-explorer", {
             state: {
               fromCarrie: true,
@@ -227,6 +376,9 @@ export default function IntakeSearch() {
         }, remaining);
       } catch {
         if (cancelled) return;
+        toast.error("Could not fetch matches", {
+          description: "Please try again in a moment.",
+        });
         const elapsed = Date.now() - startedAt;
         const remaining = Math.max(0, FINDING_MATCHES_DURATION_MS - elapsed);
         window.setTimeout(() => {
@@ -236,17 +388,7 @@ export default function IntakeSearch() {
               fromCarrie: true,
               carrieMatches: [],
               carrieFilters: {
-                locationQuery: String(formData.location || "").trim(),
-                budgetMinMonthly: Number(formData.budgetMin) || null,
-                budgetMaxMonthly: Number(formData.budgetMax) || null,
-                maxDistanceMiles: Number(formData.maxTravelMiles) || null,
-                careLevels:
-                  formData.levelOfCare && LEVEL_TO_CARE_LEVEL[formData.levelOfCare]
-                    ? [LEVEL_TO_CARE_LEVEL[formData.levelOfCare]]
-                    : [],
-                amenityMustHaves: [],
-                availability:
-                  TIMELINE_TO_AVAILABILITY[formData.careTimeline] || "Within 30 Days",
+                ...mappedFilters,
               },
             },
           });
@@ -259,19 +401,392 @@ export default function IntakeSearch() {
     };
   }, [isFindingMatches, navigate, formData]);
 
+  useEffect(() => {
+    if (step !== 7 || !mapsApiKey) return;
+    let cancelled = false;
+    let attachTimer = null;
+
+    const readAddressPart = (components, type, shortName = false) => {
+      const list = Array.isArray(components) ? components : [];
+      const found = list.find((item) => Array.isArray(item?.types) && item.types.includes(type));
+      if (!found) return "";
+      return String(shortName ? found.short_name : found.long_name || "").trim();
+    };
+
+    const buildLocationLabel = (components, fallback = "") => {
+      const city =
+        readAddressPart(components, "locality") ||
+        readAddressPart(components, "postal_town") ||
+        readAddressPart(components, "administrative_area_level_2");
+      const state = readAddressPart(components, "administrative_area_level_1", true);
+      const zip = readAddressPart(components, "postal_code");
+      const cityState = [city, state].filter(Boolean).join(", ").trim();
+      if (cityState && zip) return `${cityState} ${zip}`;
+      if (cityState) return cityState;
+      return String(fallback || "").trim();
+    };
+
+    const geocodeByLocation = (geoLocation, fallbackText = "") => {
+      const geocoder = locationGeocoderRef.current;
+      if (!geocoder || !geoLocation) return;
+      geocoder.geocode({ location: geoLocation }, (results, status) => {
+        if (cancelled) return;
+        if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
+        const normalized = buildLocationLabel(results[0].address_components, fallbackText);
+        const geo = results[0]?.geometry?.location;
+        const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+        const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
+        if (normalized) {
+          setFormData((prev) => ({
+            ...prev,
+            location: normalized,
+            locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+            locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+          }));
+          setLocationError("");
+        }
+      });
+    };
+
+    const attachAutocomplete = () => {
+      const inputEl = locationInputRef.current;
+      if (!inputEl || !window.google?.maps?.places) return;
+
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+
+      locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(inputEl, {
+        types: ["geocode"],
+        componentRestrictions: { country: "us" },
+        fields: ["address_components", "formatted_address", "geometry", "name"],
+      });
+      locationGeocoderRef.current = new window.google.maps.Geocoder();
+
+      locationAutocompleteRef.current.addListener("place_changed", () => {
+        if (cancelled) return;
+        const place = locationAutocompleteRef.current.getPlace();
+        const normalized = buildLocationLabel(
+          place?.address_components,
+          place?.formatted_address || place?.name || ""
+        );
+
+        if (normalized) {
+          lastAutocompleteSelectionRef.current = Date.now();
+          const placeGeo = place?.geometry?.location;
+          const lat =
+            placeGeo && typeof placeGeo.lat === "function" ? Number(placeGeo.lat()) : null;
+          const lng =
+            placeGeo && typeof placeGeo.lng === "function" ? Number(placeGeo.lng()) : null;
+          setFormData((prev) => ({
+            ...prev,
+            location: normalized,
+            locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+            locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+          }));
+          setLocationError("");
+        }
+
+        if (!ZIP_CODE_REGEX.test(normalized) && place?.geometry?.location) {
+          geocodeByLocation(place.geometry.location, normalized);
+        }
+      });
+    };
+
+    loadGoogleMapsScript(mapsApiKey)
+      .then(() => {
+        if (cancelled) return;
+        attachTimer = window.setTimeout(attachAutocomplete, 0);
+      })
+      .catch(() => {
+        // Keep plain input behavior when maps cannot load.
+      });
+
+    return () => {
+      cancelled = true;
+      if (attachTimer) window.clearTimeout(attachTimer);
+      if (locationAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      }
+    };
+  }, [step, mapsApiKey]);
+
+  const pickPacContainer = (inputEl) => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    if (pacContainers.length === 0) return null;
+    const visible = pacContainers.filter(
+      (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
+    );
+    if (visible.length === 1) return visible[0];
+    if (visible.length > 1) {
+      const inputRect = inputEl.getBoundingClientRect();
+      return visible.reduce((best, pac) => {
+        const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
+        const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
+        return distance < bestDistance ? pac : best;
+      }, visible[0]);
+    }
+    return pacContainers[pacContainers.length - 1];
+  };
+
+  const hidePacContainers = () => {
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    pacContainers.forEach((node) => {
+      node.style.display = "none";
+      node.style.visibility = "hidden";
+      node.style.pointerEvents = "none";
+    });
+  };
+
+  const syncPacContainer = () => {
+    const inputEl = locationInputRef.current;
+    if (!inputEl) return;
+    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
+    const pac = pickPacContainer(inputEl);
+    if (!pac) return;
+    const rect = inputEl.getBoundingClientRect();
+  const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
+  if (!isInViewport) {
+    hidePacContainers();
+    return;
+  }
+    // Keep dropdown aligned with input while page scrolls.
+    pac.style.position = "absolute";
+    pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
+    pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    pac.style.width = `${Math.round(rect.width)}px`;
+    pac.style.zIndex = "1001";
+    pac.style.display = "block";
+    pac.style.visibility = "visible";
+    pac.style.pointerEvents = "auto";
+    pacContainers.forEach((node) => {
+      if (node !== pac) {
+        node.style.display = "none";
+        node.style.visibility = "hidden";
+        node.style.pointerEvents = "none";
+      }
+    });
+  };
+
+  useEffect(() => {
+    if (step !== 7) return undefined;
+    const inputEl = locationInputRef.current;
+    if (!inputEl) return undefined;
+
+    const getScrollParent = (node) => {
+      let parent = node?.parentElement;
+      while (parent && parent !== document.body) {
+        const style = window.getComputedStyle(parent);
+        const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
+        if (/(auto|scroll|overlay)/.test(overflow)) return parent;
+        parent = parent.parentElement;
+      }
+      return window;
+    };
+
+    const scrollParent = getScrollParent(inputEl);
+    const handleSync = () => {
+      if (document.activeElement !== inputEl) {
+        hidePacContainers();
+        return;
+      }
+      syncPacContainer();
+    };
+
+    window.addEventListener("scroll", handleSync, true);
+    window.addEventListener("resize", handleSync);
+    if (scrollParent !== window) {
+      scrollParent.addEventListener("scroll", handleSync, { passive: true });
+    }
+
+    return () => {
+      window.removeEventListener("scroll", handleSync, true);
+      window.removeEventListener("resize", handleSync);
+      if (scrollParent !== window) {
+        scrollParent.removeEventListener("scroll", handleSync);
+      }
+    };
+  }, [step]);
+
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined") return undefined;
+    let frame = null;
+    const observer = new MutationObserver(() => {
+      if (document.activeElement !== activePacInputRef.current) return;
+      if (frame) cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => syncPacContainer());
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, []);
+
+  const handleLocationBlur = () => {
+    if (Date.now() - lastAutocompleteSelectionRef.current < 500) {
+      setLocationError("");
+      return;
+    }
+    hidePacContainers();
+    if (!mapsApiKey) return;
+    const geocoder = locationGeocoderRef.current;
+    if (!geocoder) return;
+
+    const raw = String(formData.location || "").trim();
+    if (!raw) {
+      setLocationError("");
+      return;
+    }
+
+    const requestId = ++geocodeRequestIdRef.current;
+    const zipMatch = raw.match(ZIP_CODE_REGEX);
+    const readAddressPart = (components, type, shortName = false) => {
+      const list = Array.isArray(components) ? components : [];
+      const found = list.find((item) => Array.isArray(item?.types) && item.types.includes(type));
+      if (!found) return "";
+      return String(shortName ? found.short_name : found.long_name || "").trim();
+    };
+    const buildLocationLabel = (components, fallback = "", zipOverride = "") => {
+      const city =
+        readAddressPart(components, "locality") ||
+        readAddressPart(components, "postal_town") ||
+        readAddressPart(components, "administrative_area_level_2");
+      const state = readAddressPart(components, "administrative_area_level_1", true);
+      const zip = zipOverride || readAddressPart(components, "postal_code");
+      const cityState = [city, state].filter(Boolean).join(", ").trim();
+      if (cityState && zip) return `${cityState} ${zip}`;
+      if (cityState) return cityState;
+      return String(fallback || "").trim();
+    };
+
+    if (zipMatch?.[1]) {
+      const zip = zipMatch[1];
+      geocoder.geocode(
+        { address: zip, componentRestrictions: { country: "US" } },
+        (results, status) => {
+          if (requestId !== geocodeRequestIdRef.current) return;
+          if (status !== "OK" || !Array.isArray(results) || !results[0]) {
+            setLocationError("");
+            return;
+          }
+          const firstZip = readAddressPart(results[0].address_components, "postal_code");
+          if (firstZip && firstZip !== zip) {
+            setLocationError("Please enter a valid US ZIP code.");
+            return;
+          }
+          const normalized = buildLocationLabel(results[0].address_components, raw, zip);
+          const geo = results[0]?.geometry?.location;
+          const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+          const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
+          if (normalized) {
+            setFormData((prev) => ({
+              ...prev,
+              location: normalized,
+              locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+              locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+            }));
+          }
+          setLocationError("");
+        }
+      );
+      return;
+    }
+
+    geocoder.geocode(
+      { address: raw, componentRestrictions: { country: "US" } },
+      (results, status) => {
+        if (requestId !== geocodeRequestIdRef.current) return;
+        if (status !== "OK" || !Array.isArray(results) || !results[0]) {
+          setLocationError("Could not validate location. Select a city suggestion or add a ZIP code.");
+          return;
+        }
+        const normalized = buildLocationLabel(results[0].address_components, raw);
+        if (!ZIP_CODE_REGEX.test(normalized)) {
+          setLocationError("Please select a city suggestion so we can auto-fetch ZIP.");
+          return;
+        }
+        const geo = results[0]?.geometry?.location;
+        const lat = geo && typeof geo.lat === "function" ? Number(geo.lat()) : null;
+        const lng = geo && typeof geo.lng === "function" ? Number(geo.lng()) : null;
+        setFormData((prev) => ({
+          ...prev,
+          location: normalized,
+          locationLat: Number.isFinite(lat) ? lat : prev.locationLat,
+          locationLng: Number.isFinite(lng) ? lng : prev.locationLng,
+        }));
+        setLocationError("");
+      }
+    );
+  };
+
   const goBack = () => {
     if (step > 1) setStep((s) => s - 1);
     else navigate(-1);
   };
 
+  const isStepValid = () => {
+    switch (step) {
+      case 1: return !!formData.who;
+      case 2: return !!formData.parentAge;
+      case 3: return !!formData.careTimeline;
+      case 4: return !!formData.livingNow;
+      case 5: return !!formData.mobility;
+      case 6: return formData.lovedOneCare && formData.lovedOneCare.length > 0;
+      case 7:
+        if (!formData.location || formData.location.trim().length === 0) return false;
+        if (!requiresZipForStepSeven) return true;
+        return ZIP_CODE_REGEX.test(String(formData.location || ""));
+      case 8: return true;
+      default: return true;
+    }
+  };
+
   const goNext = () => {
-    if (step < TOTAL_STEPS) setStep((s) => s + 1);
-    else setIsFindingMatches(true);
+    if (!isStepValid()) {
+      toast.error("Required Selection Missing", {
+        description:
+          effectiveValidationError || "Please select an option before moving to the next step.",
+      });
+      return;
+    }
+
+    if (step < TOTAL_STEPS) {
+      console.log(`Step ${step} selection:`, formData);
+      setStep((s) => s + 1);
+    } else {
+      console.log("Final Intake JSON:", JSON.stringify(formData, null, 2));
+      setIsFindingMatches(true);
+    }
   };
 
   const handleSaveAndFinishLater = () => {
-    console.log("Saved progress:", { step, formData });
-    navigate("/");
+    try {
+      sessionStorage.setItem(
+        INTAKE_DRAFT_STORAGE_KEY,
+        JSON.stringify({ step, formData, savedAt: Date.now() }),
+      );
+    } catch {
+      // Ignore storage write failures and continue auth redirect.
+    }
+    const hasPersistedSession =
+      isAuthenticated ||
+      (typeof window !== "undefined" && Boolean(localStorage.getItem("access_token")));
+
+    if (hasPersistedSession) {
+      toast.success("Progress saved. You can continue later.");
+      navigate("/", { state: { fromIntakeSave: true } });
+      return;
+    }
+
+    navigate("/register", {
+      state: {
+        from: {
+          pathname: "/find-care",
+          state: { resumeIntake: true },
+        },
+      },
+    });
   };
 
   const update = (key, value) => setFormData((prev) => ({ ...prev, [key]: value }));
@@ -288,6 +803,115 @@ export default function IntakeSearch() {
     return (
       <>
         <SEO title="Finding Matches - CareMatch" />
+        <style jsx global>{`
+          @keyframes intakeFinderIconFloatStrong {
+            0%, 100% {
+              transform: translateY(0px) translateX(0px) scale(1);
+            }
+            25% {
+              transform: translateY(-6px) translateX(2px) scale(1.05);
+            }
+            50% {
+              transform: translateY(-2px) translateX(5px) scale(1.1);
+            }
+            75% {
+              transform: translateY(4px) translateX(-1px) scale(1.03);
+            }
+          }
+
+          @keyframes intakeFinderIconBounceStrong {
+            0%, 100% {
+              transform: translateY(0px) scale(1);
+            }
+            20% {
+              transform: translateY(-7px) scale(1.06);
+            }
+            40% {
+              transform: translateY(1px) scale(0.98);
+            }
+            60% {
+              transform: translateY(-4px) scale(1.04);
+            }
+            80% {
+              transform: translateY(0px) scale(1);
+            }
+          }
+
+          @keyframes intakeFinderIconSpinStrong {
+            0% {
+              transform: rotate(0deg) scale(1);
+            }
+            40% {
+              transform: rotate(160deg) scale(1.08);
+            }
+            70% {
+              transform: rotate(280deg) scale(1.02);
+            }
+            100% {
+              transform: rotate(360deg) scale(1);
+            }
+          }
+
+          @keyframes intakeFinderIconWobble {
+            0%, 100% {
+              transform: rotate(0deg) translateY(0px) scale(1);
+            }
+            15% {
+              transform: rotate(-12deg) translateY(-2px) scale(1.05);
+            }
+            30% {
+              transform: rotate(10deg) translateY(2px) scale(1.02);
+            }
+            45% {
+              transform: rotate(-8deg) translateY(-1px) scale(1.06);
+            }
+            60% {
+              transform: rotate(6deg) translateY(2px) scale(1.03);
+            }
+            75% {
+              transform: rotate(-4deg) translateY(-1px) scale(1.01);
+            }
+          }
+
+          @keyframes intakeFinderIconRipple {
+            0% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0.45);
+            }
+            70% {
+              box-shadow: 0 0 0 14px rgba(0, 207, 244, 0);
+            }
+            100% {
+              box-shadow: 0 0 0 0 rgba(0, 207, 244, 0);
+            }
+          }
+
+          .animate-intake-icon-float-strong {
+            animation: intakeFinderIconFloatStrong 1.45s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-bounce-strong {
+            animation: intakeFinderIconBounceStrong 1.2s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-spin-strong {
+            animation: intakeFinderIconSpinStrong 1.3s linear infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-wobble {
+            animation: intakeFinderIconWobble 1.1s ease-in-out infinite;
+            will-change: transform;
+          }
+
+          .animate-intake-icon-ripple {
+            animation:
+              intakeFinderIconFloatStrong 1.45s ease-in-out infinite,
+              intakeFinderIconRipple 1.7s ease-out infinite;
+            will-change: transform, box-shadow;
+          }
+        `}</style>
         <div
           className="min-h-screen flex flex-col items-center justify-center px-4 py-8 lg:py-12 bg-no-repeat"
           style={{
@@ -302,29 +926,44 @@ export default function IntakeSearch() {
               boxShadow: "0px 4px 6px -1px rgba(0,0,0,0.08), 0px 2px 4px -2px rgba(0,0,0,0.06)",
             }}
           >
-            {/* Icon cluster: central star + 4 surrounding icons */}
-            <div className="relative flex justify-center items-center mb-8 h-28">
-              <div className="absolute flex h-20 w-20 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] transform scale-100 animate-pulse">
-                <Sparkles className="h-10 w-10" />
-              </div>   
-              <div className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Users className="h-5 w-5" />
+            <div className="relative mb-8 flex h-24 items-center justify-center">
+              <div className="absolute flex h-16 w-16 items-center justify-center rounded-2xl bg-[#e0f7fb] text-[#00CFF4] carrie-pulse-slow">
+                <img
+                  src="/assets/images/favicon/favicon.svg"
+                  alt="CareMatch"
+                  className="h-9 w-9 object-contain"
+                />
               </div>
-              <div className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <User className="h-5 w-5" />
+              <div
+                className="absolute -top-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4]/80 bg-white text-[#00CFF4] animate-intake-icon-float-strong shadow-[0_0_0_0_rgba(0,207,244,0.45)] animate-intake-icon-ripple"
+                style={{ animationDelay: "0ms" }}
+              >
+                <Search className="h-4 w-4" />
               </div>
-              <div className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Activity className="h-5 w-5" />
+              <div
+                className="absolute -top-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#38BDF8]/80 bg-white text-[#0EA5E9] animate-intake-icon-bounce-strong shadow-[0_0_16px_rgba(56,189,248,0.35)]"
+                style={{ animationDelay: "100ms" }}
+              >
+                <MapPin className="h-4 w-4" />
               </div>
-              <div className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#00CFF4] bg-white text-[#00CFF4] animate-float-left-right">
-                <Heart className="h-5 w-5" />
+              <div
+                className="absolute -bottom-1 -right-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#22D3EE]/80 bg-white text-[#0891B2] animate-intake-icon-spin-strong shadow-[0_0_16px_rgba(34,211,238,0.35)]"
+                style={{ animationDelay: "180ms" }}
+              >
+                <Compass className="h-4 w-4" />
+              </div>
+              <div
+                className="absolute -bottom-1 -left-2 flex h-11 w-11 items-center justify-center rounded-full border-2 border-[#2DD4BF]/80 bg-white text-[#0F766E] animate-intake-icon-wobble shadow-[0_0_14px_rgba(45,212,191,0.35)]"
+                style={{ animationDelay: "260ms" }}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
               </div>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold italic text-[#1D293D] mb-3">
               Finding Your Matches...
             </h1>
             <p className="text-[#64748b] text-base mb-6 max-w-sm mx-auto">
-              We&apos;re analyzing hundreds of facilities to find the best fits for your needs. This will just take a moment.
+              Reviewing care preferences
             </p>
             <ul className="text-left max-w-xs mx-auto space-y-2 text-[#334155]">
               <li className="flex items-center gap-2">
@@ -340,6 +979,10 @@ export default function IntakeSearch() {
                 Calculating match scores....
               </li>
             </ul>
+            <div className="mt-7 flex items-center justify-center gap-2 text-sm text-slate-600">
+              <span className="h-4 w-4 rounded-full border-2 border-[#94a3b8]/40 border-t-[#00CFF4] animate-spin" />
+              Please wait
+            </div>
           </div>
         </div>
       </>
@@ -368,7 +1011,7 @@ export default function IntakeSearch() {
           <div className="hidden lg:block lg:w-[42%] xl:w-[40%] lg:min-w-0 lg:shrink-0 overflow-hidden rounded-l-2xl">
             <TiltCard className="h-full w-full" innerClassName="h-full w-full overflow-hidden rounded-l-2xl">
               <img
-                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/patting.svg" : step === 9 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
+                src={step === 2 ? "/assets/images/youngPeople.svg" : step === 3 ? "/assets/images/girlForFindCare.svg" : step === 4 ? "/assets/images/oldMan.svg" : step === 5 ? "/assets/images/inCar.svg" : step === 6 ? "/assets/images/greetingPeople.svg" : step === 7 ? "/assets/images/crossingRoad.svg" : step === 8 ? "/assets/images/wheelChair.svg" : "/assets/images/search_img.svg"}
                 alt=""
                 className="h-full w-full object-cover object-center"
                 aria-hidden
@@ -387,6 +1030,7 @@ export default function IntakeSearch() {
               onBack={goBack}
               onContinue={goNext}
               onSaveLater={handleSaveAndFinishLater}
+              canContinue={!effectiveValidationError}
             >
               <StepContent
                 step={step}
@@ -394,6 +1038,12 @@ export default function IntakeSearch() {
                 update={update}
                 setFormData={setFormData}
                 toggleArray={toggleArray}
+                locationInputRef={locationInputRef}
+                onLocationBlur={handleLocationBlur}
+                onLocationInputChange={() => setLocationError("")}
+                locationError={locationError}
+                requiresZipForStepSeven={requiresZipForStepSeven}
+                syncPacContainer={syncPacContainer}
               />
             </CardShell>
           </div>
@@ -403,7 +1053,16 @@ export default function IntakeSearch() {
   );
 }
 
-function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSaveLater, children }) {
+function CardShell({
+  step,
+  totalSteps,
+  progressPercent,
+  onBack,
+  onContinue,
+  onSaveLater,
+  canContinue = true,
+  children,
+}) {
   return (
     <div className="flex flex-col flex-1 w-full min-w-0 px-6 sm:px-8 lg:px-10 pt-6 sm:pt-8 lg:pt-10 pb-6 sm:pb-8 lg:pb-10">
       {/* Top section: Back + Step + track bar on top, then divider */}
@@ -436,7 +1095,8 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
       <div className="mt-10 flex flex-col gap-4">
         <Button
           onClick={onContinue}
-          className="h-14 w-full rounded-2xl bg-[#00CFF4] text-xl text-white font-semibold"
+          disabled={!canContinue}
+          className="h-14 w-full rounded-2xl bg-[#00CFF4] text-xl text-white font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {step < totalSteps ? "Continue" : "See matching facilities"}
           <ArrowRight className="h-4 w-4 ml-1" />
@@ -453,7 +1113,30 @@ function CardShell({ step, totalSteps, progressPercent, onBack, onContinue, onSa
   );
 }
 
-function StepContent({ step, formData, update, setFormData, toggleArray }) {
+function StepContent({
+  step,
+  formData,
+  update,
+  setFormData,
+  toggleArray,
+  locationInputRef,
+  onLocationBlur,
+  onLocationInputChange,
+  locationError,
+  requiresZipForStepSeven,
+  syncPacContainer,
+}) {
+  const handleLocationKeyDown = (event) => {
+    if (
+      event.key === "Shift" ||
+      event.key === "Control" ||
+      event.key === "Alt" ||
+      event.key === "Meta" ||
+      event.key === "Fn"
+    ) {
+      syncPacContainer?.();
+    }
+  };
   if (step === 1) {
     return (
       <>
@@ -770,10 +1453,32 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
             <Input
               id="preferredLocation"
               placeholder="Enter city, zip code, or address"
+              ref={locationInputRef}
               value={formData.location}
-              onChange={(e) => update("location", e.target.value)}
+              onChange={(e) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  location: e.target.value,
+                  locationLat: null,
+                  locationLng: null,
+                }));
+                if (typeof onLocationInputChange === "function") onLocationInputChange();
+                syncPacContainer?.();
+              }}
+              onFocus={() => {
+                activePacInputRef.current = locationInputRef.current;
+                syncPacContainer?.();
+              }}
+              onKeyDown={handleLocationKeyDown}
+              onBlur={onLocationBlur}
               className="rounded-xl border-[#e2e8f0] h-12 placeholder:italic"
             />
+            <p className="text-xs text-[#64748b]">
+              {requiresZipForStepSeven
+                ? "Start typing your city and choose from suggestions. ZIP will auto-fill."
+                : "Enter city, ZIP code, or address."}
+            </p>
+            {locationError && <p className="text-xs text-[#DC2626]">{locationError}</p>}
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -798,7 +1503,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label className="text-[#334155] font-bold">What is your monthly budget?</Label>
-              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}+</span>
+              <span className="text-sm font-semibold text-[#00CFF4]">{formatBudget(budgetMin)} – {formatBudget(budgetMax)}</span>
             </div>
             <BudgetRangeSlider
               budgetMin={budgetMin}
@@ -823,6 +1528,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     );
   }
 
+  /*
   if (step === 8) {
     const assistedOption = LEVEL_OF_CARE_OPTIONS.find((o) => o.id === "assisted");
     if (!assistedOption) return null;
@@ -841,23 +1547,6 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           needed?
         </h1>
         <p className="text-[#64748b] mb-6 text-center">Select an option to help us match you with the facility they need.</p>
-        {/* Removed from step 8 UI (commented, not deleted) — Independent Living, Memory Care, Skilled Nursing. Original grid with all 4 cards:
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {LEVEL_OF_CARE_OPTIONS.map(({ id: optId, label: optLabel, desc: optDesc, Icon: OptIcon }) => (
-            <button key={optId} type="button" onClick={() => update("levelOfCare", optId)}
-              className={cn("rounded-2xl border-2 px-4 py-4 text-left transition-colors flex gap-3 items-start",
-                formData.levelOfCare === optId ? "border-[#00CFF4] bg-[#e0f7fb] shadow-[inset_0_0_0_1px_rgba(0,207,244,0.2)]" : "border-[#e2e8f0] bg-white text-[#64748b] hover:border-[#94a3b8]")}>
-              <span className={cn("flex h-10 w-10 shrink-0 rounded-xl items-center justify-center", formData.levelOfCare === optId ? "bg-[#00CFF4]/20 text-[#00CFF4]" : "bg-[#f1f5f9] text-[#64748b]")}>
-                <OptIcon className="h-5 w-5" />
-              </span>
-              <div className="min-w-0">
-                <span className={cn("block font-bold text-[#0f172a]", formData.levelOfCare === optId && "text-[#0f172a]")}>{optLabel}</span>
-                <span className="text-sm text-[#64748b] mt-0.5 block">{optDesc}</span>
-              </div>
-            </button>
-          ))}
-        </div>
-        */}
         <div className="flex min-h-[220px] items-center justify-center">
           <button
             type="button"
@@ -888,8 +1577,9 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
       </>
     );
   }
+  */
 
-  if (step === 9) {
+  if (step === 8) {
     return (
       <>
         <h1 className="text-xl sm:text-2xl font-bold italic text-[#0f172a] mb-2 text-center">
@@ -902,7 +1592,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
           </span>
           ?
         </h1>
-        <p className="text-[#64748b] mb-4 text-center">Select one of the options below or add another need.</p>
+        <p className="text-[#64748b] mb-4 text-center">Optional: select any preferences to improve matching, or continue to see facilities.</p>
         <div className="space-y-2 mb-4">
           <Label className="text-[#334155]">Select Preferences &amp; Needs</Label>
           <div className="min-h-[3.5rem] rounded-xl border-2 border-[#e2e8f0] bg-white px-4 py-3 flex flex-wrap gap-2 items-center">
@@ -956,7 +1646,7 @@ function StepContent({ step, formData, update, setFormData, toggleArray }) {
     );
   }
 
-  // Steps 10–16 commented out – flow ends at step 9
+  // Steps 10–16 commented out – flow ends at step 8
   // if (step === 10) {
   //   return (
   //     <>

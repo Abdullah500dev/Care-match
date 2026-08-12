@@ -25,6 +25,7 @@ const joiRegisterSchema = Joi.object({
       "string.empty": "Confirm password is required",
       "any.required": "Confirm password is required",
     }),
+  role: Joi.string().valid("user", "facility").default("user"),
 });
 
 const joiLoginSchema = Joi.object({
@@ -38,12 +39,18 @@ const joiForgetPasswordSchema = Joi.object({
 
 const joiVerifyActivationSchema = Joi.object({
   email: Joi.string().email().required(),
-  code: Joi.string()
-    .length(6)
-    .pattern(/^[0-9]+$/)
+  code: Joi.alternatives()
+    .try(
+      Joi.string()
+        .pattern(/^\s*\d{6}\s*$/)
+        .messages({
+          "string.pattern.base": "Verification code must be 6 digits",
+        }),
+      Joi.number().integer().min(100000).max(999999),
+    )
     .required()
     .messages({
-      "string.pattern.base": "Verification code must be 6 digits",
+      "any.required": "Verification code is required",
     }),
 });
 

@@ -42,8 +42,41 @@ function deriveServicesFromAmenities(amenities) {
   if (/\bhospice\b/.test(text)) services.push("hospice care");
   if (/\bphysical therapy|therapy\b/.test(text)) services.push("physical therapy");
   if (/\boccupational therapy\b/.test(text)) services.push("occupational therapy");
+  if (/\bmeal|dining|nutrition\b/.test(text)) services.push("meals and dining");
+  if (/\bactivit|social|engagement\b/.test(text)) services.push("activities and social engagement");
   if (/\bskilled nursing|snf\b/.test(text)) services.push("skilled nursing");
   return [...new Set(services)];
+}
+
+function toPositiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
+
+function buildDiscoveryKeywords(prefs, amenities) {
+  const keywords = [];
+  const notes = String(prefs?.personalityNotes || "").trim();
+  if (notes) keywords.push(notes);
+
+  const amenityText = (Array.isArray(amenities) ? amenities : [])
+    .map((x) => String(x || "").toLowerCase())
+    .join(" | ");
+
+  if (/\bmeal|dining|nutrition\b/.test(amenityText)) keywords.push("meals and dining");
+  if (/\bactivit|social|engagement\b/.test(amenityText)) keywords.push("activities and social engagement");
+  if (/\bwheelchair|accessible|ada\b/.test(amenityText)) {
+    keywords.push("wheelchair-accessible entrance and parking");
+  }
+  if (/\bprivate room|room type|suite|semi-private\b/.test(amenityText)) {
+    keywords.push("room types and private rooms");
+  }
+  if (/\bsafety|safe|secure|staff|qualified|licensed\b/.test(amenityText)) {
+    keywords.push("strong safety standards and qualified staff");
+  }
+  if (/\breview|rating|highly rated\b/.test(amenityText)) keywords.push("highly rated communities with strong reviews");
+  if (/\bmodern|amenit/.test(amenityText)) keywords.push("modern amenities");
+
+  return [...new Set(keywords)].filter(Boolean);
 }
 
 /** @param {Record<string, unknown>|null|undefined} prefs */
@@ -68,17 +101,45 @@ export function intakePreferencesToAiSearchParams(prefs) {
     : [];
 
   const services = deriveServicesFromAmenities(amenities);
+  const budgetMin = toPositiveNumber(prefs.budgetMinMonthly ?? prefs.budgetMin ?? prefs.budget_min);
+  const budgetMax = toPositiveNumber(prefs.budgetMaxMonthly ?? prefs.budgetMax ?? prefs.budget_max);
+  const maxDistanceMiles = toPositiveNumber(prefs.maxDistanceMiles ?? prefs.max_distance_miles);
+  const keywords = buildDiscoveryKeywords(prefs, amenities);
 
-  if (!zip || !locationRaw) return null;
+  // Allow city/state-only discovery when ZIP is unknown.
+  // `results.js` accepts either zip_code or location.
+  if (!locationRaw) return null;
 
-  return {
-    zip_code: zip,
+  const payload = {
+    zip_code: zip || locationRaw,
     location: locationRaw,
     care_levels,
     amenities,
     services,
   };
+
+  if (budgetMin != null && budgetMax != null && budgetMax >= budgetMin) {
+    payload.budget_min = budgetMin;
+    payload.budget_max = budgetMax;
+  } else if (budgetMax != null) {
+    payload.budget_max = budgetMax;
+  }
+
+  if (maxDistanceMiles != null) {
+    payload.max_distance_miles = maxDistanceMiles;
+  }
+
+  if (keywords.length > 0) {
+    payload.keywords = keywords;
+  }
+
+  return payload;
 }
+
+import {
+  isAggregatorListingUrl,
+  resolveOperatorWebsite,
+} from "../utils/isAggregatorListingUrl.js";
 
 /**
  * @param {object} f - one facility object from getCareMatchResults().results
@@ -122,6 +183,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     google_places: {
       place_id: gp.place_id || "",
       maps_url: gp.maps_url || f.maps_url || "",
+      website: gp.website || "",
       latitude: lat,
       longitude: lng,
       review_count: reviewCount,
@@ -139,6 +201,20 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
   if (f.pricing) reasons.push(String(f.pricing).trim());
   if (!reasons.length) reasons.push("AI-suggested community — verify details before touring.");
 
+  const providerUrl = String(f.provider_url || "").trim();
+  const operatorWebsite = resolveOperatorWebsite(
+    f.website,
+    gp.website,
+    f.maps_url,
+  );
+  const listingUrl =
+    providerUrl ||
+    (isAggregatorListingUrl(f.website) ? String(f.website || "").trim() : "");
+
+  const rawEmail = String(f.email || "").trim().toLowerCase();
+  // Never expose synthetic scrape placeholders in discover payloads.
+  const email = /@external\.carematch\.local$/i.test(rawEmail) ? "" : rawEmail;
+
   return {
     facilityId,
     name: f.name || "Community",
@@ -154,8 +230,9 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
         : null,
     care_levels: Array.isArray(f.care_levels) ? f.care_levels : [],
     images: Array.isArray(f.images) ? f.images : [],
-    website: f.website || "",
+    website: operatorWebsite,
     phone: f.phone || "",
+    email,
     zip_code: loc.zip_code || "",
     specialty: [],
     description: String(f.description || "").trim(),
@@ -164,6 +241,7 @@ export function mapAiDiscoveryFacilityToMatchRow(f, index) {
     amenities: Array.isArray(f.amenities) ? f.amenities : [],
     services: Array.isArray(f.services) ? f.services : [],
     external_data,
+    external_source_url: listingUrl,
     latitude: lat,
     longitude: lng,
     score,
