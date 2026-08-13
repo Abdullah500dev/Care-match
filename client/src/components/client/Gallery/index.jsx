@@ -13,7 +13,7 @@ const statCards = [
     description:
       "Access verified assisted living, memory care, and skilled nursing communities across the nation for your loved one.",
     imageSrc:
-      "/assets/images/happiness-cheerful-elderly-woman-men-talking-with-female-caregiver-nurse-doctor-having-health-checking-consult-living-areacaretakers-with-senior-couple-sitting-living-room-nursing-home (1).webp",
+      "/assets/images/happiness",
     imageAlt: "Caregiver with elderly couple",
   },
   {

@@ -6,6 +6,8 @@ import {
   LayoutDashboard,
   Users,
   Building2,
+  Hospital,
+  CalendarDays,
   MessageSquare,
   BarChart2,
   Settings,
@@ -21,6 +23,8 @@ const NAV_ITEMS = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/admin/residents", label: "Leads", icon: Users },
   { to: "/admin/communities", label: "Facilities", icon: Building2 },
+  { to: "/admin/snf-partners", label: "SNF Partners", icon: Hospital, adminOnly: true },
+  { to: "/admin/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true },
   { to: "/admin/messages", label: "Messages", icon: MessageSquare },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart2 },
   { to: "/admin/settings", label: "Settings", icon: Settings },
@@ -40,7 +44,12 @@ function NavContent({ onNavClick }) {
     : "/admin";
   const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard;
   const visibleItems = hideLeadsAndAnalytics
-    ? NAV_ITEMS.filter((item) => item.label !== "Leads" && item.label !== "Analytics")
+    ? NAV_ITEMS.filter(
+        (item) =>
+          item.label !== "Leads" &&
+          item.label !== "Analytics" &&
+          !item.adminOnly,
+      )
     : NAV_ITEMS;
   const finalItems = visibleItems.map((item) => {
     if (isFacilityDashboard && item.label === "Facilities") {
@@ -76,13 +85,20 @@ function NavContent({ onNavClick }) {
           {({ isActive }) => (
             <>
               <span
-                className="flex w-full items-center gap-3 rounded-lg px-4 py-2.5"
+                className="relative flex w-full items-center gap-3 rounded-lg px-4 py-2.5"
                 style={
                   isActive
                     ? { backgroundColor: "#ECFEFF", color: "#00B8DB" }
                     : { color: "#62748E" }
                 }
               >
+                {isActive && (
+                  <span
+                    className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full"
+                    style={{ backgroundColor: "#00B8DB" }}
+                    aria-hidden
+                  />
+                )}
                 <span
                   className={
                     isActive

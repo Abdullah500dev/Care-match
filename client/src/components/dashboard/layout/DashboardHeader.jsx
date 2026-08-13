@@ -4,8 +4,14 @@ import { useSelector } from "react-redux";
 import { Bell, Menu, User } from "lucide-react";
 import { getUser } from "../../../store/auth/authSlice";
 
-/** Top bar keeps Dashboard only — Leads / Facilities live in the sidebar. */
-const NAV_ITEMS = [{ to: "/admin", label: "Dashboard", exact: true }];
+/** Top nav matches admin mock: Dashboard / Leads / My Facilities. */
+const ADMIN_NAV_ITEMS = [
+  { to: "/admin", label: "Dashboard", exact: true },
+  { to: "/admin/residents", label: "Leads" },
+  { to: "/admin/communities", label: "My Facilities" },
+];
+
+const PORTAL_NAV_ITEMS = [{ to: "/admin", label: "Dashboard", exact: true }];
 
 function headerAccountLabel(userData) {
   const name = userData?.name?.trim();
@@ -28,6 +34,8 @@ export default function DashboardHeader({ onMenuClick }) {
     : isFacilityDashboard
       ? "/facility"
       : "/admin";
+  const NAV_ITEMS =
+    isUserDashboard || isFacilityDashboard ? PORTAL_NAV_ITEMS : ADMIN_NAV_ITEMS;
 
   return (
     <header
