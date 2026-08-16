@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import SEO from "@/components/common/SEO";
 import DashboardFooter from "@/components/dashboard/layout/DashboardFooter";
 import {
@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { apiClient } from "@/services/api";
 
 /** Brand tokens from SNF Partners reference mock */
 const BRAND = {
@@ -41,66 +42,28 @@ const BRAND = {
 
 const METRIC_CARDS = [
   {
-    label: "Active Leads",
-    value: "48",
-    change: "+12%",
+    label: "Total Referrals",
+    value: "0",
+    change: "Live",
     icon: TrendingUp,
     iconColor: BRAND.cyan,
     iconBg: "rgba(0, 184, 219, 0.12)",
   },
   {
-    label: "Tour Requests",
-    value: "12",
-    change: "+5%",
+    label: "Partner Facilities",
+    value: "0",
+    change: "Live",
     icon: CalendarDays,
     iconColor: BRAND.purple,
     iconBg: "rgba(124, 58, 237, 0.12)",
   },
   {
-    label: "Conversion Rate",
-    value: "24%",
-    change: "+8%",
+    label: "Referral Codes",
+    value: "0",
+    change: "Live",
     icon: BarChart2,
     iconColor: BRAND.cyan,
     iconBg: "rgba(0, 184, 219, 0.12)",
-  },
-];
-
-const PARTNER_FACILITIES = [
-  {
-    id: 1,
-    name: "Evergreen Health Center",
-    location: "Seattle, WA",
-    activeCount: "12",
-    totalCount: "145",
-    referralCode: "EVE-552-WA",
-  },
-  {
-    id: 2,
-    name: "Sunnyvale Skilled Nursing",
-    location: "Portland, OR",
-    activeCount: "5",
-    totalCount: "89",
-    referralCode: "SUN-441-OR",
-  },
-];
-
-const REFERRALS = [
-  {
-    id: 1,
-    patient: "James Wilson",
-    details: "78 years • Assisted Living",
-    source: "Evergreen Health Center",
-    status: "AWAITING VERIFICATION",
-    statusVariant: "warning",
-  },
-  {
-    id: 2,
-    patient: "Martha Stewart",
-    details: "82 years • Memory Care",
-    source: "Sunnyvale Skilled Nursing",
-    status: "ONBOARDING",
-    statusVariant: "success",
   },
 ];
 
@@ -125,12 +88,48 @@ export default function SNFPartners() {
   const [snfModalOpen, setSnfModalOpen] = useState(false);
   const [snfModalStep, setSnfModalStep] = useState("onboard"); // onboard | kit
   const [openKitModalOpen, setOpenKitModalOpen] = useState(false);
+  const [partners, setPartners] = useState([]);
+  const [referrals, setReferrals] = useState([]);
+  const [summary, setSummary] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [selectedPartner, setSelectedPartner] = useState(null);
   const [onboardForm, setOnboardForm] = useState({
     facilityName: "",
     contactPerson: "",
+    email: "",
     phone: "",
     partnershipType: "",
   });
+
+  const metricCards = useMemo(
+    () => [
+      { ...METRIC_CARDS[0], value: String(summary.totalReferrals ?? 0) },
+      { ...METRIC_CARDS[1], value: String(summary.partnerCount ?? 0) },
+      { ...METRIC_CARDS[2], value: String(summary.partnerCount ?? 0) },
+    ],
+    [summary],
+  );
+
+  const loadDashboard = async () => {
+    setLoading(true);
+    try {
+      const { data } = await apiClient.get("/api/snf-partners/dashboard");
+      setPartners(Array.isArray(data?.partners) ? data.partners : []);
+      setReferrals(Array.isArray(data?.referrals) ? data.referrals : []);
+      setSummary(data?.summary || {});
+    } catch (error) {
+      toast.error("Could not load skilled nursing partners", {
+        description: error?.response?.data?.message || "Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
 
   const copyReferralCode = async (code) => {
     try {
@@ -141,21 +140,40 @@ export default function SNFPartners() {
     }
   };
 
-  const REFERRAL_LINK = "https://carematch.ai/referral/EVE-992-WA";
-
   const copyReferralLink = async () => {
+    if (!selectedPartner?.referralLink) return;
     try {
-      await navigator.clipboard.writeText(REFERRAL_LINK);
+      await navigator.clipboard.writeText(selectedPartner.referralLink);
       toast.success("Referral link copied");
     } catch {
       toast.error("Could not copy link");
     }
   };
 
-  const handleOnboardSubmit = (e) => {
+  const handleOnboardSubmit = async (e) => {
     e.preventDefault();
-    setOpenKitModalOpen(false);
-    setSnfModalStep("kit");
+    setSaving(true);
+    try {
+      const { data } = await apiClient.post("/api/snf-partners", onboardForm);
+      setSelectedPartner(data.partner);
+      setOpenKitModalOpen(false);
+      setSnfModalStep("kit");
+      setPartners((current) => [data.partner, ...current]);
+      setOnboardForm({
+        facilityName: "",
+        contactPerson: "",
+        email: "",
+        phone: "",
+        partnershipType: "",
+      });
+      toast.success("SNF partner created. A sign-in invite was sent by email.");
+    } catch (error) {
+      toast.error("Could not create SNF partner", {
+        description: error?.response?.data?.message || "Please review the form.",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openOnboardModal = () => {
@@ -170,14 +188,23 @@ export default function SNFPartners() {
     setSnfModalStep("onboard");
   };
 
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if (!qrInput.trim()) {
       toast.error("Enter a QR referral code");
       return;
     }
-    toast.success("Patient checked in", {
-      description: `Code ${qrInput.trim()} verified.`,
-    });
+    try {
+      const { data } = await apiClient.post("/api/snf-partners/check-in", {
+        referralCode: qrInput.trim(),
+      });
+      toast.success("Referral checked in", { description: data.message });
+      setQrInput("");
+      loadDashboard();
+    } catch (error) {
+      toast.error("Could not check in referral", {
+        description: error?.response?.data?.message || "Check the referral code.",
+      });
+    }
   };
 
   return (
@@ -222,7 +249,7 @@ export default function SNFPartners() {
 
         {/* Metric cards */}
         <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-3">
-          {METRIC_CARDS.map((item) => {
+          {metricCards.map((item) => {
             const Icon = item.icon;
             return (
               <div
@@ -361,7 +388,19 @@ export default function SNFPartners() {
                   </tr>
                 </thead>
                 <tbody>
-                  {PARTNER_FACILITIES.map((row) => (
+                  {loading ? (
+                    <tr>
+                      <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                        Loading partners…
+                      </td>
+                    </tr>
+                  ) : partners.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                        No skilled nursing partners yet.
+                      </td>
+                    </tr>
+                  ) : partners.map((row) => (
                     <tr
                       key={row.id}
                       className="border-b last:border-b-0"
@@ -372,29 +411,34 @@ export default function SNFPartners() {
                           {row.name}
                         </p>
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.location}
+                          {row.contactPerson} · {row.email}
                         </p>
                       </td>
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
-                          {row.activeCount} Active
+                          {row.activeReferrals} Active
                         </p>
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.totalCount} total
+                          {row.totalReferrals} total referrals
                         </p>
                       </td>
                       <td className="px-5 py-4 sm:px-6">
                         <div className="flex items-center gap-2">
-                          <span
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPartner(row);
+                              setSnfModalStep("kit");
+                              setSnfModalOpen(true);
+                            }}
                             className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-bold"
                             style={{
                               backgroundColor: "#F1F5F9",
                               color: "#475569",
-                              // border: "1px solid #E2E8F0",
                             }}
                           >
                             {row.referralCode}
-                          </span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => copyReferralCode(row.referralCode)}
@@ -431,7 +475,13 @@ export default function SNFPartners() {
                   </tr>
                 </thead>
                 <tbody>
-                  {REFERRALS.map((row) => (
+                  {referrals.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                        No referrals have been checked in yet.
+                      </td>
+                    </tr>
+                  ) : referrals.map((row) => (
                     <tr
                       key={row.id}
                       className="border-b last:border-b-0"
@@ -439,14 +489,14 @@ export default function SNFPartners() {
                     >
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
-                          {row.patient}
+                          {row.referralCode}
                         </p>
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.details}
+                          {new Date(row.checkedInAt).toLocaleString()}
                         </p>
                       </td>
                       <td
-                        className="px-5 py-4 text-sm font-medium underline sm:px-6"
+                        className="px-5 py-4 text-sm font-medium sm:px-6"
                         style={{ color: "#334155" }}
                       >
                         {row.source}
@@ -455,15 +505,10 @@ export default function SNFPartners() {
                         <span
                           className="inline-flex rounded-full px-3 py-1 text-[11px] font-bold"
                           style={
-                            row.statusVariant === "warning"
-                              ? {
-                                  backgroundColor: "#FEF3C7",
-                                  color: "#B45309",
-                                }
-                              : {
-                                  backgroundColor: BRAND.greenBadgeBg,
-                                  color: BRAND.greenBadgeText,
-                                }
+                            {
+                              backgroundColor: BRAND.greenBadgeBg,
+                              color: BRAND.greenBadgeText,
+                            }
                           }
                         >
                           {row.status}
@@ -533,6 +578,7 @@ export default function SNFPartners() {
                       Facility Name
                     </label>
                     <input
+                      required
                       value={onboardForm.facilityName}
                       onChange={(e) =>
                         setOnboardForm((p) => ({
@@ -558,6 +604,7 @@ export default function SNFPartners() {
                         Contact Person
                       </label>
                       <input
+                        required
                         value={onboardForm.contactPerson}
                         onChange={(e) =>
                           setOnboardForm((p) => ({
@@ -579,9 +626,34 @@ export default function SNFPartners() {
                         className="block text-[11px] font-bold uppercase tracking-[0.1em]"
                         style={{ color: "#90A1B9" }}
                       >
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={onboardForm.email}
+                        onChange={(e) =>
+                          setOnboardForm((p) => ({ ...p, email: e.target.value }))
+                        }
+                        placeholder="contact@facility.com"
+                        className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
+                        style={{
+                          borderRadius: 12,
+                          backgroundColor: "#F8FAFC",
+                          borderColor: "#E2E8F0",
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        className="block text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ color: "#90A1B9" }}
+                      >
                         Phone
                       </label>
                       <input
+                        type="tel"
+                        required
                         value={onboardForm.phone}
                         onChange={(e) =>
                           setOnboardForm((p) => ({ ...p, phone: e.target.value }))
@@ -612,6 +684,7 @@ export default function SNFPartners() {
                         }))
                       }
                       placeholder=""
+                      required
                       className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
                       style={{
                         borderRadius: 12,
@@ -631,13 +704,13 @@ export default function SNFPartners() {
                       "0 0 6px -2px #CEFAFE, 0 8px 20px 0 rgba(0, 184, 219, 0.45)",
                   }}
                 >
-                  Generate Partnership & QR Kit
+                  {saving ? "Creating partner…" : "Generate Partnership & QR Kit"}
                 </button>
               </form>
             </>
           ) : (
             <div className="relative overflow-hidden">
-              <DialogTitle className="sr-only">Evergreen Health Center</DialogTitle>
+              <DialogTitle className="sr-only">{selectedPartner?.name || "SNF partner"}</DialogTitle>
               <div style={{ fontFamily: "Rethink Sans, sans-serif" }}>
                 <div className="flex min-w-0 flex-col px-6 pb-7 pt-7 sm:px-8 sm:pb-8 sm:pt-8">
                   <div className="flex min-w-0 items-start gap-3 pr-10 sm:gap-4">
@@ -660,23 +733,23 @@ export default function SNFPartners() {
                         className="text-xl font-bold tracking-tight sm:text-[22px]"
                         style={{ color: "#0F172A" }}
                       >
-                        Evergreen Health Center
+                        {selectedPartner?.name || "SNF partner"}
                       </h2>
                       <p
                         className="mt-1 flex items-center gap-1.5 text-sm"
                         style={{ color: "#64748B" }}
                       >
                         <MapPin className="h-3 w-3 shrink-0" style={{ color: "#94A3B8" }} />
-                        Seattle, WA
+                        {selectedPartner?.partnershipType || "Skilled Nursing Partner"}
                       </p>
                     </div>
                   </div>
 
                   <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                     {[
-                      { value: "145", label: "Total Referrals", color: "#0F172A" },
-                      { value: "12", label: "Currently Active", color: "#00B8DB" },
-                      { value: "88%", label: "Intake Success", color: "#166534" },
+                      { value: String(selectedPartner?.totalReferrals ?? 0), label: "Total Referrals", color: "#0F172A" },
+                      { value: String(selectedPartner?.activeReferrals ?? 0), label: "Currently Active", color: "#00B8DB" },
+                      { value: "—", label: "Intake Success", color: "#166534" },
                     ].map((stat) => (
                       <div
                         key={stat.label}
@@ -720,7 +793,7 @@ export default function SNFPartners() {
                         <div className="flex items-center gap-2">
                           <Phone className="h-3.5 w-3.5 shrink-0" style={{ color: BRAND.cyan }} />
                           <p className="text-sm font-bold" style={{ color: "#0F172A" }}>
-                            (206) 555-0123
+                            {selectedPartner?.phone || "—"}
                           </p>
                         </div>
                       </div>
@@ -737,7 +810,7 @@ export default function SNFPartners() {
                         <div className="flex min-w-0 items-center gap-2">
                           <Mail className="h-3.5 w-3.5 shrink-0" style={{ color: BRAND.cyan }} />
                           <p className="truncate text-sm font-bold" style={{ color: "#0F172A" }}>
-                            s.jenkins@evergreen.com
+                            {selectedPartner?.email || "—"}
                           </p>
                         </div>
                       </div>
@@ -755,8 +828,8 @@ export default function SNFPartners() {
                       <div className="flex min-w-0 flex-1 items-center gap-3">
                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white">
                           <img
-                            src="/assets/images/qrCode2.svg"
-                            alt="QR Code"
+                            src={selectedPartner?.qrImageUrl}
+                            alt="Referral QR Code"
                             className="h-8 w-8 object-contain"
                           />
                         </div>
@@ -768,7 +841,7 @@ export default function SNFPartners() {
                             className="mt-0.5 text-base font-bold leading-tight"
                             style={{ color: "#94A3B8" }}
                           >
-                            EVE-992-WA
+                            {selectedPartner?.referralCode || "—"}
                           </p>
                         </div>
                       </div>
@@ -837,7 +910,7 @@ export default function SNFPartners() {
                         className="w-full text-center text-[20px] font-bold leading-tight tracking-tight sm:text-[22px]"
                         style={{ color: "#0F172A" }}
                       >
-                        Evergreen Health Center
+                        {selectedPartner?.name || "SNF partner"}
                       </h2>
                       <p
                         className="mt-2 w-full text-center text-sm"
@@ -853,7 +926,7 @@ export default function SNFPartners() {
                         }}
                       >
                         <img
-                          src="/assets/images/SNFDashboard.svg"
+                        src={selectedPartner?.qrImageUrl}
                           alt="Referral QR Code"
                           className="h-44 w-44 sm:h-48 sm:w-48"
                         />
