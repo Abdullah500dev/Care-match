@@ -135,7 +135,7 @@ function isCareMatchPartnerListing(facility) {
   const platform = String(facility.sourcePlatform || "").toLowerCase();
   if (platform === "carematch") return true;
   const key = String(facility.key || facility.facilityId || "");
-  return key.startsWith("owned-");
+  return key.startsWith("owned-") || key.startsWith("snf-");
 }
 
 function partnerMatchesSearchArea(facility, { zipCode = "", locationQuery = "" } = {}) {
@@ -367,7 +367,11 @@ function normalizeFacilityForCard(m) {
     imageSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${latForMap},${lngForMap}&zoom=16&size=600x360&scale=2&maptype=roadmap&markers=color:0x14b8a6%7C${latForMap},${lngForMap}&key=${encodeURIComponent(mapsKey)}`;
   }
   if (!imageSrc) imageSrc = DEFAULT_CARD_IMAGE;
-  const category = "ASSISTED LIVING";
+  const isSnfListing =
+    String(m.facilityId || "").startsWith("snf-") ||
+    (Array.isArray(m.care_levels) &&
+      m.care_levels.some((level) => /skilled nursing/i.test(String(level || ""))));
+  const category = isSnfListing ? "SKILLED NURSING" : "ASSISTED LIVING";
   const features =
     Array.isArray(m.reasons) && m.reasons.length
       ? m.reasons.map((r) =>

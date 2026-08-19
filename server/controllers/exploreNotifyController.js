@@ -9,6 +9,7 @@ import User from "../models/userModel.js";
 import EmailTrack from "../models/emailTrackModel.js";
 import Lead from "../models/leadModel.js";
 import Facility from "../models/facilityModel.js";
+import SnfPartner from "../models/snfPartnerModel.js";
 import mongoose from "mongoose";
 
 const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
@@ -103,18 +104,26 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const resolvedFacilityId = String(facilityId || "").trim();
   let resolvedIsExternal = true;
 
-  // Hydrate contact details from owned Facility records when Contact payload is incomplete
+  // Hydrate contact details from owned Facility / SNF partner records when Contact payload is incomplete
   try {
     let facilityDoc = null;
     const ownedIdMatch = resolvedFacilityId.match(/^owned-(.+)$/i);
+    const snfIdMatch = resolvedFacilityId.match(/^snf-(.+)$/i);
     const mongoId =
       ownedIdMatch?.[1] ||
+      snfIdMatch?.[1] ||
       (mongoose.Types.ObjectId.isValid(resolvedFacilityId) ? resolvedFacilityId : "");
 
     if (mongoId && mongoose.Types.ObjectId.isValid(mongoId)) {
-      facilityDoc = await Facility.findById(mongoId)
-        .select("name address phone email zip_code is_external")
-        .lean();
+      if (snfIdMatch) {
+        facilityDoc = await SnfPartner.findById(mongoId)
+          .select("name address phone email zip_code")
+          .lean();
+      } else {
+        facilityDoc = await Facility.findById(mongoId)
+          .select("name address phone email zip_code is_external")
+          .lean();
+      }
     }
     if (!facilityDoc && resolvedName) {
       facilityDoc = await Facility.findOne({
@@ -124,13 +133,20 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
         .select("name address phone email zip_code is_external")
         .lean();
     }
+    if (!facilityDoc && resolvedName) {
+      facilityDoc = await SnfPartner.findOne({
+        name: new RegExp(`^${resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+      })
+        .select("name address phone email zip_code")
+        .lean();
+    }
     if (facilityDoc) {
       resolvedAddress = resolvedAddress || cleanFacilityField(facilityDoc.address);
       resolvedPhone = resolvedPhone || cleanFacilityField(facilityDoc.phone);
       resolvedFacilityEmail =
         resolvedFacilityEmail || cleanFacilityField(facilityDoc.email).toLowerCase();
       resolvedZip = resolvedZip || cleanFacilityField(facilityDoc.zip_code);
-      resolvedIsExternal = facilityDoc.is_external !== false;
+      resolvedIsExternal = facilityDoc.is_external === true;
     }
   } catch (err) {
     console.warn("[explore-click] facility hydrate failed:", err?.message || err);
@@ -139,6 +155,7 @@ export const notifyExploreClick = catchAsyncError(async (req, res, next) => {
   const platform = String(sourcePlatform || "").toLowerCase();
   const isOwnedFacility =
     resolvedFacilityId.startsWith("owned-") ||
+    resolvedFacilityId.startsWith("snf-") ||
     platform === "carematch" ||
     resolvedIsExternal === false;
   const isScrapedFacility = !isOwnedFacility;

@@ -2497,8 +2497,10 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     constrainedByDistance: constrainedRows.length,
     candidatesForEnrichment: effectiveRows.length,
     finalScored: facilities.length,
-    partnersInResponse: facilities.filter((f) => String(f.facilityId || "").startsWith("owned-"))
-      .length,
+    partnersInResponse: facilities.filter((f) => {
+      const id = String(f.facilityId || "");
+      return id.startsWith("owned-") || id.startsWith("snf-");
+    }).length,
     enrichBudgetHintMonthly: {
       min: Number.isFinite(bmin) && bmin > 0 ? Math.round(bmin) : null,
       max: Number.isFinite(bmax) && bmax > 0 ? Math.round(bmax) : null,

@@ -50,6 +50,13 @@ const BRAND = {
   purple: "#7C3AED",
 };
 
+function resolveSnfImageUrl(path) {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  const base = import.meta.env.VITE_REACT_APP_API_BASE_URL || "";
+  return `${String(base).replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 function formatPricingInput(value) {
   const raw = String(value || "");
   const monthly = /\/\s*month\s*$/i.test(raw.trim());
@@ -566,12 +573,34 @@ export default function SNFPartners() {
                       style={{ borderColor: BRAND.border }}
                     >
                       <td className="px-5 py-4 sm:px-6">
-                        <p className="font-bold" style={{ color: BRAND.text }}>
-                          {row.name}
-                        </p>
-                        <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.address || row.email}
-                        </p>
+                        <div className="flex min-w-0 items-center gap-3">
+                          {row.images?.[0] ? (
+                            <img
+                              src={resolveSnfImageUrl(row.images[0])}
+                              alt=""
+                              className="h-12 w-12 shrink-0 rounded-xl object-cover"
+                            />
+                          ) : (
+                            <div
+                              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl"
+                              style={{ backgroundColor: BRAND.cyanSoft }}
+                            >
+                              <img
+                                src="/assets/images/everGreenHealthCareIcon.svg"
+                                alt=""
+                                className="h-7 w-7 object-contain"
+                              />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-bold" style={{ color: BRAND.text }}>
+                              {row.name}
+                            </p>
+                            <p className="mt-0.5 truncate text-sm" style={{ color: BRAND.muted }}>
+                              {row.address || row.email}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
@@ -996,12 +1025,20 @@ export default function SNFPartners() {
                         borderRadius: 16,
                       }}
                     >
+                    {selectedPartner?.images?.[0] ? (
+                      <img
+                        src={resolveSnfImageUrl(selectedPartner.images[0])}
+                        alt=""
+                        className="h-12 w-12 rounded-2xl object-cover sm:h-14 sm:w-14"
+                      />
+                    ) : (
                       <img
                         src="/assets/images/everGreenHealthCareIcon.svg"
                         alt=""
                         className="h-8 w-8 object-contain sm:h-9 sm:w-9"
                         style={{ background: "transparent" }}
                       />
+                    )}
                     </div>
                     <div className="min-w-0 flex-1 pt-0.5">
                       <h2

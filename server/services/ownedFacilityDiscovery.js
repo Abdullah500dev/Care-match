@@ -1,4 +1,5 @@
 import Facility from "../models/facilityModel.js";
+import SnfPartner from "../models/snfPartnerModel.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "./aiDiscoveryBridge.js";
 
 function normalizeZip(value) {
@@ -94,6 +95,32 @@ export function mapOwnedFacilityToMatchRow(doc, index) {
   };
 }
 
+export function mapOwnedSnfToMatchRow(doc, index) {
+  const aiInput = mapOwnedDocToAiInput({
+    ...doc,
+    care_levels:
+      Array.isArray(doc.care_levels) && doc.care_levels.length
+        ? doc.care_levels
+        : ["Skilled Nursing"],
+  });
+  const row = mapAiDiscoveryFacilityToMatchRow(aiInput, index);
+  const email = String(doc.email || "").trim().toLowerCase();
+  return {
+    ...row,
+    facilityId: `snf-${String(doc._id)}`,
+    is_external: false,
+    source_platform: "CareMatch",
+    external_source_url: "",
+    email: /@external\.carematch\.local$/i.test(email) ? "" : email,
+    care_levels:
+      Array.isArray(doc.care_levels) && doc.care_levels.length
+        ? doc.care_levels
+        : ["Skilled Nursing"],
+    reasons: ["CareMatch skilled nursing partner."],
+    score: Math.max(row.score || 0, 88),
+  };
+}
+
 /**
  * Find non-external (admin/provider) facilities matching search ZIP and/or city/state.
  */
@@ -137,15 +164,22 @@ export async function findOwnedFacilitiesForDiscover({
     return [];
   }
 
-  const docs = await Facility.find({
-    is_external: { $ne: true },
-    $or: orConditions,
-  })
-    .sort({ updatedAt: -1 })
-    .limit(50)
-    .lean();
+  const locationFilter = { $or: orConditions };
+  const [docs, snfDocs] = await Promise.all([
+    Facility.find({
+      is_external: { $ne: true },
+      ...locationFilter,
+    })
+      .sort({ updatedAt: -1 })
+      .limit(50)
+      .lean(),
+    SnfPartner.find(locationFilter).sort({ updatedAt: -1 }).limit(50).lean(),
+  ]);
 
-  const filtered = docs.filter((doc) => ownedFacilityMatchesCareLevels(doc));
+  const facilityRows = docs
+    .filter((doc) => ownedFacilityMatchesCareLevels(doc))
+    .map((doc, index) => mapOwnedFacilityToMatchRow(doc, index));
+  const snfRows = snfDocs.map((doc, index) => mapOwnedSnfToMatchRow(doc, index));
 
-  return filtered.map((doc, index) => mapOwnedFacilityToMatchRow(doc, index));
+  return [...snfRows, ...facilityRows];
 }

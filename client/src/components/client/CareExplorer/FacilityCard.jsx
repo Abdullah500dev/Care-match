@@ -180,7 +180,8 @@ const FacilityCard = ({
   const isOwnedFacility =
     isExternal === false ||
     String(sourcePlatform || "").toLowerCase() === "carematch" ||
-    String(facilityId || "").startsWith("owned-");
+    String(facilityId || "").startsWith("owned-") ||
+    String(facilityId || "").startsWith("snf-");
   const navigate = useNavigate();
   const location = useLocation();
   const isLoggedIn = Boolean(localStorage.getItem("access_token"));
