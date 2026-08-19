@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Users,
   Building2,
+  Hospital,
   MessageSquareText,
   BarChart3,
   Settings,
@@ -91,6 +92,16 @@ export default function Header() {
           to: `${accountBasePath}/communities`,
           icon: Building2,
         },
+        ...(!isAdminStaff && !isFacilityUser && !isSnfUser
+          ? [
+              {
+                key: "snf",
+                label: "SNF",
+                to: "/portal/snf",
+                icon: Hospital,
+              },
+            ]
+          : []),
         {
           key: "messages",
           label: "Messages",

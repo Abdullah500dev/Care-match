@@ -19,6 +19,7 @@ import snfPartnerRouter from "./routes/snfPartnerRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
+import { ensureSnfReferralIndexes } from "./models/snfPartnerModel.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,11 @@ const port = process.env.PORT;
 
 database.on("error", console.error.bind(console, "Database connection error:"));
 database.once("open", async () => {
+  try {
+    await ensureSnfReferralIndexes();
+  } catch (error) {
+    console.error("SNF referral index repair failed:", error.message);
+  }
   try {
     await seedDefaultAdmin();
   } catch (error) {

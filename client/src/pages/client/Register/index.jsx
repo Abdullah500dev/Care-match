@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { authServices } from "../../../services/authServices";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../../lib/authFeedback";
+import { persistSnfReferralCode, peekSnfReferralCode } from "../../../lib/snfReferral";
 
 const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
 
@@ -31,10 +32,21 @@ export default function Register() {
   const [errors, setErrors] = useState({});
   const showActivationCard = Boolean(pendingEmail);
   const fromState = location.state?.from;
+  const signinDestination = () => {
+    const referral = peekSnfReferralCode() || persistSnfReferralCode(searchParams.get("referral"));
+    return {
+      pathname: "/signin",
+      search: referral ? `?referral=${encodeURIComponent(referral)}` : "",
+    };
+  };
  
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  useEffect(() => {
+    persistSnfReferralCode(searchParams.get("referral"));
+  }, [searchParams]);
 
   useEffect(() => {
     const emailFromQuery = (searchParams.get("email") || "").trim().toLowerCase();
@@ -134,7 +146,7 @@ export default function Register() {
             "Account activated",
             "Your account was activated successfully. Please sign in to continue."
           );
-          navigate("/signin", { state: { ...nextState, from: fromState } });
+          navigate(signinDestination(), { state: { ...nextState, from: fromState } });
           return;
         }
       } catch {
@@ -296,7 +308,7 @@ export default function Register() {
           // Ignore parsing errors and continue with email only.
         }
       }
-      navigate("/signin", { state: { ...nextState, from: fromState } });
+      navigate(signinDestination(), { state: { ...nextState, from: fromState } });
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Verification failed",
@@ -528,7 +540,7 @@ export default function Register() {
 
                     <p className="text-center text-sm text-[#64748b]">
                       Already have an account?{" "}
-                      <Link to="/signin" state={{ from: fromState }} className="underline text-[#00b8db]">
+                      <Link to={signinDestination()} state={{ from: fromState }} className="underline text-[#00b8db]">
                         Sign In
                       </Link>
                     </p>

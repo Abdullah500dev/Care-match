@@ -84,6 +84,18 @@ const userSchema = new mongoose.Schema(
       type: [Object],
       default: [],
     },
+    scanned_snfs: {
+      type: [
+        {
+          partnerId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "SnfPartner",
+          },
+          scannedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

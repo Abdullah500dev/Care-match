@@ -1,12 +1,17 @@
 import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import { useForm } from "react-hook-form";
 import { authServices, clearPersistedAuthTokens, persistAuthTokens } from "../../services/authServices";
-import { clearUser, setUser } from "../../store/auth/authSlice";
+import { clearUser, getUser, setUser } from "../../store/auth/authSlice";
 import { Eye, EyeOff } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import SEO from "../../components/common/SEO";
+import {
+  peekSnfReferralCode,
+  persistSnfReferralCode,
+  snfReferralPath,
+} from "../../lib/snfReferral";
 
 const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
 const POST_LOGIN_REDIRECT_KEY = "carematch_post_login_redirect";
@@ -15,6 +20,8 @@ function Signin() {
     const dispatch = useDispatch();
     const navigate = useNavigate();
     const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const { isAuthenticated, userData, token } = useSelector(getUser);
     const [showPassword, setShowPassword] = useState(false);
     const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm();
     const fromState = location.state?.from;
@@ -73,6 +80,15 @@ function Signin() {
     };
 
     React.useEffect(() => {
+      const referralFromQuery = persistSnfReferralCode(searchParams.get("referral"));
+      const referralCode = referralFromQuery || peekSnfReferralCode();
+      const currentToken = token || (typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : "");
+      if (referralCode && isAuthenticated && currentToken && userData?.role === "user") {
+        navigate(snfReferralPath(referralCode), { replace: true });
+      }
+    }, [isAuthenticated, navigate, searchParams, token, userData?.role]);
+
+    React.useEffect(() => {
       const stateEmail = location.state?.email || "";
       const statePassword = location.state?.password || "";
 
@@ -121,6 +137,7 @@ function Signin() {
             sessionStorage.removeItem(SIGNUP_PREFILL_KEY);
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
+            const referralCode = persistSnfReferralCode(searchParams.get("referral")) || peekSnfReferralCode();
             const redirect = getPostLoginRedirect() || getStoredPostLoginRedirect();
             sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
             if (role === "facility") {
@@ -137,6 +154,8 @@ function Signin() {
                 replace: true,
                 state: redirect?.state,
               });
+            } else if (referralCode) {
+              navigate(snfReferralPath(referralCode), { replace: true });
             } else {
               if (redirect && !String(redirect.pathname || "").startsWith("/facility") && !String(redirect.pathname || "").startsWith("/snf") && !String(redirect.pathname || "").startsWith("/admin")) {
                 navigate(
@@ -210,7 +229,7 @@ function Signin() {
                 </button>
 
                 <p className="text-sm text-center mt-4">
-                    Don’t have an account? <Link to="/register" className="underline text-[#00b8db]">Sign Up</Link>
+                    Don’t have an account? <Link to={{ pathname: "/register", search: location.search }} state={{ from: fromState }} className="underline text-[#00b8db]">Sign Up</Link>
                 </p>
             </form>
         </div>

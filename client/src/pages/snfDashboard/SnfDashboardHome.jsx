@@ -1,6 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Copy, Download, Mail, MapPin, Phone, QrCode } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import SEO from "@/components/common/SEO";
 import { apiClient } from "@/services/api";
 import { toast } from "sonner";
@@ -33,6 +40,7 @@ export default function SnfDashboardHome() {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
+  const [selectedReferral, setSelectedReferral] = useState(null);
 
   useEffect(() => {
     const load = async () => {
@@ -264,23 +272,35 @@ export default function SnfDashboardHome() {
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {referrals.map((row) => (
-              <li key={row.id} className="flex items-start justify-between gap-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-800">
-                    {row.referralCode}
-                  </p>
-                  {row.checkedInAt ? (
-                    <p className="mt-0.5 text-[11px] text-slate-400">
-                      {formatShortDate(row.checkedInAt)}
-                    </p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                  {row.status || "Checked In"}
-                </span>
-              </li>
-            ))}
+            {referrals.map((row) => {
+              const visitorLabel = row.visitorName || row.visitorEmail || "Unknown visitor";
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReferral(row)}
+                    className="flex w-full items-start justify-between gap-3 py-2.5 text-left transition hover:bg-slate-50"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {visitorLabel}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {row.visitorEmail && row.visitorName ? row.visitorEmail : row.referralCode}
+                      </p>
+                      {row.checkedInAt ? (
+                        <p className="mt-0.5 text-[11px] text-slate-400">
+                          {formatShortDate(row.checkedInAt)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                      {row.status || "Checked In"}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -295,6 +315,69 @@ export default function SnfDashboardHome() {
           description="Upload, replace, or remove photos for your skilled nursing facility (max 8)."
         />
       ) : null}
+      <Dialog
+        open={Boolean(selectedReferral)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedReferral(null);
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl border-[#E2E8F0]">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="text-xl text-slate-900">
+              {selectedReferral?.visitorName || selectedReferral?.visitorEmail || "Referral details"}
+            </DialogTitle>
+            <DialogDescription>
+              Visitor who scanned your QR code or opened your referral link.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Name</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {selectedReferral?.visitorName || "—"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+              <p className="mt-1 break-all text-sm font-semibold text-slate-900">
+                {selectedReferral?.visitorEmail || "—"}
+              </p>
+            </div>
+            {selectedReferral?.visitorPhone ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Phone</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral.visitorPhone}
+                </p>
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Referral code
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral?.referralCode || "—"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Scanned</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral?.checkedInAt
+                    ? formatShortDate(selectedReferral.checkedInAt)
+                    : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <p className="text-sm font-medium text-emerald-800">Status</p>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                {selectedReferral?.status || "Checked In"}
+              </span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

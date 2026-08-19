@@ -20,6 +20,12 @@ const snfReferralSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    scannedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true },
 );
@@ -58,4 +64,33 @@ const snfPartnerSchema = new mongoose.Schema(
 );
 
 export const SnfReferral = mongoose.model("SnfReferral", snfReferralSchema);
+
+/** Older schema made referralCode unique on scans; multiple users must be able to scan the same QR. */
+export async function ensureSnfReferralIndexes() {
+  const collection = SnfReferral.collection;
+  let indexes = [];
+  try {
+    indexes = await collection.indexes();
+  } catch {
+    return;
+  }
+
+  for (const idx of indexes) {
+    const keys = Object.keys(idx.key || {});
+    if (keys.length === 1 && keys[0] === "referralCode" && idx.unique) {
+      try {
+        await collection.dropIndex(idx.name);
+      } catch {
+        // Index may already have been removed.
+      }
+    }
+  }
+
+  try {
+    await collection.createIndex({ referralCode: 1 });
+  } catch {
+    // Non-unique index may already exist.
+  }
+}
+
 export default mongoose.model("SnfPartner", snfPartnerSchema);

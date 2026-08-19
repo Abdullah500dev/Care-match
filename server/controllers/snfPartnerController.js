@@ -6,7 +6,7 @@ import ErrorHandler from "../utils/errorHandler.js";
 import sendMail from "../utils/sendMail.js";
 import { resolveClientBaseUrl } from "../utils/resolveClientBaseUrl.js";
 import User from "../models/userModel.js";
-import SnfPartner, { SnfReferral } from "../models/snfPartnerModel.js";
+import SnfPartner, { SnfReferral, ensureSnfReferralIndexes } from "../models/snfPartnerModel.js";
 import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
 
 const RESET_PASSWORD_TOKEN_MINUTES = 60;
@@ -33,9 +33,38 @@ const partnerReferralStats = async (partnerId) => {
     SnfReferral.find({ snfPartnerId: partnerId })
       .sort({ checkedInAt: -1 })
       .limit(25)
+      .populate("scannedBy", "name email phone")
+      .populate("checkedInBy", "name email phone")
       .lean(),
   ]);
   return { total, recent };
+};
+
+const visitorFromUser = (user) => {
+  if (!user) return { id: "", name: "", email: "", phone: "" };
+  return {
+    id: String(user._id || ""),
+    name: String(user.name || "").trim(),
+    email: String(user.email || "").trim().toLowerCase(),
+    phone: String(user.phone || "").trim(),
+  };
+};
+
+const serializeReferralRow = (referral, extra = {}) => {
+  const visitor = visitorFromUser(referral.scannedBy);
+  const checkedInUser = visitorFromUser(referral.checkedInBy);
+  const display = visitor.email || visitor.name ? visitor : checkedInUser;
+  return {
+    id: referral._id,
+    referralCode: referral.referralCode,
+    status: referral.status,
+    checkedInAt: referral.checkedInAt,
+    visitorName: display.name || "",
+    visitorEmail: display.email || "",
+    visitorPhone: display.phone || "",
+    visitorId: display.id || "",
+    ...extra,
+  };
 };
 
 const makeReferralCode = (name) => {
@@ -92,7 +121,25 @@ const serializePartner = (partner, referralCount = 0, activeCount = 0, referralL
 });
 
 const publicReferralLink = (req, code) =>
-  `${req.protocol}://${req.get("host")}/api/snf-partners/referral/${encodeURIComponent(code)}`;
+  `${resolveClientBaseUrl(req)}/snf-referral/${encodeURIComponent(code)}`;
+
+const serializePublicPartner = (partner) => ({
+  id: String(partner._id),
+  name: partner.name,
+  phone: partner.phone,
+  email: partner.email,
+  website: partner.website || "",
+  address: partner.address || "",
+  zip_code: partner.zip_code || "",
+  pricing: partner.pricing || "",
+  services: partner.services || [],
+  amenities: partner.amenities || [],
+  care_levels: partner.care_levels?.length ? partner.care_levels : ["Skilled Nursing"],
+  units: partner.units || 0,
+  occupancy: partner.occupancy || 0,
+  images: partner.images || [],
+  partnershipType: partner.partnershipType || "Skilled Nursing",
+});
 
 export const createSnfPartner = catchAsyncError(async (req, res, next) => {
   if (!(await requireAdmin(req.user?.id))) {
@@ -219,12 +266,7 @@ export const getMySnfPartner = catchAsyncError(async (req, res, next) => {
   return res.json({
     success: true,
     partner: serializePartner(partner, total, 0, publicReferralLink(req, partner.referralCode)),
-    referrals: recent.map((referral) => ({
-      id: referral._id,
-      referralCode: referral.referralCode,
-      status: referral.status,
-      checkedInAt: referral.checkedInAt,
-    })),
+    referrals: recent.map((referral) => serializeReferralRow(referral)),
   });
 });
 
@@ -330,6 +372,8 @@ export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
     .sort({ checkedInAt: -1 })
     .limit(25)
     .populate("snfPartnerId", "name")
+    .populate("scannedBy", "name email phone")
+    .populate("checkedInBy", "name email phone")
     .lean();
 
   return res.json({
@@ -346,15 +390,77 @@ export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
         publicReferralLink(req, partner.referralCode),
       ),
     ),
-    referrals: recent.map((referral) => ({
-      id: referral._id,
-      referralCode: referral.referralCode,
-      source: referral.snfPartnerId?.name || "Unknown SNF",
-      status: referral.status,
-      checkedInAt: referral.checkedInAt,
-    })),
+    referrals: recent.map((referral) =>
+      serializeReferralRow(referral, {
+        source: referral.snfPartnerId?.name || "Unknown SNF",
+      }),
+    ),
   });
 });
+
+const rememberUserSnfScan = async (userId, partner) => {
+  const user = await User.findById(userId).select("scanned_snfs");
+  if (!user) return;
+  const partnerId = String(partner._id);
+  const rows = Array.isArray(user.scanned_snfs) ? user.scanned_snfs : [];
+  const existing = rows.find((row) => String(row.partnerId) === partnerId);
+  if (existing) {
+    existing.scannedAt = new Date();
+  } else {
+    rows.unshift({ partnerId: partner._id, scannedAt: new Date() });
+  }
+  user.scanned_snfs = rows;
+  await user.save({ validateBeforeSave: false });
+};
+
+const recordSnfReferralScan = async ({
+  referralCode,
+  partnerId,
+  userId,
+  checkedInBy = null,
+}) => {
+  const existingForUser = userId
+    ? await SnfReferral.findOne({
+        snfPartnerId: partnerId,
+        scannedBy: userId,
+      }).sort({ checkedInAt: -1 })
+    : null;
+  if (existingForUser) {
+    existingForUser.checkedInAt = new Date();
+    if (checkedInBy) existingForUser.checkedInBy = checkedInBy;
+    await existingForUser.save();
+    return existingForUser;
+  }
+
+  try {
+    return await SnfReferral.create({
+      referralCode,
+      snfPartnerId: partnerId,
+      scannedBy: userId || null,
+      checkedInBy,
+    });
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+    try {
+      await ensureSnfReferralIndexes();
+      return await SnfReferral.create({
+        referralCode,
+        snfPartnerId: partnerId,
+        scannedBy: userId || null,
+        checkedInBy,
+      });
+    } catch (retryError) {
+      if (retryError?.code !== 11000) throw retryError;
+      const existing = await SnfReferral.findOne({ referralCode }).sort({ checkedInAt: -1 });
+      if (!existing) throw retryError;
+      if (userId) existing.scannedBy = userId;
+      existing.checkedInAt = new Date();
+      if (checkedInBy) existing.checkedInBy = checkedInBy;
+      await existing.save();
+      return existing;
+    }
+  }
+};
 
 export const checkInSnfReferral = catchAsyncError(async (req, res, next) => {
   if (!(await requireAdmin(req.user?.id))) {
@@ -366,9 +472,10 @@ export const checkInSnfReferral = catchAsyncError(async (req, res, next) => {
   const partner = await SnfPartner.findOne({ referralCode });
   if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
 
-  const referral = await SnfReferral.create({
+  const referral = await recordSnfReferralScan({
     referralCode,
-    snfPartnerId: partner._id,
+    partnerId: partner._id,
+    userId: req.user.id,
     checkedInBy: req.user.id,
   });
   return res.status(201).json({
@@ -378,20 +485,94 @@ export const checkInSnfReferral = catchAsyncError(async (req, res, next) => {
   });
 });
 
-/** QR destination. Every phone scan is counted before sending the visitor to CareMatch. */
+/** Legacy QR / API URL. Send visitors to the frontend SNF referral page. */
 export const scanSnfReferral = catchAsyncError(async (req, res, next) => {
   const referralCode = String(req.params.code || "").trim().toUpperCase();
-  const partner = await SnfPartner.findOne({ referralCode });
+  const partner = await SnfPartner.findOne({ referralCode }).select("referralCode");
   if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
-
-  await SnfReferral.create({
-    referralCode,
-    snfPartnerId: partner._id,
-  });
 
   const clientBaseUrl = resolveClientBaseUrl(req);
   return res.redirect(
     302,
-    `${clientBaseUrl}/signin?referral=${encodeURIComponent(referralCode)}`,
+    `${clientBaseUrl}/snf-referral/${encodeURIComponent(partner.referralCode)}`,
   );
+});
+
+export const getPublicSnfByReferralCode = catchAsyncError(async (req, res, next) => {
+  const referralCode = String(req.params.code || "").trim().toUpperCase();
+  const partner = await SnfPartner.findOne({ referralCode });
+  if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
+  return res.json({
+    success: true,
+    partner: serializePublicPartner(partner),
+  });
+});
+
+export const claimSnfReferral = catchAsyncError(async (req, res, next) => {
+  const referralCode = String(req.body?.referralCode || req.params.code || "")
+    .trim()
+    .toUpperCase();
+  if (!referralCode) return next(new ErrorHandler("Referral code is required", 400));
+
+  const partner = await SnfPartner.findOne({ referralCode });
+  if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
+
+  const userId = req.user?.id;
+  await rememberUserSnfScan(userId, partner);
+  try {
+    await recordSnfReferralScan({
+      referralCode,
+      partnerId: partner._id,
+      userId,
+    });
+  } catch (error) {
+    console.error("SNF referral scan log failed:", error?.message || error);
+  }
+
+  return res.json({
+    success: true,
+    partner: serializePublicPartner(partner),
+  });
+});
+
+export const getMyScannedSnfs = catchAsyncError(async (req, res, next) => {
+  const userId = req.user?.id;
+  const user = await User.findById(userId).select("scanned_snfs");
+  const fromUser = Array.isArray(user?.scanned_snfs) ? user.scanned_snfs : [];
+  const scannedAtById = new Map(
+    fromUser
+      .filter((row) => row?.partnerId)
+      .map((row) => [String(row.partnerId), row.scannedAt]),
+  );
+
+  const referrals = await SnfReferral.find({ scannedBy: userId })
+    .sort({ checkedInAt: -1 })
+    .populate("snfPartnerId")
+    .lean();
+
+  for (const referral of referrals) {
+    const id = String(referral.snfPartnerId?._id || "");
+    if (!id || scannedAtById.has(id)) continue;
+    scannedAtById.set(id, referral.checkedInAt || referral.createdAt);
+  }
+
+  const ids = [...scannedAtById.keys()];
+  const docs = ids.length
+    ? await SnfPartner.find({ _id: { $in: ids } }).lean()
+    : [];
+  const docById = new Map(docs.map((doc) => [String(doc._id), doc]));
+
+  const partners = ids
+    .map((id) => {
+      const doc = docById.get(id);
+      if (!doc) return null;
+      return {
+        ...serializePublicPartner(doc),
+        scannedAt: scannedAtById.get(id),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.scannedAt || 0) - new Date(a.scannedAt || 0));
+
+  return res.json({ success: true, partners });
 });

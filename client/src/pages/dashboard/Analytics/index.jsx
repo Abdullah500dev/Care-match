@@ -277,8 +277,8 @@ export default function Analytics() {
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-slate-900 md:text-2xl">
-            Analytics
-          </h2>
+        Analytics
+      </h2>
           <p className="mt-1 text-sm text-slate-500 md:text-base">
             Website reporting — visits, inquiries, and facility engagement across CareMatch.
           </p>

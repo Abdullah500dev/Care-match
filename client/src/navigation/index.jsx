@@ -28,6 +28,7 @@ import Privacy from "../pages/client/Privacy";
 import Terms from "../pages/client/Terms";
 import FAQ from "../pages/client/FAQ";
 import WhyUs from "../pages/client/WhyUs";
+import SnfReferralLanding from "../pages/client/SnfReferral";
 import NotFound from "../pages/common/NotFound";
 import Signin from "../pages/auth/Signin";
 import AdminSignin from "../pages/auth/AdminSignin";
@@ -83,6 +84,9 @@ const UserDashboardSettings = lazyWithRetry(
 );
 const UserDashboardFacilities = lazyWithRetry(
   () => import("../pages/userDashboard/UserDashboardFacilities"),
+);
+const UserDashboardSnfs = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardSnfs"),
 );
 const FacilityDashboardHome = lazyWithRetry(
   () => import("../pages/facilityDashboard/FacilityDashboardHome"),
@@ -508,6 +512,7 @@ export default function Navigation() {
               <Route path="/terms" element={<Terms />} />
               <Route path="/faqs" element={<FAQ />} />
               <Route path="/why-us" element={<WhyUs />} />
+              <Route path="/snf-referral/:code" element={<SnfReferralLanding />} />
               <Route path="/Signin" element={<Signin />} />
               <Route path="/signin" element={<Signin />} />
               <Route path="/login" element={<Signin />} />
@@ -557,6 +562,7 @@ export default function Navigation() {
                   path="communities"
                   element={<UserDashboardFacilities />}
                 />
+                <Route path="snf" element={<UserDashboardSnfs />} />
                 <Route path="messages" element={<UserDashboardMessages />} />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>

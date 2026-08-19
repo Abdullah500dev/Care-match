@@ -24,6 +24,7 @@ const NAV_ITEMS = [
   { to: "/admin/residents", label: "Leads", icon: Users },
   { to: "/admin/communities", label: "Facilities", icon: Building2 },
   { to: "/admin/snf-partners", label: "SNF Partners", icon: Hospital, adminOnly: true },
+  { to: "/admin/snf", label: "SNF", icon: Hospital, userOnly: true },
   { to: "/admin/calendar", label: "Calendar", icon: CalendarDays, adminOnly: true },
   { to: "/admin/messages", label: "Messages", icon: MessageSquare },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart2 },
@@ -51,9 +52,10 @@ function NavContent({ onNavClick }) {
         (item) =>
           item.label !== "Leads" &&
           item.label !== "Analytics" &&
-          !item.adminOnly,
+          !item.adminOnly &&
+          (!item.userOnly || isUserDashboard),
       )
-    : NAV_ITEMS;
+    : NAV_ITEMS.filter((item) => !item.userOnly);
   const finalItems = visibleItems.map((item) => {
     if (isFacilityDashboard && item.label === "Facilities") {
       return { ...item, label: "Facility" };

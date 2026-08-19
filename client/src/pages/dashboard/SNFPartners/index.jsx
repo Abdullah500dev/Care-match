@@ -677,10 +677,12 @@ export default function SNFPartners() {
                     >
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
-                          {row.referralCode}
+                          {row.visitorName || row.visitorEmail || row.referralCode}
                         </p>
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {new Date(row.checkedInAt).toLocaleString()}
+                          {row.visitorEmail && row.visitorName
+                            ? row.visitorEmail
+                            : new Date(row.checkedInAt).toLocaleString()}
                         </p>
                       </td>
                       <td
