@@ -12,6 +12,7 @@ import {
   Phone,
   Mail,
   X,
+  ImagePlus,
 } from "lucide-react";
 import {
   Dialog,
@@ -19,8 +20,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
+import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
+import {
+  extractZipFromAddress,
+  formatZipInput,
+  validateAddressZipPair,
+} from "@/lib/facilityAddressGeo";
+import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 /** Brand tokens from SNF Partners reference mock */
 const BRAND = {
@@ -38,6 +48,46 @@ const BRAND = {
   greenBadgeText: "#15803D",
   greenBadgeBorder: "#b7f7ce",
   purple: "#7C3AED",
+};
+
+function formatPricingInput(value) {
+  const raw = String(value || "");
+  const monthly = /\/\s*month\s*$/i.test(raw.trim());
+  let body = raw.replace(/\s*\/\s*month\s*$/i, "").trim();
+  body = body.replace(/\$/g, "").replace(/,/g, "");
+  body = body.replace(/[^\d\s-]/g, "");
+  const parts = body.split(/\s*-\s*/);
+  const leftDigits = (parts[0] ?? "").replace(/\D/g, "").slice(0, 8);
+  const rightDigits =
+    parts.length > 1 ? parts.slice(1).join("").replace(/\D/g, "").slice(0, 8) : "";
+  const fmt = (digits) => {
+    if (!digits) return "";
+    const num = Number.parseInt(digits, 10);
+    if (Number.isNaN(num)) return "";
+    return `$${num.toLocaleString("en-US")}`;
+  };
+  let out = fmt(leftDigits);
+  if (parts.length > 1) {
+    out = rightDigits ? `${fmt(leftDigits)}-${fmt(rightDigits)}` : `${fmt(leftDigits)}-`;
+  }
+  const suffix = monthly ? "/month" : "";
+  if (!out && !suffix) return "";
+  return out + suffix;
+}
+
+const EMPTY_ONBOARD = {
+  name: "",
+  email: "",
+  phone: "",
+  website: "",
+  address: "",
+  zip_code: "",
+  pricing: "",
+  services: [],
+  amenities: [],
+  careLevels: ["Skilled Nursing"],
+  units: "",
+  occupancy: "",
 };
 
 const METRIC_CARDS = [
@@ -94,13 +144,20 @@ export default function SNFPartners() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState(null);
-  const [onboardForm, setOnboardForm] = useState({
-    facilityName: "",
-    contactPerson: "",
-    email: "",
-    phone: "",
-    partnershipType: "",
+  const [onboardForm, setOnboardForm] = useState(EMPTY_ONBOARD);
+  const [tagDrafts, setTagDrafts] = useState({
+    services: "",
+    amenities: "",
+    careLevels: "",
   });
+  const [selectedImages, setSelectedImages] = useState([]);
+  const [selectedImagePreviewUrls, setSelectedImagePreviewUrls] = useState([]);
+
+  useEffect(() => {
+    const urls = selectedImages.map((file) => URL.createObjectURL(file));
+    setSelectedImagePreviewUrls(urls);
+    return () => urls.forEach((url) => URL.revokeObjectURL(url));
+  }, [selectedImages]);
 
   const metricCards = useMemo(
     () => [
@@ -152,20 +209,63 @@ export default function SNFPartners() {
 
   const handleOnboardSubmit = async (e) => {
     e.preventDefault();
+    const phoneFormatted = formatPhoneInput(onboardForm.phone);
+    if (phoneDigitsOnly(phoneFormatted).length !== 10) {
+      toast.error("Invalid phone number", {
+        description: "Enter a 10-digit US phone number, e.g. (206) 555-0123.",
+      });
+      return;
+    }
+    const zipDigits =
+      formatZipInput(onboardForm.zip_code) || extractZipFromAddress(onboardForm.address);
+    if (zipDigits.length !== 5) {
+      toast.error("ZIP code required", {
+        description: "Include a valid 5-digit US ZIP in the address.",
+      });
+      return;
+    }
+    const geoCheck = await validateAddressZipPair(onboardForm.address, zipDigits);
+    if (geoCheck.state === "mismatch") {
+      toast.error("Address ZIP could not be verified", {
+        description: geoCheck.message,
+      });
+      return;
+    }
+    const normalizedWebsite = normalizeFacilityWebsite(onboardForm.website);
+    if (String(onboardForm.website || "").trim() && !normalizedWebsite) {
+      toast.error("Invalid website", {
+        description: "Enter a valid URL (e.g. https://www.yourfacility.com).",
+      });
+      return;
+    }
+
     setSaving(true);
     try {
-      const { data } = await apiClient.post("/api/snf-partners", onboardForm);
+      const payload = new FormData();
+      payload.append("name", onboardForm.name);
+      payload.append("email", onboardForm.email);
+      payload.append("phone", phoneFormatted);
+      payload.append("website", normalizedWebsite);
+      payload.append("address", onboardForm.address);
+      payload.append("zip_code", zipDigits);
+      payload.append("pricing", onboardForm.pricing);
+      onboardForm.services.forEach((item) => payload.append("services", item));
+      onboardForm.amenities.forEach((item) => payload.append("amenities", item));
+      onboardForm.careLevels.forEach((item) => payload.append("care_levels", item));
+      selectedImages.forEach((file) => payload.append("images", file));
+      payload.append("units", onboardForm.units || 0);
+      payload.append("occupancy", onboardForm.occupancy || 0);
+
+      const { data } = await apiClient.post("/api/snf-partners", payload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
       setSelectedPartner(data.partner);
       setOpenKitModalOpen(false);
       setSnfModalStep("kit");
       setPartners((current) => [data.partner, ...current]);
-      setOnboardForm({
-        facilityName: "",
-        contactPerson: "",
-        email: "",
-        phone: "",
-        partnershipType: "",
-      });
+      setOnboardForm(EMPTY_ONBOARD);
+      setTagDrafts({ services: "", amenities: "", careLevels: "" });
+      setSelectedImages([]);
       toast.success("SNF partner created. A sign-in invite was sent by email.");
     } catch (error) {
       toast.error("Could not create SNF partner", {
@@ -174,6 +274,62 @@ export default function SNFPartners() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const addTags = (field, raw) => {
+    const next = String(raw || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!next.length) return;
+    setOnboardForm((prev) => ({
+      ...prev,
+      [field]: [...prev[field], ...next.filter((item) => !prev[field].includes(item))],
+    }));
+  };
+
+  const handleTagInputKeyDown = (field, event) => {
+    if (event.key !== "Enter" && event.key !== ",") return;
+    event.preventDefault();
+    addTags(field, tagDrafts[field]);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleTagInputBlur = (field) => {
+    if (!tagDrafts[field].trim()) return;
+    addTags(field, tagDrafts[field]);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const removeTag = (field, index) => {
+    setOnboardForm((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setSelectedImages((prev) => [...prev, ...files].slice(0, 8));
+    e.target.value = "";
+  };
+
+  const handleFacilityImageDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleFacilityImageDrop = (e) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []).filter((f) =>
+      String(f.type || "").startsWith("image/"),
+    );
+    if (!files.length) return;
+    setSelectedImages((prev) => [...prev, ...files].slice(0, 8));
+  };
+
+  const removeImage = (index) => {
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const openOnboardModal = () => {
@@ -186,6 +342,9 @@ export default function SNFPartners() {
     setSnfModalOpen(false);
     setOpenKitModalOpen(false);
     setSnfModalStep("onboard");
+    setOnboardForm(EMPTY_ONBOARD);
+    setTagDrafts({ services: "", amenities: "", careLevels: "" });
+    setSelectedImages([]);
   };
 
   const handleCheckIn = async () => {
@@ -411,7 +570,7 @@ export default function SNFPartners() {
                           {row.name}
                         </p>
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.contactPerson} · {row.email}
+                          {row.address || row.email}
                         </p>
                       </td>
                       <td className="px-5 py-4 sm:px-6">
@@ -538,7 +697,7 @@ export default function SNFPartners() {
           className={
             snfModalStep === "kit"
               ? "w-[calc(100%-2rem)] max-w-[720px] gap-0 overflow-hidden border-0 bg-white p-0"
-              : "w-[calc(100%-2rem)] max-w-[440px] gap-0 overflow-hidden border-0 bg-white p-0 sm:max-w-[480px]"
+              : "w-[calc(100%-2rem)] max-w-[720px] gap-0 overflow-hidden border-0 bg-white p-0"
           }
           style={{
             borderRadius: snfModalStep === "kit" ? 36 : 40,
@@ -566,136 +725,252 @@ export default function SNFPartners() {
               </DialogHeader>
               <form
                 onSubmit={handleOnboardSubmit}
-                className="flex min-w-0 flex-col px-7 pb-7 pt-5 sm:px-8 sm:pb-8"
-                style={{ fontFamily: "Rethink Sans, sans-serif" }}
+                className="flex min-w-0 flex-col overflow-y-auto px-7 pb-7 pt-5 sm:px-8 sm:pb-8"
+                style={{ fontFamily: "Rethink Sans, sans-serif", maxHeight: "80vh" }}
               >
                 <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label
-                      className="block text-[11px] font-bold uppercase tracking-[0.1em]"
-                      style={{ color: "#90A1B9" }}
-                    >
-                      Facility Name
-                    </label>
-                    <input
-                      required
-                      value={onboardForm.facilityName}
-                      onChange={(e) =>
-                        setOnboardForm((p) => ({
-                          ...p,
-                          facilityName: e.target.value,
-                        }))
-                      }
-                      placeholder="Seattle Senior Care"
-                      className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
-                      style={{
-                        borderRadius: 12,
-                        backgroundColor: "#F8FAFC",
-                        borderColor: "#E2E8F0",
-                      }}
-                    />
-                  </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <label
-                        className="block text-[11px] font-bold uppercase tracking-[0.1em]"
-                        style={{ color: "#90A1B9" }}
-                      >
-                        Contact Person
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        Facility Name
                       </label>
-                      <input
+                      <Input
                         required
-                        value={onboardForm.contactPerson}
+                        value={onboardForm.name}
                         onChange={(e) =>
-                          setOnboardForm((p) => ({
-                            ...p,
-                            contactPerson: e.target.value,
-                          }))
+                          setOnboardForm((p) => ({ ...p, name: e.target.value }))
                         }
-                        placeholder="John Smith"
-                        className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
-                        style={{
-                          borderRadius: 12,
-                          backgroundColor: "#F8FAFC",
-                          borderColor: "#E2E8F0",
-                        }}
+                        placeholder="Evergreen Health Center"
                       />
                     </div>
                     <div className="space-y-2">
-                      <label
-                        className="block text-[11px] font-bold uppercase tracking-[0.1em]"
-                        style={{ color: "#90A1B9" }}
-                      >
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                         Email
                       </label>
-                      <input
+                      <Input
                         type="email"
                         required
                         value={onboardForm.email}
                         onChange={(e) =>
                           setOnboardForm((p) => ({ ...p, email: e.target.value }))
                         }
-                        placeholder="contact@facility.com"
-                        className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
-                        style={{
-                          borderRadius: 12,
-                          backgroundColor: "#F8FAFC",
-                          borderColor: "#E2E8F0",
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label
-                        className="block text-[11px] font-bold uppercase tracking-[0.1em]"
-                        style={{ color: "#90A1B9" }}
-                      >
-                        Phone
-                      </label>
-                      <input
-                        type="tel"
-                        required
-                        value={onboardForm.phone}
-                        onChange={(e) =>
-                          setOnboardForm((p) => ({ ...p, phone: e.target.value }))
-                        }
-                        placeholder="(206) 555-0000"
-                        className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
-                        style={{
-                          borderRadius: 12,
-                          backgroundColor: "#F8FAFC",
-                          borderColor: "#E2E8F0",
-                        }}
+                        placeholder="intake@evergreenhealth.com"
                       />
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        Phone
+                      </label>
+                      <Input
+                        type="tel"
+                        inputMode="tel"
+                        required
+                        value={onboardForm.phone}
+                        onChange={(e) =>
+                          setOnboardForm((p) => ({
+                            ...p,
+                            phone: formatPhoneInput(e.target.value),
+                          }))
+                        }
+                        placeholder="(206) 555-0123"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        Monthly Pricing
+                      </label>
+                      <Input
+                        value={onboardForm.pricing}
+                        onChange={(e) =>
+                          setOnboardForm((p) => ({
+                            ...p,
+                            pricing: formatPricingInput(e.target.value),
+                          }))
+                        }
+                        placeholder="$4,500 or $4,500-$6,800"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <label
-                      className="block text-[11px] font-bold uppercase tracking-[0.1em]"
-                      style={{ color: "#90A1B9" }}
-                    >
-                      Partnership Type
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                      Website
                     </label>
-                    <input
-                      value={onboardForm.partnershipType}
+                    <Input
+                      type="url"
+                      value={onboardForm.website}
                       onChange={(e) =>
-                        setOnboardForm((p) => ({
-                          ...p,
-                          partnershipType: e.target.value,
-                        }))
+                        setOnboardForm((p) => ({ ...p, website: e.target.value }))
                       }
-                      placeholder=""
-                      required
-                      className="h-12 w-full border px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:ring-2 focus:ring-[#00B8DB]/35"
-                      style={{
-                        borderRadius: 12,
-                        backgroundColor: "#F8FAFC",
-                        borderColor: "#E2E8F0",
-                      }}
+                      placeholder="https://www.yourfacility.com"
                     />
+                    <p className="text-xs text-slate-500">
+                      Optional. Shown when families click Contact on Care Explorer.
+                    </p>
+                  </div>
+
+                  <FacilityAddressZipFields
+                    enabled={snfModalOpen && snfModalStep === "onboard"}
+                    address={onboardForm.address}
+                    zipCode={onboardForm.zip_code}
+                    onAddressChange={(e) =>
+                      setOnboardForm((p) => ({ ...p, address: e.target.value }))
+                    }
+                    onZipCodeChange={(zip) =>
+                      setOnboardForm((p) => ({ ...p, zip_code: zip }))
+                    }
+                  />
+
+                  <div className="space-y-3">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                      Facility images (max 8 total) — change / upload here
+                    </label>
+                    {selectedImages.length >= 8 ? (
+                      <p className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-center text-xs font-medium text-amber-950">
+                        Image limit reached (8 total). Remove an image to add more.
+                      </p>
+                    ) : (
+                      <div
+                        className="relative overflow-hidden rounded-2xl border-2 border-dashed border-slate-200/90 bg-gradient-to-br from-slate-50/80 via-white to-cyan-50/40"
+                        onDragOver={handleFacilityImageDragOver}
+                        onDrop={handleFacilityImageDrop}
+                      >
+                        <input
+                          id="snf-images-input"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="sr-only"
+                          onChange={handleImageSelect}
+                        />
+                        <label
+                          htmlFor="snf-images-input"
+                          className="relative flex cursor-pointer flex-col items-center gap-2 px-4 py-8"
+                        >
+                          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#00B8DB] to-cyan-600 text-white shadow-lg">
+                            <ImagePlus className="h-7 w-7" strokeWidth={1.75} />
+                          </div>
+                          <span className="text-sm font-semibold text-slate-800">
+                            Drop images here or click to browse
+                          </span>
+                          <span className="text-center text-xs text-slate-500">
+                            JPG, PNG, WebP — {8 - selectedImages.length} of 8 upload slots left
+                          </span>
+                        </label>
+                      </div>
+                    )}
+                    {selectedImages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {selectedImages.map((file, index) => (
+                          <div
+                            key={`${file.name}-${index}`}
+                            className="group relative overflow-hidden rounded-2xl border border-cyan-100/80 bg-white shadow-md"
+                          >
+                            <div className="relative aspect-square w-full overflow-hidden bg-slate-100">
+                              <img
+                                src={selectedImagePreviewUrls[index]}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-lg"
+                                aria-label={`Remove ${file.name}`}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <p className="truncate px-2 py-1.5 text-center text-[10px] font-medium text-slate-600">
+                              {file.name}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {[
+                    { field: "services", label: "Services", color: "text-cyan-900" },
+                    { field: "amenities", label: "Amenities", color: "text-violet-900" },
+                    { field: "careLevels", label: "Care Levels", color: "text-emerald-900" },
+                  ].map((tag) => (
+                    <div key={tag.field} className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        {tag.label}
+                      </label>
+                      <Input
+                        value={tagDrafts[tag.field]}
+                        onChange={(e) =>
+                          setTagDrafts((prev) => ({
+                            ...prev,
+                            [tag.field]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => handleTagInputKeyDown(tag.field, e)}
+                        onBlur={() => handleTagInputBlur(tag.field)}
+                        placeholder={`Type ${tag.label.slice(0, -1).toLowerCase()} and press Enter or comma`}
+                      />
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {onboardForm[tag.field].map((item, index) => (
+                          <span
+                            key={`${item}-${index}`}
+                            className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold ${tag.color}`}
+                          >
+                            {item}
+                            <button
+                              type="button"
+                              onClick={() => removeTag(tag.field, index)}
+                              className="rounded-full p-0.5"
+                              aria-label={`Remove ${item}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        Units
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        inputMode="numeric"
+                        value={onboardForm.units}
+                        onChange={(e) =>
+                          setOnboardForm((p) => ({ ...p, units: e.target.value }))
+                        }
+                        placeholder="100"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
+                        Occupancy
+                      </label>
+                      <Input
+                        type="number"
+                        min="0"
+                        inputMode="numeric"
+                        value={onboardForm.occupancy}
+                        onChange={(e) =>
+                          setOnboardForm((p) => ({ ...p, occupancy: e.target.value }))
+                        }
+                        placeholder="85"
+                      />
+                    </div>
                   </div>
                 </div>
                 <button
                   type="submit"
+                  disabled={saving}
                   className="mt-6 h-12 w-full text-[15px] font-bold text-white"
                   style={{
                     borderRadius: 14,
@@ -740,7 +1015,7 @@ export default function SNFPartners() {
                         style={{ color: "#64748B" }}
                       >
                         <MapPin className="h-3 w-3 shrink-0" style={{ color: "#94A3B8" }} />
-                        {selectedPartner?.partnershipType || "Skilled Nursing Partner"}
+                        {selectedPartner?.address || "Skilled Nursing Partner"}
                       </p>
                     </div>
                   </div>

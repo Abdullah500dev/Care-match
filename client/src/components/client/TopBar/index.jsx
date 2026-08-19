@@ -7,7 +7,8 @@ export default function TopBar() {
   const isDashboard =
     location.pathname.startsWith("/admin") ||
     location.pathname.startsWith("/portal") ||
-    location.pathname.startsWith("/facility");
+    location.pathname.startsWith("/facility") ||
+    location.pathname.startsWith("/snf");
 
   const containerClass = isDashboard
     ? "mx-auto max-w-[1800px] px-2 sm:px-4"

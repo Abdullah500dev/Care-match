@@ -20,6 +20,10 @@ export default function FacilityImagesManager({
   facility,
   onFacilityUpdated,
   className = "",
+  updateUrl = "/api/facilities/me",
+  responseKey = "facility",
+  title = "Change facility images",
+  description = "Upload, replace, or remove photos for your community (max 8).",
 }) {
   const [keptImagePaths, setKeptImagePaths] = useState([]);
   const [selectedImages, setSelectedImages] = useState([]);
@@ -28,7 +32,7 @@ export default function FacilityImagesManager({
   useEffect(() => {
     setKeptImagePaths(Array.isArray(facility?.images) ? [...facility.images] : []);
     setSelectedImages([]);
-  }, [facility?._id, facility?.images]);
+  }, [facility?._id, facility?.id, facility?.images]);
 
   const previewUrls = useMemo(
     () => selectedImages.map((file) => URL.createObjectURL(file)),
@@ -68,7 +72,7 @@ export default function FacilityImagesManager({
   );
 
   const handleSaveImages = async () => {
-    if (!facility?._id && !facility?.name) {
+    if (!facility?._id && !facility?.id && !facility?.name) {
       toast.error("No facility linked to this account.");
       return;
     }
@@ -92,10 +96,10 @@ export default function FacilityImagesManager({
       payload.append("keep_image_paths", JSON.stringify(keptImagePaths));
       selectedImages.forEach((file) => payload.append("images", file));
 
-      const { data } = await apiClient.put("/api/facilities/me", payload, {
+      const { data } = await apiClient.put(updateUrl, payload, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      const updated = data?.facility;
+      const updated = data?.[responseKey] || data?.facility || data?.partner;
       if (updated) {
         onFacilityUpdated?.(updated);
         setKeptImagePaths(Array.isArray(updated.images) ? [...updated.images] : []);
@@ -115,10 +119,8 @@ export default function FacilityImagesManager({
     <div className={`rounded-xl border border-slate-200 bg-white p-5 ${className}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Change facility images</h2>
-          <p className="text-sm text-slate-500">
-            Upload, replace, or remove photos for your community (max {MAX_IMAGES}).
-          </p>
+          <h2 className="text-base font-bold text-slate-900">{title}</h2>
+          <p className="text-sm text-slate-500">{description}</p>
         </div>
         <Button
           type="button"

@@ -36,11 +36,14 @@ export default function Header() {
     userData?.user_type,
   );
   const isFacilityUser = userData?.role === "facility";
+  const isSnfUser = userData?.role === "snf";
   const accountBasePath = isAdminStaff
     ? "/admin"
     : isFacilityUser
       ? "/facility"
-      : "/portal";
+      : isSnfUser
+        ? "/snf"
+        : "/portal";
   const accountMenuItems = isAdminStaff
     ? [
         {
@@ -84,7 +87,7 @@ export default function Header() {
         },
         {
           key: "facilities",
-          label: "Facilities",
+          label: isSnfUser ? "My SNF" : "Facilities",
           to: `${accountBasePath}/communities`,
           icon: Building2,
         },

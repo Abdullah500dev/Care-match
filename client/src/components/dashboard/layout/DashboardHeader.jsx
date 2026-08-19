@@ -18,6 +18,9 @@ function headerAccountLabel(userData) {
   if (userData?.role === "user") {
     return name || "User";
   }
+  if (userData?.role === "snf") {
+    return name || "SNF Partner";
+  }
   if (["superadmin", "super_admin", "admin"].includes(userData?.role)) {
     return "Super Admin";
   }
@@ -29,13 +32,18 @@ export default function DashboardHeader({ onMenuClick }) {
   const { userData } = useSelector(getUser);
   const isUserDashboard = location.pathname.startsWith("/portal");
   const isFacilityDashboard = location.pathname.startsWith("/facility");
+  const isSnfDashboard = location.pathname.startsWith("/snf");
   const basePath = isUserDashboard
     ? "/portal"
     : isFacilityDashboard
       ? "/facility"
-      : "/admin";
+      : isSnfDashboard
+        ? "/snf"
+        : "/admin";
   const NAV_ITEMS =
-    isUserDashboard || isFacilityDashboard ? PORTAL_NAV_ITEMS : ADMIN_NAV_ITEMS;
+    isUserDashboard || isFacilityDashboard || isSnfDashboard
+      ? PORTAL_NAV_ITEMS
+      : ADMIN_NAV_ITEMS;
 
   return (
     <header

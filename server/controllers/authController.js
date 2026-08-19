@@ -10,6 +10,7 @@ import ErrorHandler from "../utils/errorHandler.js";
 import sendToken from "../utils/jwtToken.js";
 import User from "../models/userModel.js";
 import Facility from "../models/facilityModel.js";
+import SnfPartner from "../models/snfPartnerModel.js";
 import { RESET_PASSWORD_TOKEN_MINUTES } from "../config/authConstants.js";
 
 const escapeRegex = (value) =>
@@ -240,6 +241,14 @@ export const login = catchAsyncError(async (req, res, next) => {
           403,
         ),
       );
+    }
+
+    if (user.role === "user") {
+      const linkedSnf = await SnfPartner.exists({ facilityUserId: user._id });
+      if (linkedSnf) {
+        user.role = "snf";
+        await user.save({ validateBeforeSave: false });
+      }
     }
 
     sendToken(user, 200, res);

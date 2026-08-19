@@ -130,8 +130,15 @@ function Signin() {
                 replace: true,
                 state: redirect?.state,
               });
+            } else if (role === "snf") {
+              navigate(redirect && String(redirect.pathname || "").startsWith("/snf")
+                ? redirect.pathname
+                : "/snf", {
+                replace: true,
+                state: redirect?.state,
+              });
             } else {
-              if (redirect && !String(redirect.pathname || "").startsWith("/facility") && !String(redirect.pathname || "").startsWith("/admin")) {
+              if (redirect && !String(redirect.pathname || "").startsWith("/facility") && !String(redirect.pathname || "").startsWith("/snf") && !String(redirect.pathname || "").startsWith("/admin")) {
                 navigate(
                   {
                     pathname: redirect.pathname,

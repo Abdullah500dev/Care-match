@@ -37,12 +37,15 @@ function NavContent({ onNavClick }) {
   useSelector(getUser);
   const isUserDashboard = location.pathname.startsWith("/portal");
   const isFacilityDashboard = location.pathname.startsWith("/facility");
+  const isSnfDashboard = location.pathname.startsWith("/snf");
   const basePath = isUserDashboard
     ? "/portal"
     : isFacilityDashboard
     ? "/facility"
+    : isSnfDashboard
+    ? "/snf"
     : "/admin";
-  const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard;
+  const hideLeadsAndAnalytics = isUserDashboard || isFacilityDashboard || isSnfDashboard;
   const visibleItems = hideLeadsAndAnalytics
     ? NAV_ITEMS.filter(
         (item) =>
@@ -54,6 +57,9 @@ function NavContent({ onNavClick }) {
   const finalItems = visibleItems.map((item) => {
     if (isFacilityDashboard && item.label === "Facilities") {
       return { ...item, label: "Facility" };
+    }
+    if (isSnfDashboard && item.label === "Facilities") {
+      return { ...item, label: "My SNF" };
     }
     return item;
   });

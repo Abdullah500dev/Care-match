@@ -90,6 +90,12 @@ const FacilityDashboardHome = lazyWithRetry(
 const FacilityDashboardFacilities = lazyWithRetry(
   () => import("../pages/facilityDashboard/FacilityDashboardFacilities"),
 );
+const SnfDashboardHome = lazyWithRetry(
+  () => import("../pages/snfDashboard/SnfDashboardHome"),
+);
+const SnfDashboardProfile = lazyWithRetry(
+  () => import("../pages/snfDashboard/SnfDashboardProfile"),
+);
 
 import Header from "../components/client/Header";
 import TopBar from "../components/client/TopBar";
@@ -97,6 +103,7 @@ import Footer from "../components/client/Footer";
 import DashboardLayout from "../components/dashboard/layout/DashboardLayout";
 import UserDashboardLayout from "../components/userDashboard/layout/UserDashboardLayout";
 import FacilityDashboardLayout from "../components/facilityDashboard/layout/FacilityDashboardLayout";
+import SnfDashboardLayout from "../components/snfDashboard/layout/SnfDashboardLayout";
 import { clearUser, getUser } from "../store/auth/authSlice";
 import { clearPersistedAuthTokens } from "../services/authServices";
 
@@ -139,6 +146,7 @@ const getHomeByRole = (userData) => {
   if (["admin", "authenticator", "moderator"].includes(userType))
     return "/admin";
   if (role === "facility") return "/facility";
+  if (role === "snf") return "/snf";
   if (role === "user") return "/portal";
   // Default unknown/non-staff users to website home to avoid accidental admin redirects.
   return "/";
@@ -152,6 +160,26 @@ const RequireUserRole = ({ children }) => {
   );
 
   if (isAdminStaff || userData?.role !== "user") {
+    return (
+      <Navigate
+        to={getHomeByRole(userData)}
+        replace
+        state={{ from: location }}
+      />
+    );
+  }
+
+  return children;
+};
+
+const RequireSnfRole = ({ children }) => {
+  const { userData } = useSelector(getUser);
+  const location = useLocation();
+  const isAdminStaff = ["admin", "authenticator", "moderator"].includes(
+    userData?.user_type,
+  );
+
+  if (isAdminStaff || userData?.role !== "snf") {
     return (
       <Navigate
         to={getHomeByRole(userData)}
@@ -211,7 +239,8 @@ const Layout = ({ children }) => {
   const isDashboardRoute =
     location.pathname.startsWith("/admin") ||
     location.pathname.startsWith("/portal") ||
-    location.pathname.startsWith("/facility");
+    location.pathname.startsWith("/facility") ||
+    location.pathname.startsWith("/snf");
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const inactivityTimerRef = useRef(null);
@@ -548,6 +577,23 @@ export default function Navigation() {
                   path="communities"
                   element={<FacilityDashboardFacilities />}
                 />
+                <Route path="messages" element={<UserDashboardMessages />} />
+                <Route path="settings" element={<UserDashboardSettings />} />
+              </Route>
+
+              {/* ── SNF Partner Portal (/snf/*) ──────────────────── */}
+              <Route
+                path="/snf/*"
+                element={
+                  <RequireAuth>
+                    <RequireSnfRole>
+                      <SnfDashboardLayout />
+                    </RequireSnfRole>
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<SnfDashboardHome />} />
+                <Route path="communities" element={<SnfDashboardProfile />} />
                 <Route path="messages" element={<UserDashboardMessages />} />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
