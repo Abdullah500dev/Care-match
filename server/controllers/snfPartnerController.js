@@ -412,6 +412,30 @@ export const updateSnfPartnerByAdmin = catchAsyncError(async (req, res, next) =>
   }
 });
 
+export const deleteSnfPartnerByAdmin = catchAsyncError(async (req, res, next) => {
+  if (!(await requireAdmin(req.user?.id))) {
+    return next(new ErrorHandler("Admin only", 403));
+  }
+
+  const partnerId = String(req.params.id || "").trim();
+  if (!partnerId) return next(new ErrorHandler("Partner id is required", 400));
+
+  const partner = await SnfPartner.findById(partnerId);
+  if (!partner) return next(new ErrorHandler("SNF partner not found", 404));
+
+  const linkedUserId = partner.facilityUserId;
+  await SnfReferral.deleteMany({ snfPartnerId: partner._id });
+  await SnfPartner.deleteOne({ _id: partner._id });
+  if (linkedUserId) {
+    await User.deleteOne({ _id: linkedUserId, role: "snf" });
+  }
+
+  return res.json({
+    success: true,
+    message: "SNF partner deleted successfully.",
+  });
+});
+
 export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
   if (!(await requireAdmin(req.user?.id))) {
     return next(new ErrorHandler("Admin only", 403));
@@ -520,29 +544,6 @@ const recordSnfReferralScan = async ({
     }
   }
 };
-
-export const checkInSnfReferral = catchAsyncError(async (req, res, next) => {
-  if (!(await requireAdmin(req.user?.id))) {
-    return next(new ErrorHandler("Admin only", 403));
-  }
-  const referralCode = String(req.body?.referralCode || "").trim().toUpperCase();
-  if (!referralCode) return next(new ErrorHandler("Referral code is required", 400));
-
-  const partner = await SnfPartner.findOne({ referralCode });
-  if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
-
-  const referral = await recordSnfReferralScan({
-    referralCode,
-    partnerId: partner._id,
-    userId: null,
-    checkedInBy: req.user.id,
-  });
-  return res.status(201).json({
-    success: true,
-    message: `Referral from ${partner.name} checked in.`,
-    referral,
-  });
-});
 
 /** Legacy QR / API URL. Send visitors to the frontend SNF referral page. */
 export const scanSnfReferral = catchAsyncError(async (req, res, next) => {

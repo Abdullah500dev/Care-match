@@ -1,9 +1,9 @@
 import express from "express";
 import { isAutheticated } from "../middleware/auth.js";
 import {
-  checkInSnfReferral,
   claimSnfReferral,
   createSnfPartner,
+  deleteSnfPartnerByAdmin,
   getMyScannedSnfs,
   getMySnfPartner,
   getPublicSnfByReferralCode,
@@ -25,6 +25,6 @@ router.put("/me", isAutheticated, uploadFacilityImages.array("images", 8), updat
 router.get("/dashboard", isAutheticated, getSnfDashboard);
 router.post("/", isAutheticated, uploadFacilityImages.array("images", 8), createSnfPartner);
 router.put("/:id", isAutheticated, uploadFacilityImages.array("images", 8), updateSnfPartnerByAdmin);
-router.post("/check-in", isAutheticated, checkInSnfReferral);
+router.delete("/:id", isAutheticated, deleteSnfPartnerByAdmin);
 
 export default router;

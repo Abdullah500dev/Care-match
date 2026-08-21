@@ -13,6 +13,7 @@ import {
   Mail,
   X,
   ImagePlus,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -20,6 +21,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
@@ -37,8 +48,6 @@ const BRAND = {
   cyan: "#00B8DB",
   cyanSoft: "#ECFEFF",
   navy: "#0F172A",
-  navyCard: "#1A1E2F",
-  navyInput: "#2A3044",
   pageBg: "#F8FAFC",
   text: "#0F172A",
   muted: "#64748B",
@@ -124,24 +133,8 @@ const METRIC_CARDS = [
   },
 ];
 
-function QrCodeGraphic() {
-  return (
-    <div
-      className="flex h-[120px] w-[120px] shrink-0 items-center justify-center rounded-2xl sm:h-[132px] sm:w-[132px]"
-      // style={{ backgroundColor: "#151A2B" }}
-    >
-      <img
-        src="/assets/images/Container.svg"
-        alt="QR Code"
-        className="h-[88px] w-[88px] object-contain sm:h-[96px] sm:w-[96px]"
-      />
-    </div>
-  );
-}
-
 export default function SNFPartners() {
   const [activeTab, setActiveTab] = useState("partners");
-  const [qrInput, setQrInput] = useState("");
   const [snfModalOpen, setSnfModalOpen] = useState(false);
   const [snfModalStep, setSnfModalStep] = useState("onboard"); // onboard | kit
   const [openKitModalOpen, setOpenKitModalOpen] = useState(false);
@@ -150,6 +143,8 @@ export default function SNFPartners() {
   const [summary, setSummary] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [keptImages, setKeptImages] = useState([]);
@@ -431,22 +426,33 @@ export default function SNFPartners() {
     setSelectedImages([]);
   };
 
-  const handleCheckIn = async () => {
-    if (!qrInput.trim()) {
-      toast.error("Enter a QR referral code");
-      return;
-    }
+  const handleDeletePartner = async () => {
+    const partnerId = editingPartnerId || selectedPartner?.id;
+    if (!partnerId) return;
+    setDeleting(true);
     try {
-      const { data } = await apiClient.post("/api/snf-partners/check-in", {
-        referralCode: qrInput.trim(),
-      });
-      toast.success("Referral checked in", { description: data.message });
-      setQrInput("");
+      await apiClient.delete(`/api/snf-partners/${partnerId}`);
+      setPartners((current) =>
+        current.filter((row) => String(row.id) !== String(partnerId)),
+      );
+      setReferrals((current) =>
+        current.filter(
+          (row) =>
+            String(row.source || "").toLowerCase() !==
+            String(selectedPartner?.name || "").toLowerCase(),
+        ),
+      );
+      setDeleteDialogOpen(false);
+      closeSnfModal();
+      setSelectedPartner(null);
+      toast.success("SNF partner deleted.");
       loadDashboard();
     } catch (error) {
-      toast.error("Could not check in referral", {
-        description: error?.response?.data?.message || "Check the referral code.",
+      toast.error("Could not delete SNF partner", {
+        description: error?.response?.data?.message || "Please try again.",
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -533,46 +539,6 @@ export default function SNFPartners() {
               </div>
             );
           })}
-        </div>
-
-        {/* Internal Intake Station */}
-        <div
-          className="flex min-w-0 flex-col gap-5 rounded-2xl p-5 sm:p-6 md:flex-row md:items-center md:justify-between"
-          style={{ backgroundColor: BRAND.navyCard }}
-        >
-          <div className="min-w-0 flex-1 space-y-3">
-            <h3 className="text-lg font-bold text-white sm:text-xl">
-              Internal Intake Station
-            </h3>
-            <p className="max-w-xl text-sm leading-relaxed text-white/50">
-              Check in arriving patients from SNF partners by verifying their QR <br />
-              referral code here.
-            </p>
-            <div className="flex min-w-0 max-w-md flex-col gap-2.5 sm:flex-row sm:items-center">
-              <input
-                type="text"
-                value={qrInput}
-                onChange={(e) => setQrInput(e.target.value)}
-                placeholder="222"
-                className="h-11 flex-1 rounded-xl border-0 px-4 text-sm text-gray-500 outline-none placeholder:text-slate-500 focus:ring-2"
-                style={{
-                  backgroundColor: BRAND.navyInput,
-                  boxShadow: "inset 0 0 0 1px rgba(148, 163, 184, 0.15)",
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleCheckIn}
-                className="h-11 shrink-0 rounded-xl px-6 text-sm font-bold text-white"
-                style={{ backgroundColor: BRAND.cyan }}
-              >
-                Check In
-              </button>
-            </div>
-          </div>
-          <div className="hidden shrink-0 md:block">
-            <QrCodeGraphic />
-          </div>
         </div>
 
         {/* Partner Facilities / Recent Referrals */}
@@ -1114,25 +1080,49 @@ export default function SNFPartners() {
                     </div>
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="mt-6 h-12 w-full text-[15px] font-bold text-white"
-                  style={{
-                    borderRadius: 14,
-                    backgroundColor: BRAND.cyan,
-                    boxShadow:
-                      "0 0 6px -2px #CEFAFE, 0 8px 20px 0 rgba(0, 184, 219, 0.45)",
-                  }}
+                <div
+                  className={`mt-6 flex flex-col gap-3 sm:flex-row sm:items-center ${
+                    editingPartnerId ? "sm:justify-between" : ""
+                  }`}
                 >
-                  {saving
-                    ? editingPartnerId
-                      ? "Saving changes…"
-                      : "Creating partner…"
-                    : editingPartnerId
-                      ? "Save SNF Partner"
-                      : "Generate Partnership & QR Kit"}
-                </button>
+                  {editingPartnerId ? (
+                    <button
+                      type="button"
+                      disabled={saving || deleting}
+                      onClick={() => setDeleteDialogOpen(true)}
+                      className="inline-flex h-11 items-center justify-center gap-2 border px-5 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                      style={{
+                        borderRadius: 14,
+                        borderColor: "#FECACA",
+                        backgroundColor: "#FFFFFF",
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  ) : null}
+                  <button
+                    type="submit"
+                    disabled={saving || deleting}
+                    className={`h-11 text-[15px] font-bold text-white disabled:opacity-60 ${
+                      editingPartnerId ? "w-full sm:ml-auto sm:w-auto sm:min-w-[180px] px-6" : "w-full"
+                    }`}
+                    style={{
+                      borderRadius: 14,
+                      backgroundColor: BRAND.cyan,
+                      boxShadow:
+                        "0 0 6px -2px #CEFAFE, 0 8px 20px 0 rgba(0, 184, 219, 0.45)",
+                    }}
+                  >
+                    {saving
+                      ? editingPartnerId
+                        ? "Saving changes…"
+                        : "Creating partner…"
+                      : editingPartnerId
+                        ? "Save SNF Partner"
+                        : "Generate Partnership & QR Kit"}
+                  </button>
+                </div>
               </form>
             </>
           ) : (
@@ -1405,6 +1395,34 @@ export default function SNFPartners() {
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this SNF partner?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes{" "}
+              <span className="font-semibold text-slate-700">
+                {selectedPartner?.name || "this partner"}
+              </span>
+              , their referral history, and their partner login account. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeletePartner();
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleting ? "Deleting…" : "Delete partner"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
