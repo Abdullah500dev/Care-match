@@ -12,12 +12,20 @@ import {
   snfReferralPath,
 } from "@/lib/snfReferral";
 
+const isFamilyUser = (userData) => {
+  if (!userData) return false;
+  if (userData.role !== "user") return false;
+  if (["admin", "authenticator", "moderator"].includes(userData.user_type)) {
+    return false;
+  }
+  return true;
+};
+
 export default function SnfReferralLanding() {
   const { code: rawCode } = useParams();
   const code = normalizeSnfReferralCode(rawCode);
   const navigate = useNavigate();
   const { userData, token } = useSelector(getUser);
-  const role = userData?.role;
   const [partner, setPartner] = useState(null);
   const [error, setError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -45,6 +53,22 @@ export default function SnfReferralLanding() {
 
       try {
         if (hasToken) {
+          if (!isFamilyUser(userData)) {
+            const { data } = await apiClient.get(
+              `/api/snf-partners/public/${encodeURIComponent(code)}`,
+            );
+            if (cancelled) return;
+            const nextPartner = data?.partner || null;
+            if (!nextPartner) {
+              setError("This SNF referral could not be found.");
+              return;
+            }
+            clearSnfReferralCode();
+            setPartner(nextPartner);
+            setDialogOpen(true);
+            return;
+          }
+
           try {
             const { data } = await apiClient.post("/api/snf-partners/claim-referral", {
               referralCode: code,
@@ -53,7 +77,7 @@ export default function SnfReferralLanding() {
             const claimed = data?.partner;
             if (claimed) {
               clearSnfReferralCode();
-              if (role && role !== "user") {
+              if (data?.recorded === false) {
                 setPartner(claimed);
                 setDialogOpen(true);
                 return;
@@ -92,7 +116,7 @@ export default function SnfReferralLanding() {
     return () => {
       cancelled = true;
     };
-  }, [code, navigate, role, token]);
+  }, [code, navigate, token, userData]);
 
   return (
     <div className="mx-auto min-h-[60vh] w-full max-w-3xl px-4 py-16">

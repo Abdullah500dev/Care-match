@@ -141,7 +141,7 @@ function QrCodeGraphic() {
 
 export default function SNFPartners() {
   const [activeTab, setActiveTab] = useState("partners");
-  const [qrInput, setQrInput] = useState("222");
+  const [qrInput, setQrInput] = useState("");
   const [snfModalOpen, setSnfModalOpen] = useState(false);
   const [snfModalStep, setSnfModalStep] = useState("onboard"); // onboard | kit
   const [openKitModalOpen, setOpenKitModalOpen] = useState(false);
@@ -151,6 +151,8 @@ export default function SNFPartners() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedPartner, setSelectedPartner] = useState(null);
+  const [editingPartnerId, setEditingPartnerId] = useState(null);
+  const [keptImages, setKeptImages] = useState([]);
   const [onboardForm, setOnboardForm] = useState(EMPTY_ONBOARD);
   const [tagDrafts, setTagDrafts] = useState({
     services: "",
@@ -247,10 +249,14 @@ export default function SNFPartners() {
     }
 
     setSaving(true);
+    const isEditing = Boolean(editingPartnerId);
+    const partnerId = editingPartnerId;
     try {
       const payload = new FormData();
       payload.append("name", onboardForm.name);
-      payload.append("email", onboardForm.email);
+      if (!isEditing) {
+        payload.append("email", onboardForm.email);
+      }
       payload.append("phone", phoneFormatted);
       payload.append("website", normalizedWebsite);
       payload.append("address", onboardForm.address);
@@ -262,20 +268,39 @@ export default function SNFPartners() {
       selectedImages.forEach((file) => payload.append("images", file));
       payload.append("units", onboardForm.units || 0);
       payload.append("occupancy", onboardForm.occupancy || 0);
+      if (isEditing) {
+        payload.append("keep_image_paths", JSON.stringify(keptImages));
+      }
 
-      const { data } = await apiClient.post("/api/snf-partners", payload, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = isEditing
+        ? await apiClient.put(`/api/snf-partners/${partnerId}`, payload, {
+            headers: { "Content-Type": "multipart/form-data" },
+          })
+        : await apiClient.post("/api/snf-partners", payload, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+
       setSelectedPartner(data.partner);
       setOpenKitModalOpen(false);
       setSnfModalStep("kit");
-      setPartners((current) => [data.partner, ...current]);
+      setEditingPartnerId(null);
+      setKeptImages([]);
+      if (isEditing) {
+        setPartners((current) =>
+          current.map((row) =>
+            String(row.id) === String(data.partner?.id) ? data.partner : row,
+          ),
+        );
+        toast.success("SNF partner updated.");
+      } else {
+        setPartners((current) => [data.partner, ...current]);
+        toast.success("SNF partner created. A sign-in invite was sent by email.");
+      }
       setOnboardForm(EMPTY_ONBOARD);
       setTagDrafts({ services: "", amenities: "", careLevels: "" });
       setSelectedImages([]);
-      toast.success("SNF partner created. A sign-in invite was sent by email.");
     } catch (error) {
-      toast.error("Could not create SNF partner", {
+      toast.error(isEditing ? "Could not update SNF partner" : "Could not create SNF partner", {
         description: error?.response?.data?.message || "Please review the form.",
       });
     } finally {
@@ -318,7 +343,10 @@ export default function SNFPartners() {
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
-    setSelectedImages((prev) => [...prev, ...files].slice(0, 8));
+    setSelectedImages((prev) => {
+      const room = Math.max(0, 8 - keptImages.length - prev.length);
+      return [...prev, ...files].slice(0, prev.length + room);
+    });
     e.target.value = "";
   };
 
@@ -332,14 +360,61 @@ export default function SNFPartners() {
       String(f.type || "").startsWith("image/"),
     );
     if (!files.length) return;
-    setSelectedImages((prev) => [...prev, ...files].slice(0, 8));
+    setSelectedImages((prev) => {
+      const room = Math.max(0, 8 - keptImages.length - prev.length);
+      return [...prev, ...files].slice(0, prev.length + room);
+    });
   };
 
   const removeImage = (index) => {
     setSelectedImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const removeKeptImage = (index) => {
+    setKeptImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const openPartnerModal = (row) => {
+    setSelectedPartner(row);
+    setEditingPartnerId(null);
+    setOpenKitModalOpen(false);
+    setSnfModalStep("kit");
+    setSnfModalOpen(true);
+  };
+
+  const openEditPartner = () => {
+    if (!selectedPartner) return;
+    setEditingPartnerId(selectedPartner.id);
+    setOnboardForm({
+      name: selectedPartner.name || "",
+      email: selectedPartner.email || "",
+      phone: selectedPartner.phone || "",
+      website: selectedPartner.website || "",
+      address: selectedPartner.address || "",
+      zip_code: selectedPartner.zip_code || "",
+      pricing: selectedPartner.pricing || "",
+      services: Array.isArray(selectedPartner.services) ? selectedPartner.services : [],
+      amenities: Array.isArray(selectedPartner.amenities) ? selectedPartner.amenities : [],
+      careLevels: Array.isArray(selectedPartner.care_levels) && selectedPartner.care_levels.length
+        ? selectedPartner.care_levels
+        : ["Skilled Nursing"],
+      units: selectedPartner.units != null ? String(selectedPartner.units) : "",
+      occupancy: selectedPartner.occupancy != null ? String(selectedPartner.occupancy) : "",
+    });
+    setKeptImages(Array.isArray(selectedPartner.images) ? [...selectedPartner.images] : []);
+    setSelectedImages([]);
+    setTagDrafts({ services: "", amenities: "", careLevels: "" });
+    setOpenKitModalOpen(false);
+    setSnfModalStep("onboard");
+  };
+
   const openOnboardModal = () => {
+    setEditingPartnerId(null);
+    setSelectedPartner(null);
+    setKeptImages([]);
+    setSelectedImages([]);
+    setOnboardForm(EMPTY_ONBOARD);
+    setTagDrafts({ services: "", amenities: "", careLevels: "" });
     setSnfModalStep("onboard");
     setOpenKitModalOpen(false);
     setSnfModalOpen(true);
@@ -349,6 +424,8 @@ export default function SNFPartners() {
     setSnfModalOpen(false);
     setOpenKitModalOpen(false);
     setSnfModalStep("onboard");
+    setEditingPartnerId(null);
+    setKeptImages([]);
     setOnboardForm(EMPTY_ONBOARD);
     setTagDrafts({ services: "", amenities: "", careLevels: "" });
     setSelectedImages([]);
@@ -542,7 +619,7 @@ export default function SNFPartners() {
                       backgroundColor: "#F8FAFC",
                     }}
                   >
-                    {["Facility", "Stats", "Referral Code"].map((h) => (
+                    {["Facility", "Referrals", "Referral Code"].map((h) => (
                       <th
                         key={h}
                         className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.1em] sm:px-6"
@@ -569,8 +646,9 @@ export default function SNFPartners() {
                   ) : partners.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-b last:border-b-0"
+                      className="cursor-pointer border-b last:border-b-0 transition-colors hover:bg-slate-50/80"
                       style={{ borderColor: BRAND.border }}
+                      onClick={() => openPartnerModal(row)}
                     >
                       <td className="px-5 py-4 sm:px-6">
                         <div className="flex min-w-0 items-center gap-3">
@@ -604,21 +682,13 @@ export default function SNFPartners() {
                       </td>
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
-                          {row.activeReferrals} Active
-                        </p>
-                        <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
-                          {row.totalReferrals} total referrals
+                          {row.totalReferrals}{" "}
+                          {row.totalReferrals === 1 ? "referral" : "referrals"}
                         </p>
                       </td>
                       <td className="px-5 py-4 sm:px-6">
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedPartner(row);
-                              setSnfModalStep("kit");
-                              setSnfModalOpen(true);
-                            }}
+                          <span
                             className="inline-flex items-center rounded-lg px-2.5 py-1.5 text-xs font-bold"
                             style={{
                               backgroundColor: "#F1F5F9",
@@ -626,10 +696,13 @@ export default function SNFPartners() {
                             }}
                           >
                             {row.referralCode}
-                          </button>
+                          </span>
                           <button
                             type="button"
-                            onClick={() => copyReferralCode(row.referralCode)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              copyReferralCode(row.referralCode);
+                            }}
                             className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                             aria-label={`Copy ${row.referralCode}`}
                           >
@@ -737,7 +810,17 @@ export default function SNFPartners() {
         >
           <button
             type="button"
-            onClick={closeSnfModal}
+            onClick={() => {
+              if (editingPartnerId && selectedPartner) {
+                setEditingPartnerId(null);
+                setKeptImages([]);
+                setSelectedImages([]);
+                setOnboardForm(EMPTY_ONBOARD);
+                setSnfModalStep("kit");
+                return;
+              }
+              closeSnfModal();
+            }}
             className="absolute right-6 top-6 z-30 flex h-9 w-9 items-center justify-center rounded-full text-[#94A3B8] transition-colors hover:bg-slate-100 hover:text-[#64748B] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00B8DB]/40"
             aria-label="Close"
           >
@@ -751,7 +834,7 @@ export default function SNFPartners() {
                   className="text-left text-[22px] font-bold tracking-tight"
                   style={{ color: "#0F172A", fontFamily: "Rethink Sans, sans-serif" }}
                 >
-                  Onboard New SNF
+                  {editingPartnerId ? "Edit SNF Partner" : "Onboard New SNF"}
                 </DialogTitle>
               </DialogHeader>
               <form
@@ -782,11 +865,17 @@ export default function SNFPartners() {
                         type="email"
                         required
                         value={onboardForm.email}
+                        disabled={Boolean(editingPartnerId)}
                         onChange={(e) =>
                           setOnboardForm((p) => ({ ...p, email: e.target.value }))
                         }
                         placeholder="intake@evergreenhealth.com"
                       />
+                      {editingPartnerId ? (
+                        <p className="text-[11px] text-slate-400">
+                          Login email cannot be changed here.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -859,7 +948,7 @@ export default function SNFPartners() {
                     <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
                       Facility images (max 8 total) — change / upload here
                     </label>
-                    {selectedImages.length >= 8 ? (
+                    {keptImages.length + selectedImages.length >= 8 ? (
                       <p className="rounded-2xl border border-amber-200/90 bg-amber-50/90 px-4 py-3 text-center text-xs font-medium text-amber-950">
                         Image limit reached (8 total). Remove an image to add more.
                       </p>
@@ -888,13 +977,39 @@ export default function SNFPartners() {
                             Drop images here or click to browse
                           </span>
                           <span className="text-center text-xs text-slate-500">
-                            JPG, PNG, WebP — {8 - selectedImages.length} of 8 upload slots left
+                            JPG, PNG, WebP —{" "}
+                            {8 - keptImages.length - selectedImages.length} of 8 upload slots left
                           </span>
                         </label>
                       </div>
                     )}
-                    {selectedImages.length > 0 && (
+                    {(keptImages.length > 0 || selectedImages.length > 0) && (
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        {keptImages.map((path, index) => (
+                          <div
+                            key={`kept-${path}-${index}`}
+                            className="group relative overflow-hidden rounded-2xl border border-cyan-100/80 bg-white shadow-md"
+                          >
+                            <div className="relative aspect-square w-full overflow-hidden bg-slate-100">
+                              <img
+                                src={resolveSnfImageUrl(path)}
+                                alt=""
+                                className="h-full w-full object-cover"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeKeptImage(index)}
+                                className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-lg"
+                                aria-label="Remove image"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                            <p className="truncate px-2 py-1.5 text-center text-[10px] font-medium text-slate-600">
+                              Current photo
+                            </p>
+                          </div>
+                        ))}
                         {selectedImages.map((file, index) => (
                           <div
                             key={`${file.name}-${index}`}
@@ -1010,7 +1125,13 @@ export default function SNFPartners() {
                       "0 0 6px -2px #CEFAFE, 0 8px 20px 0 rgba(0, 184, 219, 0.45)",
                   }}
                 >
-                  {saving ? "Creating partner…" : "Generate Partnership & QR Kit"}
+                  {saving
+                    ? editingPartnerId
+                      ? "Saving changes…"
+                      : "Creating partner…"
+                    : editingPartnerId
+                      ? "Save SNF Partner"
+                      : "Generate Partnership & QR Kit"}
                 </button>
               </form>
             </>
@@ -1059,11 +1180,10 @@ export default function SNFPartners() {
                     </div>
                   </div>
 
-                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+                  <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                     {[
                       { value: String(selectedPartner?.totalReferrals ?? 0), label: "Total Referrals", color: "#0F172A" },
-                      { value: String(selectedPartner?.activeReferrals ?? 0), label: "Currently Active", color: "#00B8DB" },
-                      { value: "—", label: "Intake Success", color: "#166534" },
+                      { value: selectedPartner?.referralCode || "—", label: "Referral Code", color: "#00B8DB" },
                     ].map((stat) => (
                       <div
                         key={stat.label}
@@ -1186,6 +1306,7 @@ export default function SNFPartners() {
                     </button>
                     <button
                       type="button"
+                      onClick={openEditPartner}
                       className="h-12 flex-1 border text-sm font-bold"
                       style={{
                         borderRadius: 14,

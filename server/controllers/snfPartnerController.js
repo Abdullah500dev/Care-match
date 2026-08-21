@@ -16,6 +16,21 @@ const requireAdmin = async (userId) => {
   return user?.role === "admin" || user?.user_type === "admin";
 };
 
+/** Only family accounts may be counted as QR / referral visitors. */
+const isFamilyReferralUser = (user) => {
+  if (!user) return false;
+  if (user.role !== "user") return false;
+  if (["admin", "authenticator", "moderator"].includes(user.user_type)) return false;
+  return true;
+};
+
+const isStaffOrPartnerUserDoc = (user) => {
+  if (!user) return false;
+  if (["admin", "facility", "snf"].includes(user.role)) return true;
+  if (["admin", "authenticator", "moderator"].includes(user.user_type)) return true;
+  return false;
+};
+
 const findLinkedSnfPartner = async (userId) => {
   const user = await User.findById(userId).select("role name phone");
   if (!user) return { user: null, partner: null };
@@ -28,15 +43,18 @@ const findLinkedSnfPartner = async (userId) => {
 };
 
 const partnerReferralStats = async (partnerId) => {
-  const [total, recent] = await Promise.all([
+  const [total, recentRaw] = await Promise.all([
     SnfReferral.countDocuments({ snfPartnerId: partnerId }),
     SnfReferral.find({ snfPartnerId: partnerId })
       .sort({ checkedInAt: -1 })
-      .limit(25)
-      .populate("scannedBy", "name email phone")
-      .populate("checkedInBy", "name email phone")
+      .limit(50)
+      .populate("scannedBy", "name email phone role user_type")
+      .populate("checkedInBy", "name email phone role user_type")
       .lean(),
   ]);
+  const recent = recentRaw
+    .filter((referral) => !isStaffOrPartnerUserDoc(referral.scannedBy))
+    .slice(0, 25);
   return { total, recent };
 };
 
@@ -52,17 +70,15 @@ const visitorFromUser = (user) => {
 
 const serializeReferralRow = (referral, extra = {}) => {
   const visitor = visitorFromUser(referral.scannedBy);
-  const checkedInUser = visitorFromUser(referral.checkedInBy);
-  const display = visitor.email || visitor.name ? visitor : checkedInUser;
   return {
     id: referral._id,
     referralCode: referral.referralCode,
     status: referral.status,
     checkedInAt: referral.checkedInAt,
-    visitorName: display.name || "",
-    visitorEmail: display.email || "",
-    visitorPhone: display.phone || "",
-    visitorId: display.id || "",
+    visitorName: visitor.name || "",
+    visitorEmail: visitor.email || "",
+    visitorPhone: visitor.phone || "",
+    visitorId: visitor.id || "",
     ...extra,
   };
 };
@@ -270,13 +286,7 @@ export const getMySnfPartner = catchAsyncError(async (req, res, next) => {
   });
 });
 
-export const updateMySnfPartner = catchAsyncError(async (req, res, next) => {
-  const { user, partner } = await findLinkedSnfPartner(req.user?.id);
-  if (!user) return next(new ErrorHandler("User not found", 404));
-  if (!partner) {
-    return next(new ErrorHandler("No SNF partner profile is linked to this account", 404));
-  }
-
+const applySnfPartnerUpdates = async (req, partner, linkedUser = null) => {
   const {
     name,
     phone,
@@ -293,16 +303,16 @@ export const updateMySnfPartner = catchAsyncError(async (req, res, next) => {
 
   if (name != null) {
     const trimmed = String(name).trim();
-    if (!trimmed) return next(new ErrorHandler("Facility name cannot be empty", 400));
+    if (!trimmed) throw new ErrorHandler("Facility name cannot be empty", 400);
     partner.name = trimmed;
     partner.contactPerson = trimmed;
-    user.name = trimmed;
+    if (linkedUser) linkedUser.name = trimmed;
   }
   if (phone != null) {
     const trimmed = String(phone).trim();
-    if (!trimmed) return next(new ErrorHandler("Phone cannot be empty", 400));
+    if (!trimmed) throw new ErrorHandler("Phone cannot be empty", 400);
     partner.phone = trimmed;
-    user.phone = trimmed;
+    if (linkedUser) linkedUser.phone = trimmed;
   }
   if (address != null) {
     partner.address = String(address).trim();
@@ -310,7 +320,7 @@ export const updateMySnfPartner = catchAsyncError(async (req, res, next) => {
   if (zip_code != null) {
     const zipDigits = String(zip_code || "").replace(/\D/g, "").slice(0, 5);
     if (zipDigits.length !== 5) {
-      return next(new ErrorHandler("A valid 5-digit ZIP code is required", 400));
+      throw new ErrorHandler("A valid 5-digit ZIP code is required", 400);
     }
     partner.zip_code = zipDigits;
   }
@@ -347,13 +357,59 @@ export const updateMySnfPartner = catchAsyncError(async (req, res, next) => {
     partner.images = [...keepPaths, ...newUploads].slice(0, 8);
   }
 
-  await Promise.all([partner.save(), user.save()]);
+  const saves = [partner.save()];
+  if (linkedUser) saves.push(linkedUser.save());
+  await Promise.all(saves);
   const { total } = await partnerReferralStats(partner._id);
-  return res.json({
-    success: true,
-    message: "SNF profile updated successfully.",
-    partner: serializePartner(partner, total, 0, publicReferralLink(req, partner.referralCode)),
-  });
+  return serializePartner(partner, total, 0, publicReferralLink(req, partner.referralCode));
+};
+
+export const updateMySnfPartner = catchAsyncError(async (req, res, next) => {
+  const { user, partner } = await findLinkedSnfPartner(req.user?.id);
+  if (!user) return next(new ErrorHandler("User not found", 404));
+  if (!partner) {
+    return next(new ErrorHandler("No SNF partner profile is linked to this account", 404));
+  }
+
+  try {
+    const serialized = await applySnfPartnerUpdates(req, partner, user);
+    return res.json({
+      success: true,
+      message: "SNF profile updated successfully.",
+      partner: serialized,
+    });
+  } catch (error) {
+    if (error instanceof ErrorHandler) return next(error);
+    throw error;
+  }
+});
+
+export const updateSnfPartnerByAdmin = catchAsyncError(async (req, res, next) => {
+  if (!(await requireAdmin(req.user?.id))) {
+    return next(new ErrorHandler("Admin only", 403));
+  }
+
+  const partnerId = String(req.params.id || "").trim();
+  if (!partnerId) return next(new ErrorHandler("Partner id is required", 400));
+
+  const partner = await SnfPartner.findById(partnerId);
+  if (!partner) return next(new ErrorHandler("SNF partner not found", 404));
+
+  const linkedUser = partner.facilityUserId
+    ? await User.findById(partner.facilityUserId)
+    : null;
+
+  try {
+    const serialized = await applySnfPartnerUpdates(req, partner, linkedUser);
+    return res.json({
+      success: true,
+      message: "SNF partner updated successfully.",
+      partner: serialized,
+    });
+  } catch (error) {
+    if (error instanceof ErrorHandler) return next(error);
+    throw error;
+  }
 });
 
 export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
@@ -368,13 +424,16 @@ export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
   ]);
   const countMap = new Map(counts.map((row) => [String(row._id), row.total]));
   const totalReferrals = counts.reduce((sum, row) => sum + row.total, 0);
-  const recent = await SnfReferral.find()
+  const recentRaw = await SnfReferral.find()
     .sort({ checkedInAt: -1 })
-    .limit(25)
+    .limit(50)
     .populate("snfPartnerId", "name")
-    .populate("scannedBy", "name email phone")
-    .populate("checkedInBy", "name email phone")
+    .populate("scannedBy", "name email phone role user_type")
+    .populate("checkedInBy", "name email phone role user_type")
     .lean();
+  const recent = recentRaw
+    .filter((referral) => !isStaffOrPartnerUserDoc(referral.scannedBy))
+    .slice(0, 25);
 
   return res.json({
     success: true,
@@ -475,7 +534,7 @@ export const checkInSnfReferral = catchAsyncError(async (req, res, next) => {
   const referral = await recordSnfReferralScan({
     referralCode,
     partnerId: partner._id,
-    userId: req.user.id,
+    userId: null,
     checkedInBy: req.user.id,
   });
   return res.status(201).json({
@@ -518,6 +577,16 @@ export const claimSnfReferral = catchAsyncError(async (req, res, next) => {
   if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
 
   const userId = req.user?.id;
+  const user = await User.findById(userId).select("role user_type");
+  if (!isFamilyReferralUser(user)) {
+    return res.json({
+      success: true,
+      recorded: false,
+      message: "Only family user accounts are counted as referrals.",
+      partner: serializePublicPartner(partner),
+    });
+  }
+
   await rememberUserSnfScan(userId, partner);
   try {
     await recordSnfReferralScan({
@@ -531,6 +600,7 @@ export const claimSnfReferral = catchAsyncError(async (req, res, next) => {
 
   return res.json({
     success: true,
+    recorded: true,
     partner: serializePublicPartner(partner),
   });
 });
