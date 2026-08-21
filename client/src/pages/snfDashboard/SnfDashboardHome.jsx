@@ -41,27 +41,31 @@ export default function SnfDashboardHome() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [selectedReferral, setSelectedReferral] = useState(null);
+  const [visitCodeInput, setVisitCodeInput] = useState("");
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [checkedInVisitor, setCheckedInVisitor] = useState(null);
+
+  const loadDashboard = async () => {
+    try {
+      setLoading(true);
+      const { data } = await apiClient.get("/api/snf-partners/me");
+      setPartner(data?.partner || null);
+      setReferrals(Array.isArray(data?.referrals) ? data.referrals : []);
+    } catch (error) {
+      setPartner(null);
+      setReferrals([]);
+      if (error?.response?.status !== 404) {
+        toast.error("Unable to load SNF dashboard", {
+          description: error?.response?.data?.message || "Please contact admin support.",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        const { data } = await apiClient.get("/api/snf-partners/me");
-        setPartner(data?.partner || null);
-        setReferrals(Array.isArray(data?.referrals) ? data.referrals : []);
-      } catch (error) {
-        setPartner(null);
-        setReferrals([]);
-        if (error?.response?.status !== 404) {
-          toast.error("Unable to load SNF dashboard", {
-            description: error?.response?.data?.message || "Please contact admin support.",
-          });
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    loadDashboard();
   }, []);
 
   useEffect(() => {
@@ -76,6 +80,37 @@ export default function SnfDashboardHome() {
       toast.success("Referral link copied.");
     } catch {
       toast.error("Could not copy referral link.");
+    }
+  };
+
+  const handleVisitorCheckIn = async (e) => {
+    e.preventDefault();
+    const code = String(visitCodeInput || "").trim().toUpperCase();
+    if (!code) {
+      toast.error("Enter the visitor QR code");
+      return;
+    }
+    setCheckingIn(true);
+    try {
+      const { data } = await apiClient.post("/api/snf-partners/visitor-check-in", {
+        visitCode: code,
+      });
+      const visitor = data?.visitor || null;
+      const referral = data?.referral || null;
+      if (visitor) setCheckedInVisitor(visitor);
+      if (referral) {
+        setReferrals((prev) => [referral, ...prev.filter((row) => row.id !== referral.id)]);
+        setSelectedReferral(referral);
+      }
+      setVisitCodeInput("");
+      toast.success(data?.message || "Visitor checked in");
+      loadDashboard();
+    } catch (error) {
+      toast.error("Could not check in visitor", {
+        description: error?.response?.data?.message || "Check the visit QR code and try again.",
+      });
+    } finally {
+      setCheckingIn(false);
     }
   };
 
@@ -107,6 +142,46 @@ export default function SnfDashboardHome() {
           Loading SNF metrics...
         </div>
       ) : null}
+
+      <div className="rounded-2xl border border-slate-200 bg-[#0F172A] p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wider text-[#00B8DB]">
+              Visitor check-in
+            </p>
+            <h2 className="mt-1 text-lg font-bold text-white">Scan a visitor QR code</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Enter the family user&apos;s visit code from their CareMatch QR to record the visit
+              and view their details.
+            </p>
+          </div>
+          <form
+            onSubmit={handleVisitorCheckIn}
+            className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center"
+          >
+            <input
+              type="text"
+              value={visitCodeInput}
+              onChange={(e) => setVisitCodeInput(e.target.value.toUpperCase())}
+              placeholder="USR-XXXXXX"
+              className="h-11 w-full rounded-xl border-0 bg-[#1E293B] px-4 font-mono text-sm text-white outline-none placeholder:text-slate-500 focus:ring-2 focus:ring-[#00B8DB]/50 sm:w-56"
+            />
+            <button
+              type="submit"
+              disabled={checkingIn || !partner}
+              className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-[#00B8DB] px-5 text-sm font-bold text-white disabled:opacity-60"
+            >
+              {checkingIn ? "Checking in…" : "Check in visitor"}
+            </button>
+          </form>
+        </div>
+        {checkedInVisitor ? (
+          <p className="mt-3 text-sm text-emerald-300">
+            Last check-in: {checkedInVisitor.name || checkedInVisitor.email}
+            {checkedInVisitor.email ? ` · ${checkedInVisitor.email}` : ""}
+          </p>
+        ) : null}
+      </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-slate-200">
@@ -262,13 +337,13 @@ export default function SnfDashboardHome() {
 
       <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
         <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">
-          Recent referrals
+          Recent visits
         </p>
         {loading ? (
           <p className="py-4 text-sm text-slate-500">Loading recent activity…</p>
         ) : referrals.length === 0 ? (
           <p className="py-4 text-sm text-slate-500">
-            No QR scans yet. Share your referral QR or link to start counting referrals.
+            No visitor check-ins yet. Scan a family user&apos;s visit QR to record their visit.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -324,10 +399,10 @@ export default function SnfDashboardHome() {
         <DialogContent className="max-w-md rounded-2xl border-[#E2E8F0]">
           <DialogHeader className="space-y-1 text-left">
             <DialogTitle className="text-xl text-slate-900">
-              {selectedReferral?.visitorName || selectedReferral?.visitorEmail || "Referral details"}
+              {selectedReferral?.visitorName || selectedReferral?.visitorEmail || "Visitor details"}
             </DialogTitle>
             <DialogDescription>
-              Visitor who scanned your QR code or opened your referral link.
+              Family visitor checked in at your facility.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

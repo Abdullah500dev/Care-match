@@ -96,6 +96,15 @@ const userSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    /** Unique code encoded in the family user's visit QR for SNF check-in. */
+    visitCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
   },
   {
     timestamps: true,

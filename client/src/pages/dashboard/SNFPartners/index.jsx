@@ -18,6 +18,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -145,6 +146,7 @@ export default function SNFPartners() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedReferral, setSelectedReferral] = useState(null);
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [keptImages, setKeptImages] = useState([]);
@@ -383,7 +385,7 @@ export default function SNFPartners() {
     setOnboardForm({
       name: selectedPartner.name || "",
       email: selectedPartner.email || "",
-      phone: selectedPartner.phone || "",
+      phone: formatPhoneInput(selectedPartner.phone || ""),
       website: selectedPartner.website || "",
       address: selectedPartner.address || "",
       zip_code: selectedPartner.zip_code || "",
@@ -550,7 +552,7 @@ export default function SNFPartners() {
             <div className="flex flex-wrap gap-6">
               {[
                 { id: "partners", label: "Partner Facilities" },
-                { id: "referrals", label: "Recent Referrals" },
+                { id: "referrals", label: "Recent Visits" },
               ].map((tab) => {
                 const active = activeTab === tab.id;
                 return (
@@ -690,7 +692,7 @@ export default function SNFPartners() {
                       backgroundColor: "#F8FAFC",
                     }}
                   >
-                    {["Patient", "Source", "Status"].map((h) => (
+                    {["Visitor", "Facility", "Status"].map((h) => (
                       <th
                         key={h}
                         className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.1em] sm:px-6"
@@ -705,14 +707,15 @@ export default function SNFPartners() {
                   {referrals.length === 0 ? (
                     <tr>
                       <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
-                        No referrals have been checked in yet.
+                        No visitor check-ins yet.
                       </td>
                     </tr>
                   ) : referrals.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-b last:border-b-0"
+                      className="cursor-pointer border-b last:border-b-0 transition-colors hover:bg-slate-50/80"
                       style={{ borderColor: BRAND.border }}
+                      onClick={() => setSelectedReferral(row)}
                     >
                       <td className="px-5 py-4 sm:px-6">
                         <p className="font-bold" style={{ color: BRAND.text }}>
@@ -721,7 +724,9 @@ export default function SNFPartners() {
                         <p className="mt-0.5 text-sm" style={{ color: BRAND.muted }}>
                           {row.visitorEmail && row.visitorName
                             ? row.visitorEmail
-                            : new Date(row.checkedInAt).toLocaleString()}
+                            : row.checkedInAt
+                              ? new Date(row.checkedInAt).toLocaleString()
+                              : "—"}
                         </p>
                       </td>
                       <td
@@ -733,12 +738,10 @@ export default function SNFPartners() {
                       <td className="px-5 py-4 sm:px-6">
                         <span
                           className="inline-flex rounded-full px-3 py-1 text-[11px] font-bold"
-                          style={
-                            {
-                              backgroundColor: BRAND.greenBadgeBg,
-                              color: BRAND.greenBadgeText,
-                            }
-                          }
+                          style={{
+                            backgroundColor: BRAND.greenBadgeBg,
+                            color: BRAND.greenBadgeText,
+                          }}
                         >
                           {row.status}
                         </span>
@@ -853,6 +856,7 @@ export default function SNFPartners() {
                       <Input
                         type="tel"
                         inputMode="tel"
+                        autoComplete="tel"
                         required
                         value={onboardForm.phone}
                         onChange={(e) =>
@@ -1217,7 +1221,7 @@ export default function SNFPartners() {
                         <div className="flex items-center gap-2">
                           <Phone className="h-3.5 w-3.5 shrink-0" style={{ color: BRAND.cyan }} />
                           <p className="text-sm font-bold" style={{ color: "#0F172A" }}>
-                            {selectedPartner?.phone || "—"}
+                            {formatPhoneInput(selectedPartner?.phone) || "—"}
                           </p>
                         </div>
                       </div>
@@ -1423,6 +1427,74 @@ export default function SNFPartners() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog
+        open={Boolean(selectedReferral)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedReferral(null);
+        }}
+      >
+        <DialogContent className="max-w-md rounded-2xl border-[#E2E8F0]">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="text-xl text-slate-900">
+              {selectedReferral?.visitorName ||
+                selectedReferral?.visitorEmail ||
+                "Visitor details"}
+            </DialogTitle>
+            <DialogDescription>
+              Family visitor checked in at {selectedReferral?.source || "an SNF partner"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Name</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {selectedReferral?.visitorName || "—"}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Email</p>
+              <p className="mt-1 break-all text-sm font-semibold text-slate-900">
+                {selectedReferral?.visitorEmail || "—"}
+              </p>
+            </div>
+            {selectedReferral?.visitorPhone ? (
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Phone</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral.visitorPhone}
+                </p>
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Facility
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral?.source || "—"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Checked in
+                </p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">
+                  {selectedReferral?.checkedInAt
+                    ? new Date(selectedReferral.checkedInAt).toLocaleString()
+                    : "—"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+              <p className="text-sm font-medium text-emerald-800">Status</p>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                {selectedReferral?.status || "Checked In"}
+              </span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

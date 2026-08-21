@@ -242,7 +242,7 @@ export const createSnfPartner = catchAsyncError(async (req, res, next) => {
     await sendMail({
       email: normalizedEmail,
       subject: `Welcome to CareMatch AI – ${partner.name} partner account`,
-      template: "facility-onboarding.ejs",
+      template: "snf-onboarding.ejs",
       data: {
         user: { name: partner.name },
         facility: { name: partner.name },
@@ -544,6 +544,120 @@ const recordSnfReferralScan = async ({
     }
   }
 };
+
+const makeVisitCode = () =>
+  `USR-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+
+const ensureUserVisitCode = async (user) => {
+  if (user.visitCode) return String(user.visitCode).toUpperCase();
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const code = makeVisitCode();
+    try {
+      user.visitCode = code;
+      await user.save({ validateBeforeSave: false });
+      return code;
+    } catch (error) {
+      if (error?.code !== 11000) throw error;
+    }
+  }
+  throw new ErrorHandler("Could not allocate a visit QR code", 500);
+};
+
+const serializeVisitorProfile = (user, extra = {}) => ({
+  id: String(user._id),
+  name: String(user.name || "").trim(),
+  email: String(user.email || "").trim().toLowerCase(),
+  phone: String(user.phone || "").trim(),
+  visitCode: String(user.visitCode || "").toUpperCase(),
+  ...extra,
+});
+
+/** Family user: get / generate personal visit QR used at SNF check-in. */
+export const getMyVisitPass = catchAsyncError(async (req, res, next) => {
+  const user = await User.findById(req.user?.id).select(
+    "name email phone role user_type visitCode",
+  );
+  if (!user) return next(new ErrorHandler("User not found", 404));
+  if (!isFamilyReferralUser(user)) {
+    return next(new ErrorHandler("Visit passes are only available for family accounts", 403));
+  }
+
+  const visitCode = await ensureUserVisitCode(user);
+  const clientBaseUrl = resolveClientBaseUrl(req);
+  const visitPayload = visitCode;
+  return res.json({
+    success: true,
+    visitPass: {
+      ...serializeVisitorProfile(user, { visitCode }),
+      qrImageUrl: `https://quickchart.io/qr?size=360&text=${encodeURIComponent(visitPayload)}`,
+      instructions:
+        "Show this QR at the skilled nursing facility. Staff will scan it to record your visit.",
+      deepLink: `${clientBaseUrl}/visit-pass/${encodeURIComponent(visitCode)}`,
+    },
+  });
+});
+
+/**
+ * SNF staff: scan a family user's visit QR / code and record the visit.
+ * Creates a new visit row each time and returns visitor details for the modal.
+ */
+export const checkInVisitorByCode = catchAsyncError(async (req, res, next) => {
+  const { partner } = await findLinkedSnfPartner(req.user?.id);
+  if (!partner) {
+    return next(new ErrorHandler("No SNF partner profile is linked to this account", 403));
+  }
+
+  const visitCode = String(req.body?.visitCode || req.body?.code || "")
+    .trim()
+    .toUpperCase();
+  if (!visitCode) return next(new ErrorHandler("Visitor QR code is required", 400));
+
+  const visitor = await User.findOne({ visitCode }).select(
+    "name email phone role user_type visitCode",
+  );
+  if (!visitor || !isFamilyReferralUser(visitor)) {
+    return next(new ErrorHandler("No family visitor was found for this QR code", 404));
+  }
+
+  let referral;
+  try {
+    referral = await SnfReferral.create({
+      referralCode: partner.referralCode,
+      snfPartnerId: partner._id,
+      scannedBy: visitor._id,
+      checkedInBy: req.user.id,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      await ensureSnfReferralIndexes();
+      referral = await SnfReferral.create({
+        referralCode: partner.referralCode,
+        snfPartnerId: partner._id,
+        scannedBy: visitor._id,
+        checkedInBy: req.user.id,
+      });
+    } else {
+      throw error;
+    }
+  }
+
+  await rememberUserSnfScan(visitor._id, partner);
+
+  return res.status(201).json({
+    success: true,
+    message: `Checked in ${visitor.name || visitor.email}.`,
+    visitor: serializeVisitorProfile(visitor, {
+      checkedInAt: referral.checkedInAt,
+      referralId: String(referral._id),
+      facilityName: partner.name,
+      status: referral.status || "Checked In",
+    }),
+    referral: serializeReferralRow({
+      ...referral.toObject(),
+      scannedBy: visitor,
+    }),
+  });
+});
 
 /** Legacy QR / API URL. Send visitors to the frontend SNF referral page. */
 export const scanSnfReferral = catchAsyncError(async (req, res, next) => {
