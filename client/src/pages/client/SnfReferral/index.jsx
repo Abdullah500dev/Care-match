@@ -8,6 +8,7 @@ import { getUser } from "@/store/auth/authSlice";
 import {
   clearSnfReferralCode,
   normalizeSnfReferralCode,
+  persistSnfHighlightPartnerId,
   persistSnfReferralCode,
   snfReferralPath,
 } from "@/lib/snfReferral";
@@ -77,6 +78,7 @@ export default function SnfReferralLanding() {
             const claimed = data?.partner;
             if (claimed) {
               clearSnfReferralCode();
+              persistSnfHighlightPartnerId(claimed.id);
               if (data?.recorded === false) {
                 setPartner(claimed);
                 setDialogOpen(true);

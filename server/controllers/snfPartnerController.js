@@ -131,6 +131,7 @@ const serializePartner = (partner, referralCount = 0, activeCount = 0, referralL
   qrImageUrl: `https://quickchart.io/qr?size=360&text=${encodeURIComponent(
     referralLink,
   )}`,
+  qrDownloadPath: `/api/snf-partners/qr-image/${encodeURIComponent(partner.referralCode)}`,
   totalReferrals: referralCount,
   activeReferrals: activeCount,
   createdAt: partner.createdAt,
@@ -138,6 +139,47 @@ const serializePartner = (partner, referralCount = 0, activeCount = 0, referralL
 
 const publicReferralLink = (req, code) =>
   `${resolveClientBaseUrl(req)}/snf-referral/${encodeURIComponent(code)}`;
+
+const qrImageRemoteUrl = (referralLink) =>
+  `https://quickchart.io/qr?size=512&text=${encodeURIComponent(referralLink)}`;
+
+/** Authenticated PNG download of an SNF referral QR (avoids browser CORS issues). */
+export const downloadSnfQrImage = catchAsyncError(async (req, res, next) => {
+  const referralCode = String(req.params.code || "").trim().toUpperCase();
+  if (!referralCode) return next(new ErrorHandler("Referral code is required", 400));
+
+  const partner = await SnfPartner.findOne({ referralCode });
+  if (!partner) return next(new ErrorHandler("Referral code was not found", 404));
+
+  const requester = await User.findById(req.user?.id).select("role user_type");
+  const isAdminStaff =
+    requester?.role === "admin" ||
+    ["admin", "authenticator", "moderator"].includes(requester?.user_type);
+  if (!isAdminStaff) {
+    const { partner: linked } = await findLinkedSnfPartner(req.user?.id);
+    if (!linked || String(linked._id) !== String(partner._id)) {
+      return next(new ErrorHandler("Not allowed to download this QR code", 403));
+    }
+  }
+
+  const referralLink = publicReferralLink(req, partner.referralCode);
+  const remoteUrl = qrImageRemoteUrl(referralLink);
+  const upstream = await fetch(remoteUrl);
+  if (!upstream.ok) {
+    return next(new ErrorHandler("Could not generate QR image", 502));
+  }
+
+  const buffer = Buffer.from(await upstream.arrayBuffer());
+  const filename = `${partner.referralCode}-qr.png`;
+  res.setHeader("Content-Type", "image/png");
+  res.setHeader("Content-Length", buffer.length);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${filename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+  );
+  res.setHeader("Cache-Control", "private, max-age=300");
+  return res.status(200).send(buffer);
+});
 
 const serializePublicPartner = (partner) => ({
   id: String(partner._id),

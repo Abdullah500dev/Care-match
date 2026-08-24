@@ -60,8 +60,10 @@ export default function SnfInfoDialog({ open, onOpenChange, partner }) {
               <DialogTitle className="text-xl text-[#132329] sm:text-2xl">
                 {partner?.name || "SNF partner"}
               </DialogTitle>
-              <DialogDescription className="text-sm text-[#64748b]">
-                Skilled nursing profile from a CareMatch SNF partner referral.
+              <DialogDescription className="text-sm leading-relaxed text-[#64748b]">
+                Welcome to CareMatch! The easy solution to find Assisted Living Facilities for you
+                or your loved one! It looks like you found us as a referral from{" "}
+                {partner?.name || "a partner facility"}. Welcome!
               </DialogDescription>
             </DialogHeader>
 

@@ -5,6 +5,7 @@ import {
   claimSnfReferral,
   createSnfPartner,
   deleteSnfPartnerByAdmin,
+  downloadSnfQrImage,
   getMyScannedSnfs,
   getMySnfPartner,
   getMyVisitPass,
@@ -20,6 +21,7 @@ const router = express.Router();
 
 router.get("/referral/:code", scanSnfReferral);
 router.get("/public/:code", getPublicSnfByReferralCode);
+router.get("/qr-image/:code", isAutheticated, downloadSnfQrImage);
 router.post("/claim-referral", isAutheticated, claimSnfReferral);
 router.get("/my-visit-pass", isAutheticated, getMyVisitPass);
 router.post("/visitor-check-in", isAutheticated, checkInVisitorByCode);

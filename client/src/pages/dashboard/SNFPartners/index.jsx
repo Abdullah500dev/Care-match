@@ -43,6 +43,7 @@ import {
 } from "@/lib/facilityAddressGeo";
 import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
 import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
+import { downloadAuthenticatedImage, downloadImageFile } from "@/lib/qrShare";
 
 /** Brand tokens from SNF Partners reference mock */
 const BRAND = {
@@ -210,6 +211,31 @@ export default function SNFPartners() {
       toast.success("Referral link copied");
     } catch {
       toast.error("Could not copy link");
+    }
+  };
+
+  const downloadPartnerQr = async () => {
+    if (!selectedPartner?.qrDownloadPath && !selectedPartner?.qrImageUrl) {
+      toast.error("QR image is not available yet");
+      return;
+    }
+    try {
+      const filename = `${selectedPartner.referralCode || "snf"}-qr.png`;
+      if (selectedPartner.qrDownloadPath) {
+        await downloadAuthenticatedImage(selectedPartner.qrDownloadPath, filename);
+      } else if (selectedPartner.referralCode) {
+        await downloadAuthenticatedImage(
+          `/api/snf-partners/qr-image/${encodeURIComponent(selectedPartner.referralCode)}`,
+          filename,
+        );
+      } else {
+        await downloadImageFile(selectedPartner.qrImageUrl, filename);
+      }
+      toast.success("QR image downloaded");
+    } catch (error) {
+      toast.error("Could not download QR image", {
+        description: error?.message || error?.response?.data?.message || "Please try again.",
+      });
     }
   };
 
@@ -1378,6 +1404,7 @@ export default function SNFPartners() {
                         </button>
                         <button
                           type="button"
+                          onClick={downloadPartnerQr}
                           className="flex h-12 w-full items-center justify-center gap-2 text-sm font-bold text-white"
                           style={{
                             borderRadius: 16,
@@ -1387,7 +1414,7 @@ export default function SNFPartners() {
                           }}
                         >
                           <Download className="h-4 w-4" />
-                          Download Print Kit
+                          Download QR Image
                         </button>
                       </div>
                     </div>

@@ -1,3 +1,4 @@
+import { clearSnfReferralSession } from "../lib/snfReferral";
 import { apiClient } from "./api";
 
 // Server mounts router at /api/auth
@@ -30,5 +31,6 @@ export const persistAuthTokens = ({ accessToken, refreshToken }) => {
 export const clearPersistedAuthTokens = () => {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
+  clearSnfReferralSession();
 };
 

@@ -4,7 +4,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import SnfInfoDialog from "@/components/snf/SnfInfoDialog";
 import { apiClient } from "@/services/api";
-import { resolveSnfImageUrl } from "@/lib/snfReferral";
+import { peekSnfHighlightPartnerId, resolveSnfImageUrl } from "@/lib/snfReferral";
 import { toast } from "sonner";
 
 const PLACEHOLDER_IMAGE = "/assets/images/footer-logo.svg";
@@ -15,6 +15,7 @@ export default function UserDashboardSnfs() {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(location.state?.partner || null);
+  const [highlightId] = useState(() => peekSnfHighlightPartnerId());
 
   const openId = String(searchParams.get("open") || "").trim();
 
@@ -37,6 +38,14 @@ export default function UserDashboardSnfs() {
     const match = partners.find((item) => String(item.id) === openId);
     if (match) setSelected(match);
   }, [loading, openId, partners]);
+
+  useEffect(() => {
+    if (loading || !highlightId) return;
+    const el = document.getElementById(`snf-card-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [loading, highlightId, partners]);
 
   const countLabel = useMemo(() => {
     if (loading) return "Loading…";
@@ -77,7 +86,8 @@ export default function UserDashboardSnfs() {
           <Hospital className="mx-auto mb-3 h-8 w-8 text-slate-300" />
           <p className="font-medium text-slate-500">No scanned SNFs yet.</p>
           <p className="mt-1 text-sm text-slate-400">
-            Scan a partner QR code or open a copied referral link, then sign in to save it here.
+            Scan a partner QR code, open a copied referral link, or enter a referral code when you
+            sign in to save it here.
           </p>
         </div>
       ) : (
@@ -85,12 +95,18 @@ export default function UserDashboardSnfs() {
           {partners.map((partner) => {
             const imgSrc = resolveSnfImageUrl(partner.images?.[0]) || PLACEHOLDER_IMAGE;
             const isPlaceholder = imgSrc === PLACEHOLDER_IMAGE;
+            const isHighlighted = highlightId && String(partner.id) === String(highlightId);
             return (
               <button
                 key={partner.id}
+                id={`snf-card-${partner.id}`}
                 type="button"
                 onClick={() => openPartner(partner)}
-                className="flex flex-col overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white text-left shadow-[0_2px_12px_rgba(0,0,0,0.06)] transition hover:-translate-y-0.5 hover:shadow-md"
+                className={`flex flex-col overflow-hidden rounded-2xl border bg-white text-left transition hover:-translate-y-0.5 ${
+                  isHighlighted
+                    ? "border-[#00B8DB] shadow-[0_0_0_3px_rgba(0,184,219,0.25),0_8px_24px_rgba(0,184,219,0.2)] ring-2 ring-[#00B8DB]/40"
+                    : "border-[#E2E8F0] shadow-[0_2px_12px_rgba(0,0,0,0.06)] hover:shadow-md"
+                }`}
               >
                 <div className="relative h-40 flex-shrink-0">
                   <img
@@ -101,6 +117,11 @@ export default function UserDashboardSnfs() {
                     }}
                     className={`h-full w-full ${isPlaceholder ? "object-contain bg-white p-6" : "object-cover"}`}
                   />
+                  {isHighlighted ? (
+                    <div className="absolute left-2 top-2 rounded-full bg-[#00B8DB] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm">
+                      Referral
+                    </div>
+                  ) : null}
                   {partner.scannedAt ? (
                     <div className="absolute bottom-2 left-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] text-white backdrop-blur-sm">
                       Scanned{" "}

@@ -7,8 +7,12 @@ import { clearUser, getUser, setUser } from "../../store/auth/authSlice";
 import { Eye, EyeOff } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import SEO from "../../components/common/SEO";
+import { apiClient } from "../../services/api";
 import {
+  clearSnfReferralCode,
+  normalizeSnfReferralCode,
   peekSnfReferralCode,
+  persistSnfHighlightPartnerId,
   persistSnfReferralCode,
   snfReferralPath,
 } from "../../lib/snfReferral";
@@ -95,6 +99,10 @@ function Signin() {
       if (stateEmail) setValue("email", stateEmail);
       if (statePassword) setValue("password", statePassword);
 
+      const referralPrefill =
+        normalizeSnfReferralCode(searchParams.get("referral")) || peekSnfReferralCode();
+      if (referralPrefill) setValue("referralCode", referralPrefill);
+
       if (!stateEmail || !statePassword) {
         const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
         if (savedPrefill) {
@@ -107,11 +115,35 @@ function Signin() {
           }
         }
       }
-    }, [location.state, setValue]);
+    }, [location.state, searchParams, setValue]);
+
+    const claimReferralForHighlight = async (referralCode) => {
+      const code = normalizeSnfReferralCode(referralCode);
+      if (!code) return false;
+      try {
+        const { data } = await apiClient.post("/api/snf-partners/claim-referral", {
+          referralCode: code,
+        });
+        const partnerId = data?.partner?.id;
+        if (partnerId) {
+          persistSnfHighlightPartnerId(partnerId);
+          clearSnfReferralCode();
+          return true;
+        }
+      } catch (error) {
+        toastAuthError(error, {
+          fallbackTitle: "Referral code not found",
+          fallbackDescription: "You are signed in, but that SNF referral could not be applied.",
+        });
+      }
+      return false;
+    };
 
     const onSubmit = async (data) => {
         try {
-            const response = await authServices.login(data);
+            const formReferralCode = normalizeSnfReferralCode(data.referralCode);
+            const { referralCode: _omitReferral, ...loginPayload } = data;
+            const response = await authServices.login(loginPayload);
             const payload = response?.data || {};
 
             const accessToken = payload?.accessToken;
@@ -137,7 +169,12 @@ function Signin() {
             sessionStorage.removeItem(SIGNUP_PREFILL_KEY);
 
             toastAuthSuccess("Welcome back", "You’re signed in and ready to continue.");
-            const referralCode = persistSnfReferralCode(searchParams.get("referral")) || peekSnfReferralCode();
+            if (formReferralCode) {
+              persistSnfReferralCode(formReferralCode);
+            }
+            const queryReferral = persistSnfReferralCode(searchParams.get("referral"));
+            const referralCode = formReferralCode || queryReferral || peekSnfReferralCode();
+            const usedFormReferral = Boolean(formReferralCode);
             const redirect = getPostLoginRedirect() || getStoredPostLoginRedirect();
             sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
             if (role === "facility") {
@@ -154,6 +191,9 @@ function Signin() {
                 replace: true,
                 state: redirect?.state,
               });
+            } else if (usedFormReferral && referralCode) {
+              await claimReferralForHighlight(referralCode);
+              navigate("/portal", { replace: true });
             } else if (referralCode) {
               navigate(snfReferralPath(referralCode), { replace: true });
             } else {
@@ -197,7 +237,7 @@ function Signin() {
                     {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>}
                 </div>
 
-                <div className="mb-6">
+                <div className="mb-4">
                     <label className="block text-sm font-medium mb-1">Password</label>
                     <div className="relative">
                         <input
@@ -216,6 +256,22 @@ function Signin() {
                         </button>
                     </div>
                     {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>}
+                </div>
+
+                <div className="mb-4">
+                    <label className="block text-sm font-medium mb-1">
+                      Referral code <span className="font-normal text-slate-500">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. EFF-23D52E"
+                      autoComplete="off"
+                      {...register("referralCode")}
+                      className="w-full px-4 py-2 rounded-md bg-white/90 text-black uppercase focus:outline-none focus:ring-2 focus:ring-white"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Enter an SNF partner code to highlight that facility on your SNF page.
+                    </p>
                 </div>
 
                 <div className="mb-6 text-right">

@@ -12,6 +12,12 @@ import SEO from "@/components/common/SEO";
 import { apiClient } from "@/services/api";
 import { toast } from "sonner";
 import FacilityImagesManager from "@/components/facilityDashboard/FacilityImagesManager";
+import {
+  copyAuthenticatedImageToClipboard,
+  copyImageToClipboard,
+  downloadAuthenticatedImage,
+  downloadImageFile,
+} from "@/lib/qrShare";
 
 const formatShortDate = (iso) => {
   if (!iso) return "";
@@ -44,6 +50,7 @@ export default function SnfDashboardHome() {
   const [visitCodeInput, setVisitCodeInput] = useState("");
   const [checkingIn, setCheckingIn] = useState(false);
   const [checkedInVisitor, setCheckedInVisitor] = useState(null);
+  const [qrBusy, setQrBusy] = useState(false);
 
   const loadDashboard = async () => {
     try {
@@ -80,6 +87,59 @@ export default function SnfDashboardHome() {
       toast.success("Referral link copied.");
     } catch {
       toast.error("Could not copy referral link.");
+    }
+  };
+
+  const downloadQrImage = async () => {
+    if (!partner?.qrDownloadPath && !partner?.qrImageUrl) return;
+    setQrBusy(true);
+    try {
+      const filename = `${partner.referralCode || "snf"}-qr.png`;
+      if (partner.qrDownloadPath) {
+        await downloadAuthenticatedImage(partner.qrDownloadPath, filename);
+      } else {
+        await downloadImageFile(partner.qrImageUrl, filename);
+      }
+      toast.success("QR image downloaded.");
+    } catch {
+      toast.error("Could not download QR image", {
+        description: "Try opening the QR in a new tab and saving it from there.",
+      });
+      if (partner.qrImageUrl) {
+        window.open(partner.qrImageUrl, "_blank", "noopener,noreferrer");
+      }
+    } finally {
+      setQrBusy(false);
+    }
+  };
+
+  const copyQrImage = async () => {
+    if (!partner?.qrDownloadPath && !partner?.qrImageUrl) return;
+    setQrBusy(true);
+    try {
+      if (partner.qrDownloadPath) {
+        await copyAuthenticatedImageToClipboard(partner.qrDownloadPath);
+      } else {
+        await copyImageToClipboard(partner.qrImageUrl);
+      }
+      toast.success("QR image copied.", {
+        description: "Paste it into a message, email, or document.",
+      });
+    } catch {
+      try {
+        if (partner.referralLink) {
+          await navigator.clipboard.writeText(partner.referralLink);
+          toast.success("Copied referral link instead.", {
+            description: "This browser could not copy the QR image.",
+          });
+        } else {
+          throw new Error("no link");
+        }
+      } catch {
+        toast.error("Could not copy QR image.");
+      }
+    } finally {
+      setQrBusy(false);
     }
   };
 
@@ -313,23 +373,34 @@ export default function SnfDashboardHome() {
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={copyReferralLink}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#00B8DB] px-4 text-sm font-bold text-white"
+                disabled={qrBusy || !partner?.referralLink}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#00B8DB] px-4 text-sm font-bold text-white disabled:opacity-60"
               >
                 <Copy className="h-4 w-4" />
                 Copy link
               </button>
-              <a
-                href={partner.qrImageUrl}
-                download={`${partner.referralCode || "snf"}-qr.png`}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 px-4 text-sm font-bold text-white"
+              <button
+                type="button"
+                onClick={copyQrImage}
+                disabled={qrBusy || !partner?.qrImageUrl}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-500 px-4 text-sm font-bold text-white disabled:opacity-60"
+              >
+                <Copy className="h-4 w-4" />
+                Copy QR
+              </button>
+              <button
+                type="button"
+                onClick={downloadQrImage}
+                disabled={qrBusy || !partner?.qrImageUrl}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-600 px-4 text-sm font-bold text-white disabled:opacity-60"
               >
                 <Download className="h-4 w-4" />
-                QR image
-              </a>
+                {qrBusy ? "Working…" : "Download QR"}
+              </button>
             </div>
           </div>
         </div>
