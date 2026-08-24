@@ -103,13 +103,20 @@ function Signin() {
         normalizeSnfReferralCode(searchParams.get("referral")) || peekSnfReferralCode();
       if (referralPrefill) setValue("referralCode", referralPrefill);
 
-      if (!stateEmail || !statePassword) {
+      if (!stateEmail || !statePassword || !referralPrefill) {
         const savedPrefill = sessionStorage.getItem(SIGNUP_PREFILL_KEY);
         if (savedPrefill) {
           try {
             const parsed = JSON.parse(savedPrefill);
             if (!stateEmail && parsed?.email) setValue("email", parsed.email);
             if (!statePassword && parsed?.password) setValue("password", parsed.password);
+            if (!referralPrefill && parsed?.referralCode) {
+              const fromSignup = normalizeSnfReferralCode(parsed.referralCode);
+              if (fromSignup) {
+                persistSnfReferralCode(fromSignup);
+                setValue("referralCode", fromSignup);
+              }
+            }
           } catch {
             // Ignore storage parsing errors.
           }

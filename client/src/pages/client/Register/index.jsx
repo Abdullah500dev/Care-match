@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { authServices } from "../../../services/authServices";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import { toastAuthError, toastAuthSuccess } from "../../../lib/authFeedback";
-import { persistSnfReferralCode, peekSnfReferralCode } from "../../../lib/snfReferral";
+import {
+  normalizeSnfReferralCode,
+  persistSnfReferralCode,
+  peekSnfReferralCode,
+} from "../../../lib/snfReferral";
 
 const SIGNUP_PREFILL_KEY = "carematch_signup_signin_prefill";
 
@@ -20,6 +24,7 @@ export default function Register() {
     email: "",
     password: "",
     confirmPassword: "",
+    referralCode: "",
     role: "user",
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +38,11 @@ export default function Register() {
   const showActivationCard = Boolean(pendingEmail);
   const fromState = location.state?.from;
   const signinDestination = () => {
-    const referral = peekSnfReferralCode() || persistSnfReferralCode(searchParams.get("referral"));
+    const referral =
+      normalizeSnfReferralCode(form.referralCode) ||
+      peekSnfReferralCode() ||
+      persistSnfReferralCode(searchParams.get("referral"));
+    if (referral) persistSnfReferralCode(referral);
     return {
       pathname: "/signin",
       search: referral ? `?referral=${encodeURIComponent(referral)}` : "",
@@ -45,7 +54,12 @@ export default function Register() {
   }, []);
 
   useEffect(() => {
-    persistSnfReferralCode(searchParams.get("referral"));
+    const referral =
+      normalizeSnfReferralCode(searchParams.get("referral")) || peekSnfReferralCode();
+    if (referral) {
+      persistSnfReferralCode(referral);
+      setForm((prev) => (prev.referralCode ? prev : { ...prev, referralCode: referral }));
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -168,7 +182,11 @@ export default function Register() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const nextValue = name === "referralCode" ? normalizeSnfReferralCode(value) : value;
+    setForm((prev) => ({ ...prev, [name]: nextValue }));
+    if (name === "referralCode") {
+      persistSnfReferralCode(nextValue);
+    }
     setErrors((prev) => {
       if (!prev[name]) return prev;
       const next = { ...prev };
@@ -225,6 +243,10 @@ export default function Register() {
 
     try {
       setIsSubmitting(true);
+      const referralCode = normalizeSnfReferralCode(form.referralCode);
+      if (referralCode && form.role === "user") {
+        persistSnfReferralCode(referralCode);
+      }
       const response = await authServices.register({
         name: form.fullName,
         email: form.email,
@@ -238,6 +260,7 @@ export default function Register() {
           email: form.email,
           password: form.password,
           role: form.role,
+          referralCode: form.role === "user" ? referralCode : "",
         })
       );
       setPendingEmail(form.email);
@@ -529,6 +552,28 @@ export default function Register() {
                         <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>
                       )}
                     </div>
+
+                    {form.role === "user" ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="referralCode" className="text-sm font-normal text-[#314158]">
+                          Referral code{" "}
+                          <span className="font-normal text-slate-500">(optional)</span>
+                        </Label>
+                        <Input
+                          id="referralCode"
+                          name="referralCode"
+                          type="text"
+                          autoComplete="off"
+                          value={form.referralCode}
+                          onChange={handleChange}
+                          placeholder="e.g. EFF-23D52E"
+                          className="h-11 rounded-xl border border-[#E2E8F0] uppercase text-[#364153] placeholder:text-[#0F172B80] focus-visible:ring-[#132329]"
+                        />
+                        <p className="text-xs text-slate-500">
+                          Enter an SNF partner code to highlight that facility after you sign in.
+                        </p>
+                      </div>
+                    ) : null}
 
                     <Button
                       type="submit"
