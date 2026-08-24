@@ -478,6 +478,111 @@ export const deleteSnfPartnerByAdmin = catchAsyncError(async (req, res, next) =>
   });
 });
 
+/** Resend SNF onboarding invite (new temporary password + reset link). */
+export const resendSnfPartnerKit = catchAsyncError(async (req, res, next) => {
+  if (!(await requireAdmin(req.user?.id))) {
+    return next(new ErrorHandler("Admin only", 403));
+  }
+
+  const partnerId = String(req.params.id || "").trim();
+  if (!partnerId) return next(new ErrorHandler("Partner id is required", 400));
+
+  const partner = await SnfPartner.findById(partnerId);
+  if (!partner) return next(new ErrorHandler("SNF partner not found", 404));
+
+  let facilityUser = partner.facilityUserId
+    ? await User.findById(partner.facilityUserId)
+    : null;
+  if (!facilityUser) {
+    facilityUser = await User.findOne({
+      email: String(partner.email || "").trim().toLowerCase(),
+      role: "snf",
+    });
+  }
+  if (!facilityUser) {
+    return next(new ErrorHandler("No login account is linked to this SNF partner", 404));
+  }
+
+  const temporaryPassword = makeTemporaryPassword();
+  facilityUser.password = temporaryPassword;
+  facilityUser.is_verified = true;
+  const resetToken = facilityUser.getToken(RESET_PASSWORD_TOKEN_MINUTES);
+  await facilityUser.save({ validateBeforeSave: false });
+
+  if (!partner.facilityUserId || String(partner.facilityUserId) !== String(facilityUser._id)) {
+    partner.facilityUserId = facilityUser._id;
+    await partner.save({ validateBeforeSave: false });
+  }
+
+  const clientBaseUrl = resolveClientBaseUrl(req);
+  const referralLink = publicReferralLink(req, partner.referralCode);
+
+  try {
+    await sendMail({
+      email: facilityUser.email,
+      subject: `CareMatch AI – updated partner kit for ${partner.name}`,
+      template: "snf-onboarding.ejs",
+      data: {
+        user: { name: partner.name },
+        facility: { name: partner.name },
+        username: facilityUser.email,
+        temporaryPassword,
+        loginUrl: `${clientBaseUrl}/signin`,
+        resetLink: `${clientBaseUrl}/reset-password?token=${resetToken}`,
+        dashboardUrl: `${clientBaseUrl}/snf`,
+        signupUrl: `${clientBaseUrl}/register`,
+        referralCode: partner.referralCode,
+        referralLink,
+      },
+    });
+  } catch (error) {
+    console.error("SNF resend kit email failed:", error?.message || error);
+    return next(new ErrorHandler("Could not send the partner kit email", 500));
+  }
+
+  return res.json({
+    success: true,
+    message: "Partner kit invite emailed successfully.",
+  });
+});
+
+/** All family referrals / visits for one SNF partner (admin). */
+export const getSnfPartnerReferralsByAdmin = catchAsyncError(async (req, res, next) => {
+  if (!(await requireAdmin(req.user?.id))) {
+    return next(new ErrorHandler("Admin only", 403));
+  }
+
+  const partnerId = String(req.params.id || "").trim();
+  if (!partnerId) return next(new ErrorHandler("Partner id is required", 400));
+
+  const partner = await SnfPartner.findById(partnerId).select("name referralCode");
+  if (!partner) return next(new ErrorHandler("SNF partner not found", 404));
+
+  const rows = await SnfReferral.find({ snfPartnerId: partner._id })
+    .sort({ checkedInAt: -1 })
+    .populate("scannedBy", "name email phone role user_type")
+    .lean();
+
+  const referrals = rows
+    .filter((referral) => !isStaffOrPartnerUserDoc(referral.scannedBy))
+    .map((referral) =>
+      serializeReferralRow(referral, {
+        partnerId: String(partner._id),
+        source: partner.name,
+      }),
+    );
+
+  return res.json({
+    success: true,
+    partner: {
+      id: String(partner._id),
+      name: partner.name,
+      referralCode: partner.referralCode,
+    },
+    referrals,
+  });
+});
+
 export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
   if (!(await requireAdmin(req.user?.id))) {
     return next(new ErrorHandler("Admin only", 403));
@@ -517,6 +622,7 @@ export const getSnfDashboard = catchAsyncError(async (req, res, next) => {
     ),
     referrals: recent.map((referral) =>
       serializeReferralRow(referral, {
+        partnerId: String(referral.snfPartnerId?._id || referral.snfPartnerId || ""),
         source: referral.snfPartnerId?.name || "Unknown SNF",
       }),
     ),

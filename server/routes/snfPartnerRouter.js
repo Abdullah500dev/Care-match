@@ -11,6 +11,8 @@ import {
   getMyVisitPass,
   getPublicSnfByReferralCode,
   getSnfDashboard,
+  getSnfPartnerReferralsByAdmin,
+  resendSnfPartnerKit,
   scanSnfReferral,
   updateMySnfPartner,
   updateSnfPartnerByAdmin,
@@ -29,6 +31,8 @@ router.get("/my-scans", isAutheticated, getMyScannedSnfs);
 router.get("/me", isAutheticated, getMySnfPartner);
 router.put("/me", isAutheticated, uploadFacilityImages.array("images", 8), updateMySnfPartner);
 router.get("/dashboard", isAutheticated, getSnfDashboard);
+router.get("/:id/referrals", isAutheticated, getSnfPartnerReferralsByAdmin);
+router.post("/:id/resend-kit", isAutheticated, resendSnfPartnerKit);
 router.post("/", isAutheticated, uploadFacilityImages.array("images", 8), createSnfPartner);
 router.put("/:id", isAutheticated, uploadFacilityImages.array("images", 8), updateSnfPartnerByAdmin);
 router.delete("/:id", isAutheticated, deleteSnfPartnerByAdmin);

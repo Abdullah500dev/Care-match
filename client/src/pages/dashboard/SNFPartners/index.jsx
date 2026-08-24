@@ -149,6 +149,10 @@ export default function SNFPartners() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedReferral, setSelectedReferral] = useState(null);
   const [selectedPartner, setSelectedPartner] = useState(null);
+  const [sendingKit, setSendingKit] = useState(false);
+  const [partnerReferralsOpen, setPartnerReferralsOpen] = useState(false);
+  const [partnerReferralsLoading, setPartnerReferralsLoading] = useState(false);
+  const [partnerReferrals, setPartnerReferrals] = useState([]);
   const [editingPartnerId, setEditingPartnerId] = useState(null);
   const [keptImages, setKeptImages] = useState([]);
   const [onboardForm, setOnboardForm] = useState(EMPTY_ONBOARD);
@@ -236,6 +240,44 @@ export default function SNFPartners() {
       toast.error("Could not download QR image", {
         description: error?.message || error?.response?.data?.message || "Please try again.",
       });
+    }
+  };
+
+  const sendNewKit = async () => {
+    if (!selectedPartner?.id) return;
+    setSendingKit(true);
+    try {
+      const { data } = await apiClient.post(
+        `/api/snf-partners/${encodeURIComponent(selectedPartner.id)}/resend-kit`,
+      );
+      toast.success(data?.message || "Partner kit emailed");
+    } catch (error) {
+      toast.error("Could not send new kit", {
+        description: error?.response?.data?.message || "Please try again.",
+      });
+    } finally {
+      setSendingKit(false);
+    }
+  };
+
+  const openPartnerReferrals = async () => {
+    if (!selectedPartner?.id) return;
+    setPartnerReferralsOpen(true);
+    setPartnerReferralsLoading(true);
+    setPartnerReferrals(
+      referrals.filter((row) => String(row.partnerId) === String(selectedPartner.id)),
+    );
+    try {
+      const { data } = await apiClient.get(
+        `/api/snf-partners/${encodeURIComponent(selectedPartner.id)}/referrals`,
+      );
+      setPartnerReferrals(Array.isArray(data?.referrals) ? data.referrals : []);
+    } catch (error) {
+      toast.error("Could not load referrals", {
+        description: error?.response?.data?.message || "Please try again.",
+      });
+    } finally {
+      setPartnerReferralsLoading(false);
     }
   };
 
@@ -1201,32 +1243,51 @@ export default function SNFPartners() {
                   </div>
 
                   <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    {[
-                      { value: String(selectedPartner?.totalReferrals ?? 0), label: "Total Referrals", color: "#0F172A" },
-                      { value: selectedPartner?.referralCode || "—", label: "Referral Code", color: "#00B8DB" },
-                    ].map((stat) => (
-                      <div
-                        key={stat.label}
-                        className="flex min-h-[104px] flex-col items-center justify-center rounded-2xl border bg-white px-3 py-5 text-center"
-                        style={{
-                          borderColor: "#E2E8F0",
-                          borderRadius: 16,
-                        }}
+                    <button
+                      type="button"
+                      onClick={openPartnerReferrals}
+                      className="flex min-h-[104px] flex-col items-center justify-center rounded-2xl border bg-white px-3 py-5 text-center transition hover:border-[#00B8DB]/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00B8DB]/40"
+                      style={{
+                        borderColor: "#E2E8F0",
+                        borderRadius: 16,
+                      }}
+                    >
+                      <p
+                        className="text-[28px] font-bold leading-none tracking-tight"
+                        style={{ color: "#0F172A" }}
                       >
-                        <p
-                          className="text-[28px] font-bold leading-none tracking-tight"
-                          style={{ color: stat.color }}
-                        >
-                          {stat.value}
-                        </p>
-                        <p
-                          className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.1em]"
-                          style={{ color: "#90A1B9" }}
-                        >
-                          {stat.label}
-                        </p>
-                      </div>
-                    ))}
+                        {String(selectedPartner?.totalReferrals ?? 0)}
+                      </p>
+                      <p
+                        className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ color: "#90A1B9" }}
+                      >
+                        Total Referrals
+                      </p>
+                      <p className="mt-1 text-[10px] font-medium" style={{ color: BRAND.cyan }}>
+                        View list
+                      </p>
+                    </button>
+                    <div
+                      className="flex min-h-[104px] flex-col items-center justify-center rounded-2xl border bg-white px-3 py-5 text-center"
+                      style={{
+                        borderColor: "#E2E8F0",
+                        borderRadius: 16,
+                      }}
+                    >
+                      <p
+                        className="text-[28px] font-bold leading-none tracking-tight"
+                        style={{ color: "#00B8DB" }}
+                      >
+                        {selectedPartner?.referralCode || "—"}
+                      </p>
+                      <p
+                        className="mt-2.5 text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ color: "#90A1B9" }}
+                      >
+                        Referral Code
+                      </p>
+                    </div>
                   </div>
 
                   <div className="mt-6">
@@ -1316,13 +1377,15 @@ export default function SNFPartners() {
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row">
                     <button
                       type="button"
-                      className="h-12 flex-1 text-sm font-bold text-white"
+                      onClick={sendNewKit}
+                      disabled={sendingKit}
+                      className="h-12 flex-1 text-sm font-bold text-white disabled:opacity-60"
                       style={{
                         borderRadius: 14,
                         backgroundColor: "#1A1E2F",
                       }}
                     >
-                      Send New Kit
+                      {sendingKit ? "Sending…" : "Send New Kit"}
                     </button>
                     <button
                       type="button"
@@ -1520,6 +1583,70 @@ export default function SNFPartners() {
               </span>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={partnerReferralsOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPartnerReferralsOpen(false);
+            setPartnerReferrals([]);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto rounded-2xl border-[#E2E8F0]">
+          <DialogHeader className="space-y-1 text-left">
+            <DialogTitle className="text-xl text-slate-900">
+              Referrals — {selectedPartner?.name || "SNF partner"}
+            </DialogTitle>
+            <DialogDescription>
+              Family visitors who scanned or checked in with this partner&apos;s referral code.
+            </DialogDescription>
+          </DialogHeader>
+          {partnerReferralsLoading ? (
+            <p className="py-8 text-center text-sm text-slate-400">Loading referrals…</p>
+          ) : partnerReferrals.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No referrals yet for this partner.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {partnerReferrals.map((row) => (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => setSelectedReferral(row)}
+                  className="flex w-full flex-col rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-left transition hover:border-[#00B8DB]/40 hover:bg-white"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-900">
+                        {row.visitorName || row.visitorEmail || row.referralCode || "Visitor"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {row.visitorEmail && row.visitorName
+                          ? row.visitorEmail
+                          : row.visitorPhone || "—"}
+                      </p>
+                    </div>
+                    <span
+                      className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold"
+                      style={{
+                        backgroundColor: BRAND.greenBadgeBg,
+                        color: BRAND.greenBadgeText,
+                      }}
+                    >
+                      {row.status || "Checked In"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-400">
+                    {row.checkedInAt ? new Date(row.checkedInAt).toLocaleString() : "—"}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
