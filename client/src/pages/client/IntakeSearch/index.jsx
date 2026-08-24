@@ -30,6 +30,7 @@ import {
   postDiscoverFacilities,
 } from "@/services/matchService";
 import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
+import { setLastMatchCount } from "@/lib/userDashboardStats";
 import { getUser } from "@/store/auth/authSlice";
 import { toast } from "sonner";
 
@@ -354,6 +355,7 @@ export default function IntakeSearch() {
         const { data } = await postDiscoverFacilities(discoverPayload);
         const recs = Array.isArray(data?.facilities) ? data.facilities : [];
         if (cancelled) return;
+        setLastMatchCount(recs.length);
 
         if (recs.length === 0) {
           toast.error("No matches found yet", {

@@ -27,6 +27,7 @@ import {
   loadGoogleMapsScript,
 } from "../../../lib/loadGoogleMaps";
 import { scrollToCarrieHeroThenOpenChat } from "../../../utils/scrollToCarrieHeroTagline";
+import { setLastMatchCount } from "@/lib/userDashboardStats";
 import {
   isAggregatorListingUrl,
   normalizeFacilityWebsite,
@@ -1471,6 +1472,11 @@ const CareExplorer = () => {
     () => dedupeFacilities(baseFacilities),
     [baseFacilities],
   );
+  useEffect(() => {
+    if (uniqueBaseFacilities.length > 0) {
+      setLastMatchCount(uniqueBaseFacilities.length);
+    }
+  }, [uniqueBaseFacilities.length]);
   const uniqueBaseFacilitiesForMergeRef = useRef(uniqueBaseFacilities);
   useEffect(() => {
     uniqueBaseFacilitiesForMergeRef.current = uniqueBaseFacilities;
