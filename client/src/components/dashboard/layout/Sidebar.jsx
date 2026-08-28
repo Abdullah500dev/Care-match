@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { authServices, clearPersistedAuthTokens } from "../../../services/authServices";
 import { clearUser, getUser } from "../../../store/auth/authSlice";
+import { useMessagingSocket } from "@/contexts/MessagingSocketContext";
 
 const NAV_ITEMS = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
@@ -36,6 +37,7 @@ function NavContent({ onNavClick }) {
   const navigate = useNavigate();
   const location = useLocation();
   useSelector(getUser);
+  const { unreadCount } = useMessagingSocket();
   const isUserDashboard = location.pathname.startsWith("/portal");
   const isFacilityDashboard = location.pathname.startsWith("/facility");
   const isSnfDashboard = location.pathname.startsWith("/snf");
@@ -125,6 +127,11 @@ function NavContent({ onNavClick }) {
                   <Icon className="h-4 w-4" />
                 </span>
                 <span>{label}</span>
+                {label === "Messages" && unreadCount > 0 ? (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#00B8DB] px-1.5 text-[10px] font-bold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                ) : null}
               </span>
             </>
           )}

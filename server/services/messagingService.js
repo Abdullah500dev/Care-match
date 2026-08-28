@@ -1,0 +1,449 @@
+import ErrorHandler from "../utils/errorHandler.js";
+import User from "../models/userModel.js";
+import SnfPartner, { SnfReferral } from "../models/snfPartnerModel.js";
+import {
+  Conversation,
+  Message,
+  buildParticipantKey,
+} from "../models/messageModel.js";
+
+export const isAdminStaffUser = (user) => {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  return ["admin", "authenticator", "moderator"].includes(user.user_type);
+};
+
+const loadUserById = async (userId) => {
+  if (!userId) return null;
+  return User.findById(userId).select("name email role user_type");
+};
+
+const serializeUser = (user) => {
+  if (!user) return null;
+  return {
+    id: String(user._id),
+    name: user.name || "User",
+    email: user.email || "",
+    role: user.role || "user",
+    user_type: user.user_type || "user",
+    accountLabel: accountLabelFor(user),
+  };
+};
+
+export const accountLabelFor = (user) => {
+  if (!user) return "User";
+  if (user.role === "admin" || user.user_type === "admin") return "Admin";
+  if (user.role === "facility") return "Facility";
+  if (user.role === "snf") return "SNF Partner";
+  if (["authenticator", "moderator"].includes(user.user_type)) return "Staff";
+  return "Family User";
+};
+
+const serializeMessage = (message, sender) => ({
+  id: String(message._id),
+  conversationId: String(message.conversationId),
+  senderId: String(message.senderId),
+  text: message.text,
+  createdAt: message.createdAt,
+  sender: serializeUser(sender),
+});
+
+const getUnreadForUser = (conversation, userId) => {
+  const key = String(userId);
+  const map = conversation.unreadCounts;
+  if (map instanceof Map) return Number(map.get(key) || 0);
+  if (map && typeof map === "object") return Number(map[key] || 0);
+  return 0;
+};
+
+const serializeConversation = async (conversation, viewerId, participantsById) => {
+  const viewer = String(viewerId);
+  const participantIds = conversation.participantIds.map((id) => String(id));
+  const isViewerIn = participantIds.includes(viewer);
+
+  let peerId;
+  if (isViewerIn) {
+    peerId = participantIds.find((id) => id !== viewer) || viewer;
+  } else {
+    const users = participantIds
+      .map((id) => participantsById?.get(id))
+      .filter(Boolean);
+    const familyPeer = users.find(
+      (u) => u.role === "user" && !["admin", "authenticator", "moderator"].includes(u.user_type),
+    );
+    peerId = familyPeer ? String(familyPeer._id) : participantIds[0];
+  }
+
+  const peer =
+    participantsById?.get(peerId) ||
+    (await loadUserById(peerId));
+
+  const subtitleParts = participantIds
+    .filter((id) => id !== String(peer?._id || peerId))
+    .map((id) => {
+      const user = participantsById?.get(id) || null;
+      return user ? accountLabelFor(user) : "";
+    })
+    .filter(Boolean);
+
+  return {
+    id: String(conversation._id),
+    peer: serializeUser(peer),
+    subtitle: subtitleParts.length ? subtitleParts.join(" · ") : accountLabelFor(peer),
+    lastMessageText: conversation.lastMessageText || "",
+    lastMessageAt: conversation.lastMessageAt,
+    unread: isViewerIn ? getUnreadForUser(conversation, viewerId) : 0,
+    updatedAt: conversation.updatedAt,
+  };
+};
+
+const findSupportAdmin = async () => {
+  const admin = await User.findOne({
+    $or: [{ role: "admin" }, { user_type: "admin" }],
+    is_blocked: { $ne: true },
+  })
+    .sort({ createdAt: 1 })
+    .select("_id name email role user_type");
+  return admin;
+};
+
+const collectScannedPartnerIds = async (userId) => {
+  const user = await User.findById(userId).select("scanned_snfs");
+  const scannedAtById = new Map();
+  const fromUser = Array.isArray(user?.scanned_snfs) ? user.scanned_snfs : [];
+  fromUser
+    .filter((row) => row?.partnerId)
+    .forEach((row) => scannedAtById.set(String(row.partnerId), row.scannedAt));
+
+  const referrals = await SnfReferral.find({ scannedBy: userId })
+    .sort({ checkedInAt: -1 })
+    .select("snfPartnerId checkedInAt createdAt")
+    .lean();
+
+  for (const referral of referrals) {
+    const id = String(referral.snfPartnerId || "");
+    if (!id || scannedAtById.has(id)) continue;
+    scannedAtById.set(id, referral.checkedInAt || referral.createdAt);
+  }
+
+  return scannedAtById;
+};
+
+export const userHasScannedSnfPartner = async (userId, partnerId) => {
+  const id = String(partnerId || "").trim();
+  if (!id) return false;
+  const scannedAtById = await collectScannedPartnerIds(userId);
+  return scannedAtById.has(id);
+};
+
+const userCanMessagePeer = async (reqUser, peer) => {
+  if (isAdminStaffUser(reqUser)) return true;
+  if (isAdminStaffUser(peer)) return true;
+  if (peer?.role === "snf") {
+    const partner = await SnfPartner.findOne({ facilityUserId: peer._id }).select("_id");
+    if (!partner) return false;
+    return userHasScannedSnfPartner(reqUser._id, partner._id);
+  }
+  return false;
+};
+
+/** SNF partners the family user scanned — contacts use linked SNF login user id. */
+export const listScannedSnfContacts = async (reqUser) => {
+  if (isAdminStaffUser(reqUser) || reqUser.role !== "user") {
+    return [];
+  }
+
+  const scannedAtById = await collectScannedPartnerIds(reqUser._id);
+  const ids = [...scannedAtById.keys()];
+  if (!ids.length) return [];
+
+  const partners = await SnfPartner.find({ _id: { $in: ids } })
+    .select("name email facilityUserId partnershipType")
+    .lean();
+
+  return partners
+    .filter((p) => p.facilityUserId)
+    .map((p) => ({
+      id: String(p.facilityUserId),
+      partnerId: String(p._id),
+      name: p.name || "SNF Partner",
+      email: p.email || "",
+      role: "snf",
+      user_type: "user",
+      accountLabel: "SNF Partner",
+      scannedAt: scannedAtById.get(String(p._id)),
+    }))
+    .sort((a, b) => new Date(b.scannedAt || 0) - new Date(a.scannedAt || 0));
+};
+
+export const getOrCreateConversation = async (userIdA, userIdB) => {
+  const key = buildParticipantKey(userIdA, userIdB);
+  let conversation = await Conversation.findOne({ participantKey: key });
+  if (!conversation) {
+    conversation = await Conversation.create({
+      participantIds: [userIdA, userIdB],
+      participantKey: key,
+      unreadCounts: {},
+    });
+  }
+  return conversation;
+};
+
+export const listConversationsForUser = async (reqUser) => {
+  const viewerId = String(reqUser._id);
+  const isAdmin = isAdminStaffUser(reqUser);
+
+  const query = isAdmin
+    ? {}
+    : { participantIds: reqUser._id };
+
+  const conversations = await Conversation.find(query)
+    .sort({ lastMessageAt: -1 })
+    .limit(100)
+    .lean();
+
+  const participantIds = new Set();
+  conversations.forEach((c) => {
+    c.participantIds.forEach((id) => participantIds.add(String(id)));
+  });
+
+  const users = await User.find({ _id: { $in: [...participantIds] } })
+    .select("name email role user_type")
+    .lean();
+  const byId = new Map(users.map((u) => [String(u._id), u]));
+
+  const rows = await Promise.all(
+    conversations.map((c) =>
+      serializeConversation(c, viewerId, byId),
+    ),
+  );
+
+  return rows;
+};
+
+export const listMessageDirectory = async (reqUser, search = "") => {
+  if (!isAdminStaffUser(reqUser)) {
+    throw new ErrorHandler("Admin only", 403);
+  }
+
+  const q = String(search || "").trim();
+  const filter = { is_blocked: { $ne: true } };
+  if (q) {
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    filter.$or = [{ name: regex }, { email: regex }];
+  }
+
+  const users = await User.find(filter)
+    .select("name email role user_type")
+    .sort({ name: 1 })
+    .limit(50)
+    .lean();
+
+  return users
+    .filter((u) => String(u._id) !== String(reqUser._id))
+    .map((u) => serializeUser(u));
+};
+
+export const startConversation = async (
+  reqUser,
+  { recipientId, snfPartnerId, support = false } = {},
+) => {
+  let peerId = recipientId;
+
+  if (support) {
+    const admin = await findSupportAdmin();
+    if (!admin) throw new ErrorHandler("Support is not available right now", 503);
+    peerId = admin._id;
+  }
+
+  if (snfPartnerId && !support) {
+    const partnerId = String(snfPartnerId).trim();
+    if (!await userHasScannedSnfPartner(reqUser._id, partnerId)) {
+      throw new ErrorHandler("You can only message SNF partners you have scanned", 403);
+    }
+    const partner = await SnfPartner.findById(partnerId).select("facilityUserId name");
+    if (!partner?.facilityUserId) {
+      throw new ErrorHandler("This SNF partner cannot receive messages yet", 404);
+    }
+    peerId = partner.facilityUserId;
+  }
+
+  if (!peerId) throw new ErrorHandler("Recipient is required", 400);
+
+  const peer = await User.findById(peerId).select("name email role user_type is_blocked");
+  if (!peer || peer.is_blocked) throw new ErrorHandler("User not found", 404);
+
+  if (!isAdminStaffUser(reqUser) && !support) {
+    const allowed = await userCanMessagePeer(reqUser, peer);
+    if (!allowed) {
+      throw new ErrorHandler(
+        "You can only message CareMatch support or scanned SNF partners",
+        403,
+      );
+    }
+  }
+
+  if (String(peerId) === String(reqUser._id)) {
+    throw new ErrorHandler("You cannot message yourself", 400);
+  }
+
+  const conversation = await getOrCreateConversation(reqUser._id, peerId);
+  const serialized = await serializeConversation(conversation, reqUser._id);
+  return serialized;
+};
+
+export const getConversationMessages = async (reqUser, conversationId) => {
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ErrorHandler("Conversation not found", 404);
+
+  const isParticipant = conversation.participantIds.some(
+    (id) => String(id) === String(reqUser._id),
+  );
+  if (!isParticipant && !isAdminStaffUser(reqUser)) {
+    throw new ErrorHandler("Not allowed to view this conversation", 403);
+  }
+
+  const messages = await Message.find({ conversationId: conversation._id })
+    .sort({ createdAt: 1 })
+    .limit(200)
+    .lean();
+
+  const senderIds = [...new Set(messages.map((m) => String(m.senderId)))];
+  const senders = await User.find({ _id: { $in: senderIds } })
+    .select("name email role user_type")
+    .lean();
+  const byId = new Map(senders.map((s) => [String(s._id), s]));
+
+  const meta = await serializeConversation(conversation, reqUser._id, byId);
+
+  return {
+    conversation: meta,
+    messages: messages.map((m) =>
+      serializeMessage(m, byId.get(String(m.senderId))),
+    ),
+  };
+};
+
+export const createAndEmitMessage = async ({
+  conversationId,
+  senderId,
+  text,
+  io,
+}) => {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) throw new ErrorHandler("Message text is required", 400);
+
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ErrorHandler("Conversation not found", 404);
+
+  const sender = await loadUserById(senderId);
+  if (!sender) throw new ErrorHandler("Sender not found", 404);
+
+  const isParticipant = conversation.participantIds.some(
+    (id) => String(id) === String(senderId),
+  );
+  if (!isParticipant && !isAdminStaffUser(sender)) {
+    throw new ErrorHandler("Not allowed to send in this conversation", 403);
+  }
+
+  const message = await Message.create({
+    conversationId: conversation._id,
+    senderId: sender._id,
+    text: trimmed,
+    readBy: [sender._id],
+  });
+
+  conversation.lastMessageText = trimmed;
+  conversation.lastMessageAt = new Date();
+  conversation.lastSenderId = sender._id;
+
+  const unread = conversation.unreadCounts instanceof Map
+    ? conversation.unreadCounts
+    : new Map(Object.entries(conversation.unreadCounts || {}));
+
+  conversation.participantIds.forEach((participantId) => {
+    const key = String(participantId);
+    if (key === String(senderId)) {
+      unread.set(key, 0);
+    } else {
+      unread.set(key, Number(unread.get(key) || 0) + 1);
+    }
+  });
+  conversation.unreadCounts = unread;
+  await conversation.save();
+
+  const serializedMessage = serializeMessage(message, sender);
+  const conversationPayload = await serializeConversation(
+    conversation,
+    senderId,
+  );
+
+  if (io) {
+    io.to(`conversation:${conversation._id}`).emit("message:new", {
+      message: serializedMessage,
+      conversation: conversationPayload,
+    });
+
+    for (const participantId of conversation.participantIds) {
+      const peerSerialized = await serializeConversation(
+        conversation,
+        participantId,
+      );
+      io.to(`user:${participantId}`).emit("notification:message", {
+        type: "new_message",
+        conversationId: String(conversation._id),
+        preview: trimmed.slice(0, 120),
+        senderName: sender.name,
+        unread: peerSerialized.unread,
+        conversation: peerSerialized,
+      });
+    }
+  }
+
+  return { message: serializedMessage, conversation: conversationPayload };
+};
+
+export const markConversationRead = async (reqUser, conversationId) => {
+  const conversation = await Conversation.findById(conversationId);
+  if (!conversation) throw new ErrorHandler("Conversation not found", 404);
+
+  const isParticipant = conversation.participantIds.some(
+    (id) => String(id) === String(reqUser._id),
+  );
+  if (!isParticipant && !isAdminStaffUser(reqUser)) {
+    throw new ErrorHandler("Not allowed", 403);
+  }
+
+  const unread = conversation.unreadCounts instanceof Map
+    ? conversation.unreadCounts
+    : new Map(Object.entries(conversation.unreadCounts || {}));
+  unread.set(String(reqUser._id), 0);
+  conversation.unreadCounts = unread;
+  await conversation.save();
+
+  await Message.updateMany(
+    {
+      conversationId: conversation._id,
+      senderId: { $ne: reqUser._id },
+      readBy: { $ne: reqUser._id },
+    },
+    { $addToSet: { readBy: reqUser._id } },
+  );
+
+  return { success: true };
+};
+
+export const getUnreadMessageCount = async (reqUser) => {
+  const isAdmin = isAdminStaffUser(reqUser);
+  const query = isAdmin
+    ? {}
+    : { participantIds: reqUser._id };
+
+  const conversations = await Conversation.find(query).select("unreadCounts participantIds");
+  let total = 0;
+  const viewerKey = String(reqUser._id);
+  conversations.forEach((c) => {
+    total += getUnreadForUser(c, viewerKey);
+  });
+  return total;
+};

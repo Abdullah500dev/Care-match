@@ -2,12 +2,14 @@ import React, { useState } from "react";
 import { Outlet } from "react-router-dom";
 import DashboardSidebar from "./Sidebar";
 import DashboardHeader from "./DashboardHeader";
+import { MessagingSocketProvider } from "@/contexts/MessagingSocketContext";
 
 export default function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-[calc(100vh-2.5rem)] flex-col bg-slate-50 sm:h-[calc(100vh-3rem)]">
+    <MessagingSocketProvider>
+      <div className="flex h-[calc(100vh-2.5rem)] flex-col bg-slate-50 sm:h-[calc(100vh-3rem)]">
       {/* Dashboard header spans full width, including above sidebar */}
       <DashboardHeader onMenuClick={() => setSidebarOpen(true)} />
 
@@ -22,6 +24,7 @@ export default function DashboardLayout() {
         </main>
       </div>
     </div>
+    </MessagingSocketProvider>
   );
 }
 

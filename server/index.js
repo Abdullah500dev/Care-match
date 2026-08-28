@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express from "express";
+import http from "http";
 import bodyParser from "body-parser";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -15,11 +16,13 @@ import chatRouter from "./routes/chatRouter.js";
 import facilityRouter from "./routes/facilityRouter.js";
 import matchRouter from "./routes/matchRouter.js";
 import emailRouter from "./routes/emailRouter.js";
+import messageRouter from "./routes/messageRouter.js";
 import snfPartnerRouter from "./routes/snfPartnerRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
 import { ensureSnfReferralIndexes } from "./models/snfPartnerModel.js";
+import { initSocketServer } from "./socket/socketServer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,6 +32,10 @@ dotenv.config({ path: path.resolve(__dirname, envFile) });
 
 const app = express();
 const port = process.env.PORT;
+const httpServer = http.createServer(app);
+const corsOrigin = process.env.CLIENT_BASE_URL;
+const io = initSocketServer(httpServer, corsOrigin);
+app.set("io", io);
 
 database.on("error", console.error.bind(console, "Database connection error:"));
 database.once("open", async () => {
@@ -72,6 +79,7 @@ app.use("/api/chat", chatRouter);
 app.use("/api/match", matchRouter);
 app.use("/api/facilities", facilityRouter);
 app.use("/api/email", emailRouter);
+app.use("/api/messages", messageRouter);
 app.use("/api/snf-partners", snfPartnerRouter);
 
 // Serve client build if it exists, otherwise show API info
@@ -124,5 +132,5 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(port, () => console.log(`Server is running on port ${port}!`));
+httpServer.listen(port, () => console.log(`Server is running on port ${port}!`));
 startApifySyncScheduler();
