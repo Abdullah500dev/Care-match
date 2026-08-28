@@ -1,5 +1,5 @@
 import { io } from "socket.io-client";
-import { getAuthToken } from "./api";
+import { getAuthToken } from "../services/api";
 
 const API_BASE_URL = import.meta.env.VITE_REACT_APP_API_BASE_URL || "";
 
