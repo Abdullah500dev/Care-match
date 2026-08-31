@@ -245,6 +245,7 @@ const Layout = ({ children }) => {
     location.pathname.startsWith("/portal") ||
     location.pathname.startsWith("/facility") ||
     location.pathname.startsWith("/snf");
+  const isMessagesRoute = /\/messages$/.test(location.pathname);
   const isHomePage = location.pathname === "/";
   const topAnchorRef = useRef(null);
   const inactivityTimerRef = useRef(null);
@@ -433,12 +434,14 @@ const Layout = ({ children }) => {
         children
       )}
       {!isDashboardRoute && <Footer />}
-      {!isDashboardRoute && !isChatOpen &&
+      {!isChatOpen &&
         createPortal(
           <button
             type="button"
             onClick={openCarrieChat}
-            className="group fixed bottom-8 right-8 z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] carrie-icon-bounce"
+            className={`group fixed z-[99999] flex h-14 w-14 items-center justify-center rounded-full bg-white/95 shadow-[0_10px_24px_rgba(15,23,42,0.16)] ring-1 ring-[#00CFF4]/18 transition-all duration-300 hover:scale-105 hover:shadow-[0_14px_30px_rgba(15,23,42,0.2)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00CFF4] carrie-icon-bounce ${
+              isMessagesRoute ? "bottom-28 right-5 sm:bottom-32 sm:right-8" : "bottom-8 right-8"
+            }`}
             style={{ "--carrie-bounce-duration": "3s" }}
             aria-label="Open Carrie chat"
           >
