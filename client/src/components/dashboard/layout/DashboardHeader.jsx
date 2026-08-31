@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { Bell, Menu, User } from "lucide-react";
 import { getUser } from "../../../store/auth/authSlice";
+import { useMessagingSocket } from "@/contexts/MessagingSocketContext";
 
 /** Top nav matches admin mock: Dashboard / Leads / My Facilities. */
 const ADMIN_NAV_ITEMS = [
@@ -30,6 +31,7 @@ function headerAccountLabel(userData) {
 export default function DashboardHeader({ onMenuClick }) {
   const location = useLocation();
   const { userData } = useSelector(getUser);
+  const { unreadCount } = useMessagingSocket();
   const isUserDashboard = location.pathname.startsWith("/portal");
   const isFacilityDashboard = location.pathname.startsWith("/facility");
   const isSnfDashboard = location.pathname.startsWith("/snf");
@@ -44,6 +46,7 @@ export default function DashboardHeader({ onMenuClick }) {
     isUserDashboard || isFacilityDashboard || isSnfDashboard
       ? PORTAL_NAV_ITEMS
       : ADMIN_NAV_ITEMS;
+  const messagesPath = `${basePath}/messages`;
 
   return (
     <header
@@ -93,13 +96,22 @@ export default function DashboardHeader({ onMenuClick }) {
           </nav>
 
           <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#45556C]"
-              aria-label="Notifications"
+            <Link
+              to={messagesPath}
+              className="relative flex h-8 w-8 items-center justify-center rounded-full text-[#45556C] transition-colors hover:bg-slate-100 hover:text-slate-900"
+              aria-label={
+                unreadCount > 0
+                  ? `${unreadCount} unread message${unreadCount === 1 ? "" : "s"}`
+                  : "Messages"
+              }
             >
               <Bell className="h-4 w-4" />
-            </button>
+              {unreadCount > 0 ? (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#00B8DB] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
+            </Link>
             <Link
               to={`${basePath}/settings`}
               className="flex min-w-[6.5rem] items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-200 sm:min-w-0 sm:px-2"
