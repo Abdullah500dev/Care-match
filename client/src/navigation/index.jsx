@@ -427,7 +427,7 @@ const Layout = ({ children }) => {
         {!isDashboardRoute && <Header />}
       </div>
       {isDashboardRoute ? (
-        <div className="flex min-h-0 flex-1 flex-col h-[calc(100dvh-2.5rem)] sm:h-[calc(100dvh-3rem)]">
+        <div className="flex h-[calc(100dvh-2.5rem)] min-h-0 flex-col overflow-hidden sm:h-[calc(100dvh-3rem)]">
           {children}
         </div>
       ) : (

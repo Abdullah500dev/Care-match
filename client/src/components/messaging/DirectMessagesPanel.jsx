@@ -430,59 +430,12 @@ export default function DirectMessagesPanel({
     !isCarrie && Boolean(activeConversation?.peer?.id && isUserOnline(activeConversation.peer.id));
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden sm:gap-4">
-      <div className="shrink-0">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl lg:text-2xl">
-            {title}
-          </h1>
-          <p className="mt-0.5 hidden text-sm text-slate-500 lg:block">
-            {description}
-            {socketReady ? "" : " · Connecting live socket…"}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {showSupportShortcut ? (
-            <button
-              type="button"
-              onClick={startSupportChat}
-              className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Message CareMatch Support
-            </button>
-          ) : null}
-          {showScannedSnfs ? (
-            <button
-              type="button"
-              onClick={openScannedSnfs}
-              className="inline-flex h-10 items-center rounded-xl border border-[#00B8DB]/30 bg-[#ECFEFF] px-4 text-sm font-semibold text-[#0E7490] hover:bg-[#CFFAFE]"
-            >
-              Message scanned SNF
-            </button>
-          ) : null}
-          {showDirectory ? (
-            <button
-              type="button"
-              onClick={() => {
-                setDirectoryOpen(true);
-                openDirectory();
-              }}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#00B8DB] px-4 text-sm font-bold text-white hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" />
-              New message
-            </button>
-          ) : null}
-        </div>
-        </div>
-      </div>
-
+    <div className="flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
       <div
-        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
+        className="grid h-0 min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
       >
         <aside className="grid min-h-0 h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] border-slate-100 max-md:border-b md:border-r">
-          <div className="shrink-0 border-b border-slate-100 p-3">
+          <div className="shrink-0 space-y-2 border-b border-slate-100 p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -493,6 +446,44 @@ export default function DirectMessagesPanel({
                 className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
             </div>
+            {(showSupportShortcut || showScannedSnfs || showDirectory) && (
+              <div className="flex flex-wrap gap-2">
+                {showSupportShortcut ? (
+                  <button
+                    type="button"
+                    onClick={startSupportChat}
+                    className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Support
+                  </button>
+                ) : null}
+                {showScannedSnfs ? (
+                  <button
+                    type="button"
+                    onClick={openScannedSnfs}
+                    className="inline-flex h-9 items-center rounded-lg border border-[#00B8DB]/30 bg-[#ECFEFF] px-3 text-xs font-semibold text-[#0E7490] hover:bg-[#CFFAFE]"
+                  >
+                    Scanned SNF
+                  </button>
+                ) : null}
+                {showDirectory ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDirectoryOpen(true);
+                      openDirectory();
+                    }}
+                    className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#00B8DB] px-3 text-xs font-bold text-white hover:opacity-90 sm:flex-none"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New message
+                  </button>
+                ) : null}
+              </div>
+            )}
+            {!socketReady ? (
+              <p className="text-[11px] text-slate-400">Connecting live socket…</p>
+            ) : null}
           </div>
           <div className="min-h-0 overflow-y-auto overscroll-contain">
             {loading ? (
@@ -668,8 +659,8 @@ export default function DirectMessagesPanel({
             </div>
           )}
 
-          <div className="z-10 shrink-0 border-t border-slate-100 bg-white p-3">
-            <div className="flex items-center gap-2">
+          <div className="z-20 shrink-0 border-t border-slate-200 bg-white p-3 shadow-[0_-6px_16px_rgba(15,23,42,0.06)]">
+            <div className="flex items-center gap-2 pr-14 sm:pr-16">
               <MessageSquare className="h-4 w-4 shrink-0 text-slate-300" />
               <input
                 type="text"

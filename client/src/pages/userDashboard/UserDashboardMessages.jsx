@@ -11,7 +11,7 @@ export default function UserDashboardMessages() {
     !["admin", "authenticator", "moderator"].includes(userData?.user_type);
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
+    <div className="flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
       <SEO title="Messages – CareMatch AI" />
       <DirectMessagesPanel
         title="Messages"
