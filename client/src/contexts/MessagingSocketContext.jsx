@@ -14,25 +14,72 @@ import {
   disconnectMessagingSocket,
   getMessagingSocket,
 } from "@/lib/messagingSocket";
-import { fetchUnreadMessageCount } from "@/services/messageService";
+import { fetchConversations, fetchUnreadMessageCount } from "@/services/messageService";
 import { playMessageNotificationSound } from "@/lib/messageNotificationSound";
 
 const MessagingSocketContext = createContext(null);
+
+function notificationFromPayload(payload, myUserId) {
+  const senderId = String(payload?.senderId || payload?.message?.senderId || "");
+  if (senderId && senderId === myUserId) return null;
+  const conversationId = String(
+    payload?.conversationId || payload?.conversation?.id || payload?.message?.conversationId || "",
+  );
+  if (!conversationId) return null;
+  const peer = payload?.conversation?.peer;
+  return {
+    id: conversationId,
+    conversationId,
+    senderName: payload?.senderName || peer?.name || "Someone",
+    preview: payload?.preview || payload?.message?.text || payload?.conversation?.lastMessageText || "",
+    createdAt: payload?.message?.createdAt || payload?.conversation?.lastMessageAt || new Date().toISOString(),
+    unread: Number(payload?.unread || payload?.conversation?.unread || 1),
+    accountLabel: peer?.accountLabel || "",
+  };
+}
+
+function notificationFromConversation(conversation) {
+  if (!conversation?.id || !Number(conversation.unread)) return null;
+  return {
+    id: String(conversation.id),
+    conversationId: String(conversation.id),
+    senderName: conversation.peer?.name || "Someone",
+    preview: conversation.lastMessageText || "",
+    createdAt: conversation.lastMessageAt || conversation.updatedAt,
+    unread: Number(conversation.unread) || 1,
+    accountLabel: conversation.peer?.accountLabel || conversation.subtitle || "",
+  };
+}
+
+function upsertNotification(list, item) {
+  if (!item) return list;
+  const without = list.filter((row) => row.conversationId !== item.conversationId);
+  return [item, ...without].slice(0, 20);
+}
 
 export function MessagingSocketProvider({ children }) {
   const { token, isAuthenticated, userData } = useSelector(getUser);
   const myUserId = String(userData?.id || userData?._id || "");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
   const [socketReady, setSocketReady] = useState(false);
 
   const refreshUnread = useCallback(async () => {
     if (!token) {
       setUnreadCount(0);
+      setNotifications([]);
       return;
     }
     try {
-      const { data } = await fetchUnreadMessageCount();
-      setUnreadCount(Number(data?.count) || 0);
+      const [{ data: countData }, { data: convData }] = await Promise.all([
+        fetchUnreadMessageCount(),
+        fetchConversations(),
+      ]);
+      setUnreadCount(Number(countData?.count) || 0);
+      const next = (Array.isArray(convData?.conversations) ? convData.conversations : [])
+        .map(notificationFromConversation)
+        .filter(Boolean);
+      setNotifications(next);
     } catch {
       // ignore transient errors
     }
@@ -42,6 +89,7 @@ export function MessagingSocketProvider({ children }) {
     if (!isAuthenticated || !token) {
       setSocketReady(false);
       setUnreadCount(0);
+      setNotifications([]);
       disconnectMessagingSocket();
       return undefined;
     }
@@ -53,8 +101,10 @@ export function MessagingSocketProvider({ children }) {
       const senderId = String(payload?.senderId || "");
       if (senderId && senderId !== myUserId) {
         playMessageNotificationSound();
+        const item = notificationFromPayload(payload, myUserId);
+        if (item) setNotifications((prev) => upsertNotification(prev, item));
       }
-      if (payload?.preview && payload?.senderName) {
+      if (payload?.preview && payload?.senderName && senderId !== myUserId) {
         toast.message(`Message from ${payload.senderName}`, {
           description: payload.preview,
         });
@@ -81,10 +131,11 @@ export function MessagingSocketProvider({ children }) {
       socket: getMessagingSocket(),
       socketReady,
       unreadCount,
+      notifications,
       refreshUnread,
       setUnreadCount,
     }),
-    [socketReady, unreadCount, refreshUnread],
+    [socketReady, unreadCount, notifications, refreshUnread],
   );
 
   return (

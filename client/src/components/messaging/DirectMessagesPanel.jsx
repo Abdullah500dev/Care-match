@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bot, Circle, MessageSquare, Plus, Search, Send, User, X } from "lucide-react";
 import { useSelector } from "react-redux";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useMessagingSocket } from "@/contexts/MessagingSocketContext";
 import {
@@ -66,9 +67,11 @@ export default function DirectMessagesPanel({
   const { socket, socketReady, refreshUnread } = useMessagingSocket();
   const { userData } = useSelector((state) => state.auth || {});
   const myUserId = String(userData?.id || userData?._id || "");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedConversationId = String(searchParams.get("conversation") || "").trim();
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeId, setActiveId] = useState("carrie");
+  const [activeId, setActiveId] = useState(requestedConversationId || "carrie");
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -111,6 +114,11 @@ export default function DirectMessagesPanel({
   useEffect(() => {
     loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    if (!requestedConversationId) return;
+    setActiveId(requestedConversationId);
+  }, [requestedConversationId]);
 
   const loadMessages = useCallback(async (conversationId) => {
     if (!conversationId || conversationId === "carrie") return;
@@ -211,6 +219,9 @@ export default function DirectMessagesPanel({
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c)),
       );
+      setSearchParams({ conversation: id }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
     }
   };
 
