@@ -19,6 +19,9 @@ jobs:
       with:
         node-version: '20.11.1'
 
+    - name: Enable Corepack
+      run: corepack enable
+
     - name: Install Server Dependencies
       run: |
         cd server
@@ -28,11 +31,8 @@ jobs:
     - name: Install Client Dependencies and Build
       run: |
         cd client
-        rm -f package-lock.json
-        npm install patch-package --legacy-peer-deps --no-save || true
-        npm install --legacy-peer-deps
-        rm -rf dist
-        npm run build
+        yarn install
+        yarn build
 
     - name: Deploy Server to Server
       uses: appleboy/scp-action@v0.1.7
@@ -44,15 +44,24 @@ jobs:
         target: "/home/ubuntu/care-match-ai/server"
         strip_components: 1
 
-    - name: Deploy Client to Server
+    - name: Prepare client dist directory on server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script_stop: true
+        script: mkdir -p /home/ubuntu/care-match-ai/client/dist
+
+    - name: Deploy Client Build to Server
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
-        source: "client/*"
-        target: "/home/ubuntu/care-match-ai/client"
-        strip_components: 1
+        source: "client/dist/**"
+        target: "/home/ubuntu/care-match-ai/client/dist"
+        strip_components: 2
 
     - name: Install Dependencies and Restart Services
       uses: appleboy/ssh-action@v1.0.3
@@ -60,6 +69,7 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
+        script_stop: true
         script: |
           # Navigate to project directory
           cd /home/ubuntu/care-match-ai
@@ -84,13 +94,6 @@ jobs:
           # Wait for server to start
           sleep 5
 
-          # Client setup
-          cd ../client
-          rm -f package-lock.json
-          yarn install --frozen-lockfile
-          rm -rf dist
-          yarn build
-
           # Save PM2 configuration
           pm2 save
 
@@ -100,6 +103,7 @@ jobs:
         host: ${{ secrets.EC2_HOST }}
         username: ubuntu
         key: ${{ secrets.EC2_SSH_KEY }}
+        script_stop: true
         script: |
           # Check PM2 status
           pm2 list
@@ -117,8 +121,8 @@ jobs:
           fi
 
           # Verify client build
-          if [ ! -d "/home/ubuntu/care-match-ai/client/dist" ]; then
-            echo "❌ Client dist folder not found"
+          if [ ! -f "/home/ubuntu/care-match-ai/client/dist/index.html" ]; then
+            echo "❌ Client dist/index.html not found"
             exit 1
           fi
 
