@@ -456,6 +456,7 @@ export const createAndEmitMessage = async ({
         conversationId: String(conversation._id),
         preview: trimmed.slice(0, 120),
         senderName: serializedMessage.sender?.name || sender.name,
+        senderId: String(sender._id),
         unread: peerSerialized.unread,
         conversation: peerSerialized,
       });

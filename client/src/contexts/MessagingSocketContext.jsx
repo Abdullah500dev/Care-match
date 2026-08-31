@@ -15,11 +15,13 @@ import {
   getMessagingSocket,
 } from "@/lib/messagingSocket";
 import { fetchUnreadMessageCount } from "@/services/messageService";
+import { playMessageNotificationSound } from "@/lib/messageNotificationSound";
 
 const MessagingSocketContext = createContext(null);
 
 export function MessagingSocketProvider({ children }) {
-  const { token, isAuthenticated } = useSelector(getUser);
+  const { token, isAuthenticated, userData } = useSelector(getUser);
+  const myUserId = String(userData?.id || userData?._id || "");
   const [unreadCount, setUnreadCount] = useState(0);
   const [socketReady, setSocketReady] = useState(false);
 
@@ -48,6 +50,10 @@ export function MessagingSocketProvider({ children }) {
     const onConnect = () => setSocketReady(true);
     const onDisconnect = () => setSocketReady(false);
     const onNotification = (payload) => {
+      const senderId = String(payload?.senderId || "");
+      if (senderId && senderId !== myUserId) {
+        playMessageNotificationSound();
+      }
       if (payload?.preview && payload?.senderName) {
         toast.message(`Message from ${payload.senderName}`, {
           description: payload.preview,
@@ -68,7 +74,7 @@ export function MessagingSocketProvider({ children }) {
       socket.off("notification:message", onNotification);
       disconnectMessagingSocket();
     };
-  }, [isAuthenticated, token, refreshUnread]);
+  }, [isAuthenticated, token, refreshUnread, myUserId]);
 
   const value = useMemo(
     () => ({
