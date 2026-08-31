@@ -704,10 +704,10 @@ export default function DirectMessagesPanel({
               type="text"
               value={directoryQuery}
               onChange={(e) => setDirectoryQuery(e.target.value)}
-              placeholder="Search name or email…"
+              placeholder="Search facility, SNF, user, or email…"
               className="mt-4 h-10 w-full rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
             />
-            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+            <div className="mt-3 max-h-72 space-y-2 overflow-y-auto">
               {directoryLoading ? (
                 <p className="py-6 text-center text-sm text-slate-400">Searching…</p>
               ) : directoryUsers.length === 0 ? (
@@ -720,11 +720,19 @@ export default function DirectMessagesPanel({
                     onClick={() => pickUser(user.id)}
                     className="flex w-full items-center justify-between rounded-xl border border-slate-100 px-3 py-2 text-left hover:bg-slate-50"
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{user.name}</p>
-                      <p className="text-xs text-slate-500">{user.email}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+                      <p className="truncate text-xs text-slate-500">{user.email}</p>
                     </div>
-                    <span className="text-[10px] font-bold uppercase text-[#00B8DB]">
+                    <span
+                      className={`ml-2 shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                        user.role === "facility"
+                          ? "bg-cyan-50 text-[#0E7490]"
+                          : user.role === "snf"
+                            ? "bg-violet-50 text-violet-700"
+                            : "bg-slate-50 text-[#00B8DB]"
+                      }`}
+                    >
                       {user.accountLabel}
                     </span>
                   </button>

@@ -281,22 +281,99 @@ export const listMessageDirectory = async (reqUser, search = "") => {
   }
 
   const q = String(search || "").trim();
-  const filter = { is_blocked: { $ne: true } };
-  if (q) {
-    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-    filter.$or = [{ name: regex }, { email: regex }];
+  const regex = q
+    ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    : null;
+  const selfId = String(reqUser._id);
+  const userIds = new Set();
+
+  // Always include linked facility + SNF login accounts (admin-created partners).
+  // A plain User.find().limit(50) can hide them when many family users exist.
+  const [facilityLinks, snfLinks] = await Promise.all([
+    Facility.find({
+      user_id: { $exists: true, $ne: null },
+      ...(regex ? { $or: [{ name: regex }, { email: regex }] } : {}),
+    })
+      .select("user_id")
+      .limit(200)
+      .lean(),
+    SnfPartner.find({
+      facilityUserId: { $exists: true, $ne: null },
+      ...(regex ? { $or: [{ name: regex }, { email: regex }] } : {}),
+    })
+      .select("facilityUserId")
+      .limit(200)
+      .lean(),
+  ]);
+
+  facilityLinks.forEach((f) => {
+    if (f.user_id) userIds.add(String(f.user_id));
+  });
+  snfLinks.forEach((p) => {
+    if (p.facilityUserId) userIds.add(String(p.facilityUserId));
+  });
+
+  const userFilter = {
+    is_blocked: { $ne: true },
+    _id: { $ne: reqUser._id },
+  };
+
+  if (regex) {
+    // Match login name/email OR pull in ids already matched via Facility/SNF profile.
+    const matchedUsers = await User.find({
+      ...userFilter,
+      $or: [{ name: regex }, { email: regex }],
+    })
+      .select("_id")
+      .limit(100)
+      .lean();
+    matchedUsers.forEach((u) => userIds.add(String(u._id)));
+  } else {
+    // Default browse: facilities, SNFs, and a reasonable set of family users.
+    const [facilityUsers, snfUsers, familyUsers] = await Promise.all([
+      User.find({ ...userFilter, role: "facility" }).select("_id").limit(200).lean(),
+      User.find({ ...userFilter, role: "snf" }).select("_id").limit(200).lean(),
+      User.find({
+        ...userFilter,
+        role: "user",
+        user_type: { $nin: ["admin", "authenticator", "moderator"] },
+      })
+        .select("_id")
+        .sort({ name: 1 })
+        .limit(100)
+        .lean(),
+    ]);
+    facilityUsers.forEach((u) => userIds.add(String(u._id)));
+    snfUsers.forEach((u) => userIds.add(String(u._id)));
+    familyUsers.forEach((u) => userIds.add(String(u._id)));
   }
 
-  const users = await User.find(filter)
+  userIds.delete(selfId);
+  const ids = [...userIds];
+  if (!ids.length) return [];
+
+  const users = await User.find({
+    _id: { $in: ids },
+    is_blocked: { $ne: true },
+  })
     .select("name email role user_type")
-    .sort({ name: 1 })
-    .limit(50)
     .lean();
 
-  const filtered = users.filter((u) => String(u._id) !== String(reqUser._id));
-  const nameLookup = await buildNameLookupMaps(filtered);
+  const nameLookup = await buildNameLookupMaps(users);
+  const roleRank = (role) => {
+    if (role === "facility") return 0;
+    if (role === "snf") return 1;
+    if (role === "user") return 2;
+    return 3;
+  };
 
-  return filtered.map((u) => serializeUser(u, nameLookup));
+  return users
+    .map((u) => serializeUser(u, nameLookup))
+    .sort((a, b) => {
+      const rankDiff = roleRank(a.role) - roleRank(b.role);
+      if (rankDiff !== 0) return rankDiff;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 };
 
 export const startConversation = async (
