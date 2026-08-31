@@ -828,6 +828,7 @@ export default function Communities() {
                         </div>
                       )}
                     </div>
+                    
                   </div>
 
                   <div className="space-y-2 rounded-2xl border border-slate-100 bg-white px-3 py-3">
