@@ -56,6 +56,26 @@ function mergeConversationRow(existing, incoming, myUserId) {
   return merged;
 }
 
+function sortConversationsByRecent(list) {
+  return [...list].sort((a, b) => {
+    const aTime = new Date(a.lastMessageAt || a.updatedAt || 0).getTime();
+    const bTime = new Date(b.lastMessageAt || b.updatedAt || 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function bumpConversation(list, conversationId, patch, myUserId) {
+  const id = String(conversationId);
+  const exists = list.some((c) => c.id === id);
+  if (!exists) {
+    return sortConversationsByRecent([patch, ...list]);
+  }
+  const updated = list.map((c) =>
+    c.id === id ? mergeConversationRow(c, patch, myUserId) : c,
+  );
+  return sortConversationsByRecent(updated);
+}
+
 export default function DirectMessagesPanel({
   title = "Messages",
   description = "Live messaging with socket notifications.",
@@ -101,7 +121,11 @@ export default function DirectMessagesPanel({
     setLoading(true);
     try {
       const { data } = await fetchConversations();
-      setConversations(Array.isArray(data?.conversations) ? data.conversations : []);
+      setConversations(
+        sortConversationsByRecent(
+          Array.isArray(data?.conversations) ? data.conversations : [],
+        ),
+      );
     } catch (error) {
       toast.error("Could not load conversations", {
         description: error?.response?.data?.message || "Please try again.",
@@ -158,16 +182,12 @@ export default function DirectMessagesPanel({
       const convId = payload?.message?.conversationId;
       if (!convId) return;
       setConversations((prev) => {
-        const exists = prev.some((c) => c.id === convId);
         const nextRow = payload.conversation || {
           id: convId,
           lastMessageText: payload.message?.text,
           lastMessageAt: payload.message?.createdAt,
         };
-        if (!exists) return [nextRow, ...prev];
-        return prev.map((c) =>
-          c.id === convId ? mergeConversationRow(c, nextRow, myUserId) : c,
-        );
+        return bumpConversation(prev, convId, nextRow, myUserId);
       });
       if (convId === activeId) {
         setMessages((prev) => appendMessage(prev, payload.message));
@@ -240,10 +260,17 @@ export default function DirectMessagesPanel({
       }
       if (response.conversation) {
         setConversations((prev) =>
-          prev.map((c) =>
-            c.id === activeId
-              ? mergeConversationRow(c, response.conversation, myUserId)
-              : c,
+          bumpConversation(
+            prev,
+            activeId,
+            {
+              ...response.conversation,
+              lastMessageText:
+                response.message?.text || response.conversation.lastMessageText,
+              lastMessageAt:
+                response.message?.createdAt || response.conversation.lastMessageAt,
+            },
+            myUserId,
           ),
         );
       }
@@ -322,9 +349,9 @@ export default function DirectMessagesPanel({
       setConversations((prev) => {
         const exists = prev.some((c) => c.id === conversation.id);
         if (exists) {
-          return prev.map((c) => (c.id === conversation.id ? { ...c, ...conversation } : c));
+          return bumpConversation(prev, conversation.id, conversation, myUserId);
         }
-        return [conversation, ...prev];
+        return sortConversationsByRecent([conversation, ...prev]);
       });
       setActiveId(conversation.id);
       setDirectoryOpen(false);
@@ -343,9 +370,9 @@ export default function DirectMessagesPanel({
       setConversations((prev) => {
         const exists = prev.some((c) => c.id === conversation.id);
         if (exists) {
-          return prev.map((c) => (c.id === conversation.id ? { ...c, ...conversation } : c));
+          return bumpConversation(prev, conversation.id, conversation, myUserId);
         }
-        return [conversation, ...prev];
+        return sortConversationsByRecent([conversation, ...prev]);
       });
       setActiveId(conversation.id);
     } catch (error) {
@@ -382,9 +409,9 @@ export default function DirectMessagesPanel({
       setConversations((prev) => {
         const exists = prev.some((c) => c.id === conversation.id);
         if (exists) {
-          return prev.map((c) => (c.id === conversation.id ? { ...c, ...conversation } : c));
+          return bumpConversation(prev, conversation.id, conversation, myUserId);
         }
-        return [conversation, ...prev];
+        return sortConversationsByRecent([conversation, ...prev]);
       });
       setActiveId(conversation.id);
       setScannedSnfsOpen(false);
@@ -403,7 +430,7 @@ export default function DirectMessagesPanel({
     !isCarrie && Boolean(activeConversation?.peer?.id && isUserOnline(activeConversation.peer.id));
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden sm:gap-4">
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden sm:gap-4">
       <div className="shrink-0">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="min-w-0">
@@ -452,10 +479,10 @@ export default function DirectMessagesPanel({
       </div>
 
       <div
-        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,36%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
+        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
       >
-        <aside className="flex min-h-0 min-w-0 flex-col border-slate-100 max-md:border-b md:border-r">
-          <div className="border-b border-slate-100 p-3">
+        <aside className="grid min-h-0 h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] border-slate-100 max-md:border-b md:border-r">
+          <div className="shrink-0 border-b border-slate-100 p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -467,7 +494,7 @@ export default function DirectMessagesPanel({
               />
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="min-h-0 overflow-y-auto overscroll-contain">
             {loading ? (
               <p className="px-4 py-6 text-center text-xs text-slate-400">Loading…</p>
             ) : filteredThreads.length === 0 ? (
@@ -523,7 +550,7 @@ export default function DirectMessagesPanel({
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden md:min-h-0">
+        <section className="grid min-h-0 h-full min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-white">
           <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 py-3">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
@@ -561,8 +588,9 @@ export default function DirectMessagesPanel({
           {isCarrie ? (
             <div
               ref={aiScrollRef}
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-5 py-4"
+              className="min-h-0 overflow-y-auto overscroll-contain px-5 py-4"
             >
+              <div className="flex flex-col gap-3">
               {aiMessages.map((m, i) => (
                 <div
                   key={`${i}-${m.role}`}
@@ -596,12 +624,14 @@ export default function DirectMessagesPanel({
                   </div>
                 </div>
               ) : null}
+              </div>
             </div>
           ) : (
             <div
               ref={scrollRef}
-              className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain px-5 py-4"
+              className="min-h-0 overflow-y-auto overscroll-contain px-5 py-4"
             >
+              <div className="flex flex-col gap-3">
               {messagesLoading ? (
                 <p className="text-center text-sm text-slate-400">Loading messages…</p>
               ) : messages.length === 0 ? (
@@ -634,10 +664,11 @@ export default function DirectMessagesPanel({
                   );
                 })
               )}
+              </div>
             </div>
           )}
 
-          <div className="shrink-0 border-t border-slate-100 p-3">
+          <div className="z-10 shrink-0 border-t border-slate-100 bg-white p-3">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 shrink-0 text-slate-300" />
               <input
