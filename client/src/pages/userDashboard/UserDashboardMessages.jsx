@@ -11,7 +11,7 @@ export default function UserDashboardMessages() {
     !["admin", "authenticator", "moderator"].includes(userData?.user_type);
 
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
       <SEO title="Messages – CareMatch AI" />
       <DirectMessagesPanel
         title="Messages"
@@ -20,6 +20,6 @@ export default function UserDashboardMessages() {
         showScannedSnfs={isFamilyUser}
         carriePlaceholder="Ask Carrie… (Enter to send)"
       />
-    </>
+    </div>
   );
 }

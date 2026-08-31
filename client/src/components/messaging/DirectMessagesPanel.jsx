@@ -64,7 +64,7 @@ export default function DirectMessagesPanel({
   showScannedSnfs = false,
   carriePlaceholder = "Ask Carrie… (Enter to send)",
 }) {
-  const { socket, socketReady, refreshUnread } = useMessagingSocket();
+  const { socket, socketReady, refreshUnread, isUserOnline } = useMessagingSocket();
   const { userData } = useSelector((state) => state.auth || {});
   const myUserId = String(userData?.id || userData?._id || "");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -399,10 +399,13 @@ export default function DirectMessagesPanel({
   const headerSubtitle = isCarrie
     ? "CareMatch AI assistant"
     : activeConversation?.peer?.accountLabel || "Direct message";
+  const peerIsOnline =
+    !isCarrie && Boolean(activeConversation?.peer?.id && isUserOnline(activeConversation.peer.id));
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-6xl space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mx-auto flex min-h-0 flex-1 w-full max-w-6xl flex-col gap-4 overflow-hidden sm:gap-5">
+      <div className="shrink-0">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl md:text-3xl">
             {title}
@@ -445,11 +448,11 @@ export default function DirectMessagesPanel({
             </button>
           ) : null}
         </div>
+        </div>
       </div>
 
       <div
-        className="grid h-[calc(100vh-11rem)] min-h-[36rem] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-        style={{ gridTemplateColumns: "300px 1fr" }}
+        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]"
       >
         <aside className="flex min-h-0 flex-col border-r border-slate-100">
           <div className="border-b border-slate-100 p-3">
@@ -520,8 +523,8 @@ export default function DirectMessagesPanel({
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col">
-          <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-3">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 py-3">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
               style={{
@@ -539,8 +542,18 @@ export default function DirectMessagesPanel({
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-900">{headerName}</p>
               <p className="flex items-center gap-1 text-[11px] text-slate-400">
-                <Circle className="h-2 w-2 fill-emerald-400 text-emerald-400" />
-                {headerSubtitle}
+                <Circle
+                  className={`h-2 w-2 ${
+                    isCarrie || peerIsOnline
+                      ? "fill-emerald-400 text-emerald-400"
+                      : "fill-slate-300 text-slate-300"
+                  }`}
+                />
+                {isCarrie
+                  ? headerSubtitle
+                  : peerIsOnline
+                    ? `${headerSubtitle} · Online`
+                    : `${headerSubtitle} · Offline`}
               </p>
             </div>
           </div>
@@ -624,7 +637,7 @@ export default function DirectMessagesPanel({
             </div>
           )}
 
-          <div className="border-t border-slate-100 p-3">
+          <div className="shrink-0 border-t border-slate-100 p-3">
             <div className="flex items-center gap-2">
               <MessageSquare className="h-4 w-4 shrink-0 text-slate-300" />
               <input

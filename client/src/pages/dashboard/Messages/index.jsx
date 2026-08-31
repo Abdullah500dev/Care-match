@@ -4,7 +4,7 @@ import DirectMessagesPanel from "@/components/messaging/DirectMessagesPanel";
 
 export default function AdminMessages() {
   return (
-    <>
+    <div className="flex min-h-0 flex-1 flex-col">
       <SEO title="Messages – Admin | CareMatch AI" />
       <DirectMessagesPanel
         title="Messages"
@@ -12,6 +12,6 @@ export default function AdminMessages() {
         showDirectory
         carriePlaceholder="Ask Carrie… (Enter to send)"
       />
-    </>
+    </div>
   );
 }

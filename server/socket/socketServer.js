@@ -6,6 +6,10 @@ import {
   markConversationRead,
 } from "../services/messagingService.js";
 
+function listOnlineUserIds(onlineUsers) {
+  return [...onlineUsers.keys()];
+}
+
 export function initSocketServer(httpServer, corsOrigin) {
   const io = new Server(httpServer, {
     cors: {
@@ -14,6 +18,27 @@ export function initSocketServer(httpServer, corsOrigin) {
     },
     path: "/socket.io",
   });
+
+  /** userId -> number of active socket connections */
+  const onlineUsers = new Map();
+
+  const markUserOnline = (userId) => {
+    const key = String(userId);
+    const next = (onlineUsers.get(key) || 0) + 1;
+    onlineUsers.set(key, next);
+    return next === 1;
+  };
+
+  const markUserOffline = (userId) => {
+    const key = String(userId);
+    const current = onlineUsers.get(key) || 0;
+    if (current <= 1) {
+      onlineUsers.delete(key);
+      return true;
+    }
+    onlineUsers.set(key, current - 1);
+    return false;
+  };
 
   io.use(async (socket, next) => {
     try {
@@ -37,7 +62,13 @@ export function initSocketServer(httpServer, corsOrigin) {
   });
 
   io.on("connection", (socket) => {
+    const becameOnline = markUserOnline(socket.userId);
     socket.join(`user:${socket.userId}`);
+
+    socket.emit("presence:sync", { onlineUserIds: listOnlineUserIds(onlineUsers) });
+    if (becameOnline) {
+      io.emit("presence:update", { userId: socket.userId, online: true });
+    }
 
     socket.on("conversation:join", ({ conversationId } = {}) => {
       const id = String(conversationId || "").trim();
@@ -93,6 +124,13 @@ export function initSocketServer(httpServer, corsOrigin) {
         if (typeof ack === "function") {
           ack({ success: false, message: error?.message || "Read failed" });
         }
+      }
+    });
+
+    socket.on("disconnect", () => {
+      const becameOffline = markUserOffline(socket.userId);
+      if (becameOffline) {
+        io.emit("presence:update", { userId: socket.userId, online: false });
       }
     });
   });

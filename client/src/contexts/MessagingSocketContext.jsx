@@ -62,6 +62,7 @@ export function MessagingSocketProvider({ children }) {
   const myUserId = String(userData?.id || userData?._id || "");
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
+  const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [socketReady, setSocketReady] = useState(false);
 
   const refreshUnread = useCallback(async () => {
@@ -90,6 +91,7 @@ export function MessagingSocketProvider({ children }) {
       setSocketReady(false);
       setUnreadCount(0);
       setNotifications([]);
+      setOnlineUserIds(new Set());
       disconnectMessagingSocket();
       return undefined;
     }
@@ -112,9 +114,25 @@ export function MessagingSocketProvider({ children }) {
       refreshUnread();
     };
 
+    const onPresenceSync = ({ onlineUserIds: ids } = {}) => {
+      setOnlineUserIds(new Set((Array.isArray(ids) ? ids : []).map(String)));
+    };
+    const onPresenceUpdate = ({ userId, online } = {}) => {
+      const id = String(userId || "");
+      if (!id) return;
+      setOnlineUserIds((prev) => {
+        const next = new Set(prev);
+        if (online) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("notification:message", onNotification);
+    socket.on("presence:sync", onPresenceSync);
+    socket.on("presence:update", onPresenceUpdate);
 
     refreshUnread();
 
@@ -122,9 +140,19 @@ export function MessagingSocketProvider({ children }) {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("notification:message", onNotification);
+      socket.off("presence:sync", onPresenceSync);
+      socket.off("presence:update", onPresenceUpdate);
       disconnectMessagingSocket();
     };
   }, [isAuthenticated, token, refreshUnread, myUserId]);
+
+  const isUserOnline = useCallback(
+    (userId) => {
+      const id = String(userId || "");
+      return id ? onlineUserIds.has(id) : false;
+    },
+    [onlineUserIds],
+  );
 
   const value = useMemo(
     () => ({
@@ -132,10 +160,12 @@ export function MessagingSocketProvider({ children }) {
       socketReady,
       unreadCount,
       notifications,
+      onlineUserIds,
+      isUserOnline,
       refreshUnread,
       setUnreadCount,
     }),
-    [socketReady, unreadCount, notifications, refreshUnread],
+    [socketReady, unreadCount, notifications, onlineUserIds, isUserOnline, refreshUnread],
   );
 
   return (
