@@ -36,6 +36,25 @@ function peerColor(id = "") {
   return THREAD_COLORS[hash];
 }
 
+function appendMessage(prev, message) {
+  if (!message?.id) return prev;
+  if (prev.some((row) => row.id === message.id)) return prev;
+  return [...prev, message];
+}
+
+function mergeConversationRow(existing, incoming, myUserId) {
+  if (!incoming) return existing;
+  const merged = { ...existing, ...incoming };
+  if (
+    merged.peer?.id === myUserId &&
+    existing?.peer?.id &&
+    existing.peer.id !== myUserId
+  ) {
+    merged.peer = existing.peer;
+  }
+  return merged;
+}
+
 export default function DirectMessagesPanel({
   title = "Messages",
   description = "Live messaging with socket notifications.",
@@ -138,15 +157,17 @@ export default function DirectMessagesPanel({
           lastMessageAt: payload.message?.createdAt,
         };
         if (!exists) return [nextRow, ...prev];
-        return prev.map((c) => (c.id === convId ? { ...c, ...nextRow } : c));
+        return prev.map((c) =>
+          c.id === convId ? mergeConversationRow(c, nextRow, myUserId) : c,
+        );
       });
       if (convId === activeId) {
-        setMessages((prev) => [...prev, payload.message]);
+        setMessages((prev) => appendMessage(prev, payload.message));
       }
     };
     socket.on("message:new", onNewMessage);
     return () => socket.off("message:new", onNewMessage);
-  }, [socket, activeId]);
+  }, [socket, activeId, myUserId]);
 
   useEffect(() => {
     const el = isCarrie ? aiScrollRef.current : scrollRef.current;
@@ -204,11 +225,15 @@ export default function DirectMessagesPanel({
         return;
       }
       if (response.message) {
-        setMessages((prev) => [...prev, response.message]);
+        setMessages((prev) => appendMessage(prev, response.message));
       }
       if (response.conversation) {
         setConversations((prev) =>
-          prev.map((c) => (c.id === activeId ? { ...c, ...response.conversation } : c)),
+          prev.map((c) =>
+            c.id === activeId
+              ? mergeConversationRow(c, response.conversation, myUserId)
+              : c,
+          ),
         );
       }
       setMessage("");

@@ -1,5 +1,6 @@
 import ErrorHandler from "../utils/errorHandler.js";
 import User from "../models/userModel.js";
+import Facility from "../models/facilityModel.js";
 import SnfPartner, { SnfReferral } from "../models/snfPartnerModel.js";
 import {
   Conversation,
@@ -18,18 +19,6 @@ const loadUserById = async (userId) => {
   return User.findById(userId).select("name email role user_type");
 };
 
-const serializeUser = (user) => {
-  if (!user) return null;
-  return {
-    id: String(user._id),
-    name: user.name || "User",
-    email: user.email || "",
-    role: user.role || "user",
-    user_type: user.user_type || "user",
-    accountLabel: accountLabelFor(user),
-  };
-};
-
 export const accountLabelFor = (user) => {
   if (!user) return "User";
   if (user.role === "admin" || user.user_type === "admin") return "Admin";
@@ -39,13 +28,70 @@ export const accountLabelFor = (user) => {
   return "Family User";
 };
 
-const serializeMessage = (message, sender) => ({
+const displayNameFor = (user, facilityNameByUserId, snfNameByUserId) => {
+  if (!user) return "User";
+  const id = String(user._id);
+  if (isAdminStaffUser(user)) return "CareMatch Support";
+  if (user.role === "facility") {
+    return facilityNameByUserId.get(id) || user.name || "Facility";
+  }
+  if (user.role === "snf") {
+    return snfNameByUserId.get(id) || user.name || "SNF Partner";
+  }
+  return user.name || "User";
+};
+
+const buildNameLookupMaps = async (users) => {
+  const list = users.filter(Boolean);
+  const facilityUserIds = list
+    .filter((u) => u.role === "facility")
+    .map((u) => u._id);
+  const snfUserIds = list.filter((u) => u.role === "snf").map((u) => u._id);
+
+  const facilities = facilityUserIds.length
+    ? await Facility.find({ user_id: { $in: facilityUserIds } })
+        .select("user_id name")
+        .lean()
+    : [];
+  const snfPartners = snfUserIds.length
+    ? await SnfPartner.find({ facilityUserId: { $in: snfUserIds } })
+        .select("facilityUserId name")
+        .lean()
+    : [];
+
+  const facilityNameByUserId = new Map(
+    facilities.map((f) => [String(f.user_id), f.name]),
+  );
+  const snfNameByUserId = new Map(
+    snfPartners.map((p) => [String(p.facilityUserId), p.name]),
+  );
+
+  return { facilityNameByUserId, snfNameByUserId };
+};
+
+const serializeUser = (user, nameLookup = null) => {
+  if (!user) return null;
+  const lookup = nameLookup || {
+    facilityNameByUserId: new Map(),
+    snfNameByUserId: new Map(),
+  };
+  return {
+    id: String(user._id),
+    name: displayNameFor(user, lookup.facilityNameByUserId, lookup.snfNameByUserId),
+    email: user.email || "",
+    role: user.role || "user",
+    user_type: user.user_type || "user",
+    accountLabel: accountLabelFor(user),
+  };
+};
+
+const serializeMessage = (message, sender, nameLookup = null) => ({
   id: String(message._id),
   conversationId: String(message.conversationId),
   senderId: String(message.senderId),
   text: message.text,
   createdAt: message.createdAt,
-  sender: serializeUser(sender),
+  sender: serializeUser(sender, nameLookup),
 });
 
 const getUnreadForUser = (conversation, userId) => {
@@ -78,6 +124,14 @@ const serializeConversation = async (conversation, viewerId, participantsById) =
     participantsById?.get(peerId) ||
     (await loadUserById(peerId));
 
+  const participantUsers = participantIds
+    .map((id) => participantsById?.get(id))
+    .filter(Boolean);
+  if (peer && !participantUsers.some((u) => String(u._id) === String(peer._id || peerId))) {
+    participantUsers.push(peer);
+  }
+  const nameLookup = await buildNameLookupMaps(participantUsers);
+
   const subtitleParts = participantIds
     .filter((id) => id !== String(peer?._id || peerId))
     .map((id) => {
@@ -88,7 +142,7 @@ const serializeConversation = async (conversation, viewerId, participantsById) =
 
   return {
     id: String(conversation._id),
-    peer: serializeUser(peer),
+    peer: serializeUser(peer, nameLookup),
     subtitle: subtitleParts.length ? subtitleParts.join(" · ") : accountLabelFor(peer),
     lastMessageText: conversation.lastMessageText || "",
     lastMessageAt: conversation.lastMessageAt,
@@ -239,9 +293,10 @@ export const listMessageDirectory = async (reqUser, search = "") => {
     .limit(50)
     .lean();
 
-  return users
-    .filter((u) => String(u._id) !== String(reqUser._id))
-    .map((u) => serializeUser(u));
+  const filtered = users.filter((u) => String(u._id) !== String(reqUser._id));
+  const nameLookup = await buildNameLookupMaps(filtered);
+
+  return filtered.map((u) => serializeUser(u, nameLookup));
 };
 
 export const startConversation = async (
@@ -313,13 +368,14 @@ export const getConversationMessages = async (reqUser, conversationId) => {
     .select("name email role user_type")
     .lean();
   const byId = new Map(senders.map((s) => [String(s._id), s]));
+  const nameLookup = await buildNameLookupMaps(senders);
 
   const meta = await serializeConversation(conversation, reqUser._id, byId);
 
   return {
     conversation: meta,
     messages: messages.map((m) =>
-      serializeMessage(m, byId.get(String(m.senderId))),
+      serializeMessage(m, byId.get(String(m.senderId)), nameLookup),
     ),
   };
 };
@@ -372,28 +428,34 @@ export const createAndEmitMessage = async ({
   conversation.unreadCounts = unread;
   await conversation.save();
 
-  const serializedMessage = serializeMessage(message, sender);
+  const serializedMessage = serializeMessage(
+    message,
+    sender,
+    await buildNameLookupMaps([sender]),
+  );
   const conversationPayload = await serializeConversation(
     conversation,
     senderId,
   );
 
   if (io) {
-    io.to(`conversation:${conversation._id}`).emit("message:new", {
-      message: serializedMessage,
-      conversation: conversationPayload,
-    });
-
     for (const participantId of conversation.participantIds) {
+      const participantKey = String(participantId);
       const peerSerialized = await serializeConversation(
         conversation,
-        participantId,
+        participantKey,
       );
-      io.to(`user:${participantId}`).emit("notification:message", {
+
+      io.to(`user:${participantKey}`).emit("message:new", {
+        message: serializedMessage,
+        conversation: peerSerialized,
+      });
+
+      io.to(`user:${participantKey}`).emit("notification:message", {
         type: "new_message",
         conversationId: String(conversation._id),
         preview: trimmed.slice(0, 120),
-        senderName: sender.name,
+        senderName: serializedMessage.sender?.name || sender.name,
         unread: peerSerialized.unread,
         conversation: peerSerialized,
       });
