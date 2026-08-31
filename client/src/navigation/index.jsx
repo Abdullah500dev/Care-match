@@ -433,7 +433,7 @@ const Layout = ({ children }) => {
         children
       )}
       {!isDashboardRoute && <Footer />}
-      {!isChatOpen &&
+      {!isDashboardRoute && !isChatOpen &&
         createPortal(
           <button
             type="button"
