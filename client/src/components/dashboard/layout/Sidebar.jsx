@@ -169,8 +169,8 @@ export default function DashboardSidebar({ isMobileOpen, onClose }) {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 border-r border-slate-100 bg-white md:flex">
-        <div className="flex h-full w-full flex-col py-4">
+      <aside className="hidden min-h-0 w-64 shrink-0 self-stretch border-r border-slate-100 bg-white md:flex md:flex-col">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4">
           <NavContent />
         </div>
       </aside>

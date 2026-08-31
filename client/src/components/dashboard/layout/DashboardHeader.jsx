@@ -73,7 +73,7 @@ export default function DashboardHeader({ onMenuClick }) {
 
   return (
     <header
-      className="border-b border-slate-200 bg-white"
+      className="shrink-0 border-b border-slate-200 bg-white"
       style={{ paddingLeft: "max(1.5rem, 5vw)", paddingRight: "max(1.5rem, 5vw)" }}
     >
       <div className="mx-auto flex h-14 min-w-0 max-w-[1800px] items-center justify-between gap-4 px-2 sm:h-16 sm:px-4 min-[1280px]:gap-6">

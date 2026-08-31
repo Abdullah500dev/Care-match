@@ -421,11 +421,17 @@ const Layout = ({ children }) => {
   return (
     <>
       <div id="page-top" ref={topAnchorRef} aria-hidden="true" />
-      <div className="sticky top-0 z-50 w-full">
+      <div className="sticky top-0 z-50 w-full shrink-0">
         <TopBar />
         {!isDashboardRoute && <Header />}
       </div>
-      {children}
+      {isDashboardRoute ? (
+        <div className="flex min-h-0 flex-1 flex-col h-[calc(100dvh-2.5rem)] sm:h-[calc(100dvh-3rem)]">
+          {children}
+        </div>
+      ) : (
+        children
+      )}
       {!isDashboardRoute && <Footer />}
       {!isChatOpen &&
         createPortal(

@@ -403,14 +403,14 @@ export default function DirectMessagesPanel({
     !isCarrie && Boolean(activeConversation?.peer?.id && isUserOnline(activeConversation.peer.id));
 
   return (
-    <div className="mx-auto flex min-h-0 flex-1 w-full max-w-6xl flex-col gap-4 overflow-hidden sm:gap-5">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-3 overflow-hidden sm:gap-4">
       <div className="shrink-0">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl md:text-3xl">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl lg:text-2xl">
             {title}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-0.5 hidden text-sm text-slate-500 lg:block">
             {description}
             {socketReady ? "" : " · Connecting live socket…"}
           </p>
@@ -452,9 +452,9 @@ export default function DirectMessagesPanel({
       </div>
 
       <div
-        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]"
+        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,36%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-1 lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
       >
-        <aside className="flex min-h-0 flex-col border-r border-slate-100">
+        <aside className="flex min-h-0 min-w-0 flex-col border-slate-100 max-md:border-b md:border-r">
           <div className="border-b border-slate-100 p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -523,7 +523,7 @@ export default function DirectMessagesPanel({
           </div>
         </aside>
 
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden md:min-h-0">
           <div className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 py-3">
             <div
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
