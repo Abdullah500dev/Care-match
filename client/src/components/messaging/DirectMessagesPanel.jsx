@@ -430,9 +430,9 @@ export default function DirectMessagesPanel({
     !isCarrie && Boolean(activeConversation?.peer?.id && isUserOnline(activeConversation.peer.id));
 
   return (
-    <div className="flex h-0 min-h-0 flex-1 flex-col overflow-hidden">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
-        className="grid h-0 min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
+        className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm max-md:grid-rows-[minmax(0,34%)_minmax(0,1fr)] md:grid-cols-[minmax(0,220px)_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] lg:grid-cols-[minmax(0,260px)_minmax(0,1fr)] xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
       >
         <aside className="grid min-h-0 h-full min-w-0 grid-rows-[auto_minmax(0,1fr)] border-slate-100 max-md:border-b md:border-r">
           <div className="shrink-0 space-y-2 border-b border-slate-100 p-3">

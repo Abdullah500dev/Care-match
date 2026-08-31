@@ -33,7 +33,7 @@ export default function DashboardLayout() {
         <main
           className={
             isMessagesRoute
-              ? "flex h-0 min-h-0 flex-1 flex-col overflow-hidden bg-slate-50 px-2 py-2 md:px-3 md:py-2"
+              ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-slate-50 px-2 py-2 md:px-3 md:py-2"
               : "min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-slate-50 px-4 py-4 md:px-6 md:py-6 lg:px-8 lg:py-8"
           }
         >
