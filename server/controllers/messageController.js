@@ -38,6 +38,7 @@ export const createConversation = catchAsyncError(async (req, res) => {
   const conversation = await startConversation(user, {
     recipientId: req.body?.recipientId,
     snfPartnerId: req.body?.snfPartnerId,
+    facilityId: req.body?.facilityId,
     support: Boolean(req.body?.support),
   });
   res.status(201).json({ success: true, conversation });

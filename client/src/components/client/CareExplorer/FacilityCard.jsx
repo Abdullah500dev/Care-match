@@ -16,6 +16,7 @@ import {
   normalizeFacilityWebsite,
 } from "@/lib/facilityWebsite";
 import { apiClient } from "@/services/api";
+import { startConversation } from "@/services/messageService";
 import {
   Dialog,
   DialogContent,
@@ -240,8 +241,32 @@ const FacilityCard = ({
     )}`;
   };
 
-  const openContactDestination = () => {
+  const openContactDestination = async () => {
     if (!requireLoginForFacilityAction()) return;
+
+    if (isOwnedFacility) {
+      try {
+        const { data } = await startConversation({
+          facilityId: facilityId || "",
+        });
+        const conversationId = data?.conversation?.id;
+        if (!conversationId) {
+          toast.error("Could not open messages", {
+            description: "Please try again from your Messages inbox.",
+          });
+          return;
+        }
+        navigate(`/portal/messages?conversation=${encodeURIComponent(conversationId)}`);
+        return;
+      } catch (error) {
+        toast.error("Could not message this facility", {
+          description:
+            error?.response?.data?.message ||
+            "This facility may not have messaging enabled yet.",
+        });
+        return;
+      }
+    }
 
     const destinationUrl = resolveFacilitySiteUrl();
 

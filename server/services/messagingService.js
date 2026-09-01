@@ -193,6 +193,18 @@ export const userHasScannedSnfPartner = async (userId, partnerId) => {
 const userCanMessagePeer = async (reqUser, peer) => {
   if (isAdminStaffUser(reqUser)) return true;
   if (isAdminStaffUser(peer)) return true;
+  // Family users may message CareMatch-registered facility accounts
+  // (admin-created or facility self-registered).
+  if (peer?.role === "facility") {
+    const linkedFacility = await Facility.findOne({ user_id: peer._id })
+      .select("_id is_external")
+      .lean();
+    return Boolean(linkedFacility) && linkedFacility.is_external !== true;
+  }
+  // Facility accounts may reply to / message family users who contacted them.
+  if (reqUser?.role === "facility" && peer?.role === "user") {
+    return true;
+  }
   if (peer?.role === "snf") {
     const partner = await SnfPartner.findOne({ facilityUserId: peer._id }).select("_id");
     if (!partner) return false;
@@ -376,9 +388,30 @@ export const listMessageDirectory = async (reqUser, search = "") => {
     });
 };
 
+const resolveFacilityRecipientUserId = async (facilityIdRaw) => {
+  const raw = String(facilityIdRaw || "").trim();
+  if (!raw) return null;
+
+  let mongoId = raw;
+  if (raw.startsWith("owned-")) {
+    mongoId = raw.slice("owned-".length);
+  } else if (raw.startsWith("snf-")) {
+    const partner = await SnfPartner.findById(raw.slice("snf-".length))
+      .select("facilityUserId")
+      .lean();
+    return partner?.facilityUserId || null;
+  }
+
+  if (!/^[a-fA-F0-9]{24}$/.test(mongoId)) return null;
+
+  const facility = await Facility.findById(mongoId).select("user_id is_external").lean();
+  if (!facility || facility.is_external === true || !facility.user_id) return null;
+  return facility.user_id;
+};
+
 export const startConversation = async (
   reqUser,
-  { recipientId, snfPartnerId, support = false } = {},
+  { recipientId, snfPartnerId, facilityId, support = false } = {},
 ) => {
   let peerId = recipientId;
 
@@ -386,6 +419,16 @@ export const startConversation = async (
     const admin = await findSupportAdmin();
     if (!admin) throw new ErrorHandler("Support is not available right now", 503);
     peerId = admin._id;
+  }
+
+  if (facilityId && !support && !peerId) {
+    peerId = await resolveFacilityRecipientUserId(facilityId);
+    if (!peerId) {
+      throw new ErrorHandler(
+        "This facility cannot receive in-app messages yet",
+        404,
+      );
+    }
   }
 
   if (snfPartnerId && !support) {
@@ -409,7 +452,7 @@ export const startConversation = async (
     const allowed = await userCanMessagePeer(reqUser, peer);
     if (!allowed) {
       throw new ErrorHandler(
-        "You can only message CareMatch support or scanned SNF partners",
+        "You can only message CareMatch facilities, support, or scanned SNF partners",
         403,
       );
     }
