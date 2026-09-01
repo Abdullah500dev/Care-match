@@ -61,6 +61,12 @@ export default function Header() {
           icon: Building2,
         },
         {
+          key: "snf-partners",
+          label: "SNF Partners",
+          to: "/admin/snf-partners",
+          icon: Hospital,
+        },
+        {
           key: "messages",
           label: "Messages",
           to: "/admin/messages",
