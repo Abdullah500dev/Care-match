@@ -199,7 +199,9 @@ const userCanMessagePeer = async (reqUser, peer) => {
     const linkedFacility = await Facility.findOne({ user_id: peer._id })
       .select("_id is_external")
       .lean();
-    return Boolean(linkedFacility) && linkedFacility.is_external !== true;
+    if (linkedFacility?.is_external === true) return false;
+    // Registered facility login (admin-created or self-registered).
+    return true;
   }
   // Facility accounts may reply to / message family users who contacted them.
   if (reqUser?.role === "facility" && peer?.role === "user") {
@@ -404,9 +406,16 @@ const resolveFacilityRecipientUserId = async (facilityIdRaw) => {
 
   if (!/^[a-fA-F0-9]{24}$/.test(mongoId)) return null;
 
-  const facility = await Facility.findById(mongoId).select("user_id is_external").lean();
-  if (!facility || facility.is_external === true || !facility.user_id) return null;
-  return facility.user_id;
+  const facility = await Facility.findById(mongoId)
+    .select("user_id email is_external")
+    .lean();
+  if (!facility || facility.is_external === true) return null;
+  if (facility.user_id) return facility.user_id;
+
+  const email = String(facility.email || "").trim().toLowerCase();
+  if (!email) return null;
+  const facilityUser = await User.findOne({ email, role: "facility" }).select("_id").lean();
+  return facilityUser?._id || null;
 };
 
 export const startConversation = async (

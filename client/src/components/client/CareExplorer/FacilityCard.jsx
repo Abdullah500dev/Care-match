@@ -10,7 +10,10 @@ import {
   Globe,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
 import { toast } from "sonner";
+import { getDashboardMessagesPath } from "@/lib/dashboardMessagesPath";
+import { getUser } from "@/store/auth/authSlice";
 import {
   isAggregatorListingUrl,
   normalizeFacilityWebsite,
@@ -185,6 +188,7 @@ const FacilityCard = ({
     String(facilityId || "").startsWith("snf-");
   const navigate = useNavigate();
   const location = useLocation();
+  const { userData } = useSelector(getUser);
   const isLoggedIn = Boolean(localStorage.getItem("access_token"));
 
   const requireLoginForFacilityAction = () => {
@@ -241,8 +245,25 @@ const FacilityCard = ({
     )}`;
   };
 
+  const postExploreClickNotify = (destinationUrl) =>
+    apiClient.post("/api/facilities/explore-click", {
+      facilityId: facilityId || "",
+      facilityName: name,
+      address,
+      zipCode,
+      phone: String(phone || "").trim() === "N/A" ? "" : phone,
+      email: hasRealEmail ? displayEmail : "",
+      website: normalizedWebsite || website || "",
+      destinationUrl,
+      sourcePlatform: sourcePlatform || (isOwnedFacility ? "CareMatch" : ""),
+      careType: "Assisted Living",
+      category: "Assisted Living",
+    });
+
   const openContactDestination = async () => {
     if (!requireLoginForFacilityAction()) return;
+
+    const destinationUrl = resolveFacilitySiteUrl();
 
     if (isOwnedFacility) {
       try {
@@ -256,7 +277,18 @@ const FacilityCard = ({
           });
           return;
         }
-        navigate(`/portal/messages?conversation=${encodeURIComponent(conversationId)}`);
+
+        postExploreClickNotify(destinationUrl).catch(() => {
+          // Email notify is best-effort; in-app chat still works.
+        });
+
+        const messagesPath = getDashboardMessagesPath(userData);
+        navigate(
+          `${messagesPath}?conversation=${encodeURIComponent(conversationId)}`,
+        );
+        toast.success("Opening messages", {
+          description: "We also emailed the facility contact about your interest.",
+        });
         return;
       } catch (error) {
         toast.error("Could not message this facility", {
@@ -268,28 +300,16 @@ const FacilityCard = ({
       }
     }
 
-    const destinationUrl = resolveFacilitySiteUrl();
-
-    apiClient
-      .post("/api/facilities/explore-click", {
-        facilityId: facilityId || "",
-        facilityName: name,
-        address,
-        zipCode,
-        phone: String(phone || "").trim() === "N/A" ? "" : phone,
-        email: hasRealEmail ? displayEmail : "",
-        website: normalizedWebsite || website || "",
-        destinationUrl,
-        sourcePlatform,
-        careType: "Assisted Living",
-        category: "Assisted Living",
-      })
-      .catch(() => {
-        // Ignore notify failures so UX is not blocked.
+    try {
+      await postExploreClickNotify(destinationUrl);
+      toast.success("Request sent", {
+        description: "We contacted the facility contact to reach out to you.",
       });
-    toast.success("Request sent", {
-      description: "We contacted the facility contact to reach out to you.",
-    });
+    } catch {
+      toast.error("Could not send request", {
+        description: "Please try again in a moment.",
+      });
+    }
   };
   const handleMoreInformationClick = () => {
     if (!isOwnedFacility) return;
