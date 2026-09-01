@@ -111,6 +111,7 @@ const toArray = (value) => {
 
 const serializePartner = (partner, referralCount = 0, activeCount = 0, referralLink = "") => ({
   id: partner._id,
+  facilityUserId: partner.facilityUserId ? String(partner.facilityUserId) : "",
   name: partner.name,
   contactPerson: partner.contactPerson || partner.name,
   email: partner.email,

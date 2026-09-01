@@ -41,6 +41,7 @@ const mapLead = (lead, facilityLookup = {}) => {
 
   return {
     id: lead._id,
+    userId: lead.userId ? String(lead.userId) : "",
     initials: initialsFromName(lead.userName),
     name: lead.userName || "Unknown",
     email: lead.userEmail || "",

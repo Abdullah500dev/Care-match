@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import DashboardFooter from "@/components/dashboard/layout/DashboardFooter";
 import {
@@ -35,6 +36,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
+import AdminMessageIconButton from "@/components/dashboard/AdminMessageIconButton";
+import { messageAdminSnfPartner } from "@/lib/adminMessaging";
 import FacilityAddressZipFields from "@/components/dashboard/facilities/FacilityAddressZipFields";
 import {
   extractZipFromAddress,
@@ -136,6 +139,7 @@ const METRIC_CARDS = [
 ];
 
 export default function SNFPartners() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("partners");
   const [snfModalOpen, setSnfModalOpen] = useState(false);
   const [snfModalStep, setSnfModalStep] = useState("onboard"); // onboard | kit
@@ -655,7 +659,7 @@ export default function SNFPartners() {
                       backgroundColor: "#F8FAFC",
                     }}
                   >
-                    {["Facility", "Referrals", "Referral Code"].map((h) => (
+                    {["Facility", "Referrals", "Referral Code", "Message"].map((h) => (
                       <th
                         key={h}
                         className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-[0.1em] sm:px-6"
@@ -669,13 +673,13 @@ export default function SNFPartners() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                      <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
                         Loading partners…
                       </td>
                     </tr>
                   ) : partners.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="px-6 py-10 text-center text-sm text-slate-400">
+                      <td colSpan={4} className="px-6 py-10 text-center text-sm text-slate-400">
                         No skilled nursing partners yet.
                       </td>
                     </tr>
@@ -745,6 +749,13 @@ export default function SNFPartners() {
                             <Copy className="h-4 w-4" />
                           </button>
                         </div>
+                      </td>
+                      <td className="px-5 py-4 sm:px-6">
+                        <AdminMessageIconButton
+                          label="Message SNF partner"
+                          onClick={() => messageAdminSnfPartner(navigate, row)}
+                          disabled={!row.facilityUserId}
+                        />
                       </td>
                     </tr>
                   ))}

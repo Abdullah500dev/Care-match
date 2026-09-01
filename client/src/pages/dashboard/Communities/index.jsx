@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import SEO from "@/components/common/SEO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ import {
   validateAddressZipPair,
 } from "@/lib/facilityAddressGeo";
 import { normalizeFacilityWebsite } from "@/lib/facilityWebsite";
+import AdminMessageIconButton from "@/components/dashboard/AdminMessageIconButton";
+import { messageAdminFacility } from "@/lib/adminMessaging";
 import { formatPhoneInput, phoneDigitsOnly } from "@/lib/formatPhone";
 
 const PLACEHOLDER_IMAGE =
@@ -212,6 +215,7 @@ function FacilityImageSlider({ images, name }) {
 }
 
 export default function Communities() {
+  const navigate = useNavigate();
   const PAGE_SIZE = 6;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -898,11 +902,15 @@ export default function Communities() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex items-center gap-2 pt-1">
+                    <AdminMessageIconButton
+                      label="Message facility"
+                      onClick={() => messageAdminFacility(navigate, facility)}
+                    />
                     <Button
                       type="button"
                       size="default"
-                      className="w-[70%] shrink-0 rounded-2xl font-semibold text-white"
+                      className="min-w-0 flex-1 rounded-2xl font-semibold text-white"
                       style={{ background: "#1A1E2F" }}
                       onClick={() => openManageFacility(facility)}
                     >
@@ -911,7 +919,7 @@ export default function Communities() {
                     <Button
                       variant="outline"
                       size="default"
-                      className="w-[30%] shrink-0 rounded-2xl border-slate-200 font-semibold text-slate-900"
+                      className="min-w-0 flex-1 rounded-2xl border-slate-200 font-semibold text-slate-900"
                       onClick={() => openFacilityAnalytics(facility)}
                     >
                       View Analytics

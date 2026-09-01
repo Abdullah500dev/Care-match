@@ -259,13 +259,8 @@ export const getOrCreateConversation = async (userIdA, userIdB) => {
 
 export const listConversationsForUser = async (reqUser) => {
   const viewerId = String(reqUser._id);
-  const isAdmin = isAdminStaffUser(reqUser);
 
-  const query = isAdmin
-    ? {}
-    : { participantIds: reqUser._id };
-
-  const conversations = await Conversation.find(query)
+  const conversations = await Conversation.find({ participantIds: reqUser._id })
     .sort({ lastMessageAt: -1 })
     .limit(100)
     .lean();
@@ -442,7 +437,10 @@ export const startConversation = async (
 
   if (snfPartnerId && !support) {
     const partnerId = String(snfPartnerId).trim();
-    if (!await userHasScannedSnfPartner(reqUser._id, partnerId)) {
+    if (
+      !isAdminStaffUser(reqUser) &&
+      !await userHasScannedSnfPartner(reqUser._id, partnerId)
+    ) {
       throw new ErrorHandler("You can only message SNF partners you have scanned", 403);
     }
     const partner = await SnfPartner.findById(partnerId).select("facilityUserId name");
@@ -483,7 +481,7 @@ export const getConversationMessages = async (reqUser, conversationId) => {
   const isParticipant = conversation.participantIds.some(
     (id) => String(id) === String(reqUser._id),
   );
-  if (!isParticipant && !isAdminStaffUser(reqUser)) {
+  if (!isParticipant) {
     throw new ErrorHandler("Not allowed to view this conversation", 403);
   }
 
@@ -527,7 +525,7 @@ export const createAndEmitMessage = async ({
   const isParticipant = conversation.participantIds.some(
     (id) => String(id) === String(senderId),
   );
-  if (!isParticipant && !isAdminStaffUser(sender)) {
+  if (!isParticipant) {
     throw new ErrorHandler("Not allowed to send in this conversation", 403);
   }
 
@@ -602,7 +600,7 @@ export const markConversationRead = async (reqUser, conversationId) => {
   const isParticipant = conversation.participantIds.some(
     (id) => String(id) === String(reqUser._id),
   );
-  if (!isParticipant && !isAdminStaffUser(reqUser)) {
+  if (!isParticipant) {
     throw new ErrorHandler("Not allowed", 403);
   }
 
@@ -626,12 +624,8 @@ export const markConversationRead = async (reqUser, conversationId) => {
 };
 
 export const getUnreadMessageCount = async (reqUser) => {
-  const isAdmin = isAdminStaffUser(reqUser);
-  const query = isAdmin
-    ? {}
-    : { participantIds: reqUser._id };
-
-  const conversations = await Conversation.find(query).select("unreadCounts participantIds");
+  const conversations = await Conversation.find({ participantIds: reqUser._id })
+    .select("unreadCounts participantIds");
   let total = 0;
   const viewerKey = String(reqUser._id);
   conversations.forEach((c) => {

@@ -30,9 +30,15 @@ import {
   MapPin,
   Mail,
   Phone,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/services/api";
+import AdminMessageIconButton from "@/components/dashboard/AdminMessageIconButton";
+import {
+  messageAdminFacility,
+  messageAdminUser,
+} from "@/lib/adminMessaging";
 
 const STATUS_STYLES = {
   New: "bg-amber-500 text-white",
@@ -622,7 +628,18 @@ export default function Residents() {
                       </span>
                     </TableCell>
                     <TableCell className="align-top py-4 last:pr-5">
-                      <DropdownMenu>
+                      <div className="flex items-center justify-end gap-1">
+                        <AdminMessageIconButton
+                          label="Message family user"
+                          onClick={() => messageAdminUser(navigate, lead.userId)}
+                          disabled={!lead.userId}
+                        />
+                        <AdminMessageIconButton
+                          label="Message facility"
+                          onClick={() => messageAdminFacility(navigate, lead.facilityId)}
+                          disabled={!lead.facilityId}
+                        />
+                        <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button
                             variant="ghost"
@@ -649,8 +666,23 @@ export default function Residents() {
                           >
                             Mark as Contacted
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => messageAdminUser(navigate, lead.userId)}
+                            disabled={!lead.userId}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            Message family user
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => messageAdminFacility(navigate, lead.facilityId)}
+                            disabled={!lead.facilityId}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            Message facility
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => navigate("/admin/messages")}>
-                            Send message
+                            Open all messages
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -661,6 +693,7 @@ export default function Residents() {
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                   );
