@@ -1188,7 +1188,7 @@ export default function Communities() {
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                  Services
+                  Services — Use Comma in Between
                 </label>
                 <Input
                   value={tagDrafts.services}
@@ -1223,7 +1223,7 @@ export default function Communities() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                  Amenities
+                  Amenities — Use Comma in Between
                 </label>
                 <Input
                   value={tagDrafts.amenities}
@@ -1258,7 +1258,7 @@ export default function Communities() {
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-                  Care Levels
+                  Care Levels — Use Comma in Between
                 </label>
                 <Input
                   value={tagDrafts.careLevels}

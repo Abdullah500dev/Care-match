@@ -317,6 +317,11 @@ const FacilityCard = ({
     setDetailsOpen(true);
   };
 
+  const openOwnedDetails = () => {
+    if (!isOwnedFacility) return;
+    handleMoreInformationClick();
+  };
+
   const moreInfoButtonClass = (size) =>
     size === "grid"
       ? "flex-1 min-w-0 rounded-full border border-[#E2E8F0] bg-white py-1.5 text-center text-[11px] sm:text-[12px] font-medium text-[#132329] transition-colors hover:bg-[#F1F5F9] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white"
@@ -532,8 +537,11 @@ const FacilityCard = ({
               {category}
             </p>
             <h3
-              className="mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px]"
+              className={`mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px] ${
+                isOwnedFacility ? "cursor-pointer hover:text-[#00B8DB]" : ""
+              }`}
               title={name}
+              onClick={openOwnedDetails}
             >
               {name}
             </h3>
@@ -671,8 +679,11 @@ const FacilityCard = ({
                 {category}
               </p>
               <h3
-                className={`mt-0.5 font-bold text-[#132329] ${gridView ? "truncate" : "break-words"} ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"}`}
+                className={`mt-0.5 font-bold text-[#132329] ${gridView ? "truncate" : "break-words"} ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"} ${
+                  isOwnedFacility ? "cursor-pointer hover:text-[#00B8DB]" : ""
+                }`}
                 title={name}
+                onClick={openOwnedDetails}
               >
                 {name}
               </h3>

@@ -285,7 +285,7 @@ export default function SnfDashboardProfile() {
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Services (comma separated)
+                  Services — Use Comma in Between
                 </label>
                 <Input
                   value={form.services}
@@ -294,7 +294,7 @@ export default function SnfDashboardProfile() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Amenities (comma separated)
+                  Amenities — Use Comma in Between
                 </label>
                 <Input
                   value={form.amenities}
@@ -303,7 +303,7 @@ export default function SnfDashboardProfile() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Care levels (comma separated)
+                  Care levels — Use Comma in Between
                 </label>
                 <Input
                   value={form.care_levels}

@@ -1089,9 +1089,9 @@ export default function SNFPartners() {
                   </div>
 
                   {[
-                    { field: "services", label: "Services", color: "text-cyan-900" },
-                    { field: "amenities", label: "Amenities", color: "text-violet-900" },
-                    { field: "careLevels", label: "Care Levels", color: "text-emerald-900" },
+                    { field: "services", label: "Services — Use Comma in Between", color: "text-cyan-900" },
+                    { field: "amenities", label: "Amenities — Use Comma in Between", color: "text-violet-900" },
+                    { field: "careLevels", label: "Care Levels — Use Comma in Between", color: "text-emerald-900" },
                   ].map((tag) => (
                     <div key={tag.field} className="space-y-2">
                       <label className="text-xs font-semibold uppercase tracking-wider text-slate-900">
@@ -1107,7 +1107,7 @@ export default function SNFPartners() {
                         }
                         onKeyDown={(e) => handleTagInputKeyDown(tag.field, e)}
                         onBlur={() => handleTagInputBlur(tag.field)}
-                        placeholder={`Type ${tag.label.slice(0, -1).toLowerCase()} and press Enter or comma`}
+                        placeholder="Use comma in between — press Enter to add"
                       />
                       <div className="flex flex-wrap gap-2 pt-1">
                         {onboardForm[tag.field].map((item, index) => (
