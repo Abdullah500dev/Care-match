@@ -40,6 +40,7 @@ export function savedFacilityToCardProps(saved) {
       : [];
   const amenities = Array.isArray(src.amenities) ? src.amenities : [];
   const services = Array.isArray(src.services) ? src.services : [];
+  const features = Array.isArray(src.features) ? src.features : [];
 
   return {
     facilityId: facilityId || String(src.name || "saved-facility"),
@@ -61,6 +62,7 @@ export function savedFacilityToCardProps(saved) {
     careLevels,
     amenities,
     services,
+    features,
     savedAt: src.savedAt || null,
   };
 }

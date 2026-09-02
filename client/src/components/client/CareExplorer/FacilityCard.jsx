@@ -109,6 +109,7 @@ const FacilityCard = ({
   careLevels = [],
   amenities = [],
   services = [],
+  features = [],
   compact = false,
   gridView = false,
   isFavorite = false,
@@ -141,6 +142,9 @@ const FacilityCard = ({
   const careLevelList = Array.isArray(careLevels) ? careLevels : [];
   const amenityList = Array.isArray(amenities) ? amenities : [];
   const serviceList = Array.isArray(services) ? services : [];
+  const featureList = (Array.isArray(features) ? features : [])
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
   const descriptionText = String(description || "").trim();
   React.useEffect(() => {
     setFailedImageUrls(new Set());
@@ -234,6 +238,7 @@ const FacilityCard = ({
       careLevels: careLevelList,
       amenities: amenityList,
       services: serviceList,
+      features: featureList,
     });
   };
   const resolveFacilitySiteUrl = () => {
@@ -312,13 +317,11 @@ const FacilityCard = ({
     }
   };
   const handleMoreInformationClick = () => {
-    if (!isOwnedFacility) return;
     if (!requireLoginForFacilityAction()) return;
     setDetailsOpen(true);
   };
 
-  const openOwnedDetails = () => {
-    if (!isOwnedFacility) return;
+  const openFacilityDetails = () => {
     handleMoreInformationClick();
   };
 
@@ -343,12 +346,7 @@ const FacilityCard = ({
             }
       }
       onClick={handleMoreInformationClick}
-      disabled={!isOwnedFacility}
-      title={
-        isOwnedFacility
-          ? "View facility details, amenities, and services"
-          : "More Information is available after this facility creates a CareMatch account"
-      }
+      title="View facility details, amenities, and services"
     >
       More Information
     </button>
@@ -377,7 +375,9 @@ const FacilityCard = ({
               </p>
               <DialogTitle className="text-xl text-[#132329] sm:text-2xl">{name}</DialogTitle>
               <DialogDescription className="text-sm text-[#64748b]">
-                Facility details added on CareMatch AI
+                {isOwnedFacility
+                  ? "Facility details added on CareMatch AI"
+                  : "Listing details from your saved community"}
               </DialogDescription>
             </DialogHeader>
 
@@ -458,6 +458,12 @@ const FacilityCard = ({
               <h4 className="text-sm font-bold text-[#132329]">Amenities</h4>
               <TagList items={amenityList} />
             </div>
+            {featureList.length > 0 ? (
+              <div className="space-y-2">
+                <h4 className="text-sm font-bold text-[#132329]">Highlights</h4>
+                <TagList items={featureList} />
+              </div>
+            ) : null}
           </div>
         </div>
       </DialogContent>
@@ -537,11 +543,9 @@ const FacilityCard = ({
               {category}
             </p>
             <h3
-              className={`mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px] ${
-                isOwnedFacility ? "cursor-pointer hover:text-[#00B8DB]" : ""
-              }`}
+                className="mb-1.5 truncate text-[13px] font-semibold tracking-tight text-[#132329] min-[400px]:text-[14px] sm:mb-2 sm:text-[15px] cursor-pointer hover:text-[#00B8DB]"
               title={name}
-              onClick={openOwnedDetails}
+              onClick={openFacilityDetails}
             >
               {name}
             </h3>
@@ -679,11 +683,9 @@ const FacilityCard = ({
                 {category}
               </p>
               <h3
-                className={`mt-0.5 font-bold text-[#132329] ${gridView ? "truncate" : "break-words"} ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"} ${
-                  isOwnedFacility ? "cursor-pointer hover:text-[#00B8DB]" : ""
-                }`}
+                className={`mt-0.5 font-bold text-[#132329] ${gridView ? "truncate" : "break-words"} ${compact ? "text-sm sm:text-base" : "mt-1 text-lg sm:text-xl"} cursor-pointer hover:text-[#00B8DB]`}
                 title={name}
-                onClick={openOwnedDetails}
+                onClick={openFacilityDetails}
               >
                 {name}
               </h3>
