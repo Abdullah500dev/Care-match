@@ -2203,12 +2203,24 @@ const CareExplorer = () => {
       return score;
     };
 
+    const searchZipForRank = String(activeFilters.zipCode || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+    const locationQueryForRank = String(
+      activeFilters.locationQuery || carrieLocationQuery || "",
+    ).trim();
+
+    /** CareMatch / admin facilities in the searched ZIP (or city) always rank above scrapes. */
+    const isPriorityPartner = (facility) =>
+      partnerMatchesSearchArea(facility, {
+        zipCode: searchZipForRank,
+        locationQuery: locationQueryForRank,
+      });
+
     return filteredFacilities
       .map((facility) => {
         let computedDistanceMiles = computeFacilityMiles(facility, locationCenterCoords);
-        const searchZip = String(activeFilters.zipCode || "")
-          .replace(/\D/g, "")
-          .slice(0, 5);
+        const searchZip = searchZipForRank;
         const facilityZip = String(facility.zipCode || "")
           .replace(/\D/g, "")
           .slice(0, 5);
@@ -2230,9 +2242,16 @@ const CareExplorer = () => {
           qualityScore: computeOverallQualityScore(facility),
           relevanceScore: getRelevanceScore(facility),
           averagePrice: averageFacilityPrice(facility),
+          isPriorityPartner: isPriorityPartner(facility),
         };
       })
       .sort((a, b) => {
+        // Always surface our system facilities (admin-added / registered) first when they
+        // match the searched ZIP / location — before scrapes and other sort modes.
+        if (a.isPriorityPartner !== b.isPriorityPartner) {
+          return a.isPriorityPartner ? -1 : 1;
+        }
+
         if (sortBy === "overallQuality") {
           const qualityDiff = b.qualityScore - a.qualityScore;
           if (qualityDiff !== 0) return qualityDiff;
