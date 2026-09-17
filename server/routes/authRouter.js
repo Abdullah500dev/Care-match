@@ -26,6 +26,7 @@ import {
 } from "../middleware/formValidation/authFormValidation.js";
 
 import { isAutheticated } from "../middleware/auth.js";
+import uploadUserCareDocuments from "../middleware/uploadUserCareDocuments.js";
 
 const router = express.Router();
 
@@ -547,7 +548,12 @@ router.get("/me", isAutheticated, getUserInfo);
  *                   type: integer
  *                   example: 401
  */
-router.put("/update-user-info", isAutheticated, updateUserInfo);
+router.put(
+  "/update-user-info",
+  isAutheticated,
+  uploadUserCareDocuments.array("documents", 6),
+  updateUserInfo,
+);
 /**
  * @swagger
  * /api/auth/update-user-password:

@@ -105,6 +105,45 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
+    /** Family care profile — preferences shared with facilities / matching. */
+    bio: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 2000,
+    },
+    medical_issues: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 4000,
+    },
+    care_background: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 4000,
+    },
+    desired_services: {
+      type: [String],
+      default: [],
+    },
+    desired_amenities: {
+      type: [String],
+      default: [],
+    },
+    care_documents: {
+      type: [
+        {
+          path: { type: String, required: true },
+          originalName: { type: String, default: "" },
+          mimeType: { type: String, default: "" },
+          size: { type: Number, default: 0 },
+          uploadedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

@@ -1,16 +1,34 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, FileText, ImagePlus, X } from "lucide-react";
 import SEO from "@/components/common/SEO";
 import { authServices } from "../../services/authServices";
 import { getUser, setUser } from "../../store/auth/authSlice";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 
+const API_BASE = String(import.meta.env.VITE_REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
+
+const resolveUploadUrl = (path) => {
+  const raw = String(path || "").trim();
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("/")) return `${API_BASE}${raw}`;
+  return `${API_BASE}/${raw}`;
+};
+
+const listToCsv = (value) =>
+  Array.isArray(value) ? value.filter(Boolean).join(", ") : String(value || "");
+
 export default function UserDashboardSettings() {
   const dispatch = useDispatch();
   const { userData, token } = useSelector(getUser);
+  const isFamilyUser =
+    userData?.role === "user" &&
+    !["admin", "authenticator", "moderator"].includes(userData?.user_type);
+
   const [name, setName] = useState(userData?.name || "");
   const [nameLoading, setNameLoading] = useState(false);
+  const [careLoading, setCareLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: "",
@@ -28,6 +46,49 @@ export default function UserDashboardSettings() {
     newPassword: false,
     confirmPassword: false,
   });
+
+  const [careForm, setCareForm] = useState({
+    bio: userData?.bio || "",
+    medical_issues: userData?.medical_issues || "",
+    care_background: userData?.care_background || "",
+    desired_services: listToCsv(userData?.desired_services),
+    desired_amenities: listToCsv(userData?.desired_amenities),
+  });
+  const [keptDocuments, setKeptDocuments] = useState(
+    Array.isArray(userData?.care_documents) ? userData.care_documents : [],
+  );
+  const [newFiles, setNewFiles] = useState([]);
+
+  useEffect(() => {
+    setName(userData?.name || "");
+    setCareForm({
+      bio: userData?.bio || "",
+      medical_issues: userData?.medical_issues || "",
+      care_background: userData?.care_background || "",
+      desired_services: listToCsv(userData?.desired_services),
+      desired_amenities: listToCsv(userData?.desired_amenities),
+    });
+    setKeptDocuments(
+      Array.isArray(userData?.care_documents) ? userData.care_documents : [],
+    );
+  }, [userData]);
+
+  const newFilePreviews = useMemo(
+    () =>
+      newFiles.map((file) => ({
+        file,
+        url: file.type?.startsWith("image/") ? URL.createObjectURL(file) : "",
+      })),
+    [newFiles],
+  );
+
+  useEffect(() => {
+    return () => {
+      newFilePreviews.forEach((item) => {
+        if (item.url) URL.revokeObjectURL(item.url);
+      });
+    };
+  }, [newFilePreviews]);
 
   const handleNameUpdate = async (e) => {
     e.preventDefault();
@@ -54,6 +115,43 @@ export default function UserDashboardSettings() {
     }
   };
 
+  const handleCareProfileUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      setCareLoading(true);
+      const payload = new FormData();
+      payload.append("name", name.trim() || userData?.name || "");
+      payload.append("bio", careForm.bio);
+      payload.append("medical_issues", careForm.medical_issues);
+      payload.append("care_background", careForm.care_background);
+      payload.append("desired_services", careForm.desired_services);
+      payload.append("desired_amenities", careForm.desired_amenities);
+      payload.append(
+        "keep_document_paths",
+        JSON.stringify(keptDocuments.map((doc) => doc.path).filter(Boolean)),
+      );
+      newFiles.forEach((file) => payload.append("documents", file));
+
+      const response = await authServices.updateUserInfo(payload);
+      const updatedUser = response?.data?.user;
+      if (updatedUser) {
+        dispatch(setUser({ user: updatedUser, token, tokenExpire: null }));
+        setKeptDocuments(
+          Array.isArray(updatedUser.care_documents) ? updatedUser.care_documents : [],
+        );
+        setNewFiles([]);
+      }
+      toastAuthSuccess("Care profile saved", "Your care preferences were updated.");
+    } catch (error) {
+      toastAuthError(error, {
+        fallbackTitle: "Could not save care profile",
+        fallbackDescription: "Please check your files and try again.",
+      });
+    } finally {
+      setCareLoading(false);
+    }
+  };
+
   const handlePasswordUpdate = async (e) => {
     e.preventDefault();
     const nextErrors = {
@@ -74,7 +172,7 @@ export default function UserDashboardSettings() {
       }));
       toastAuthError(
         { response: { status: 400, data: { message: "Passwords do not match." } } },
-        { fallbackTitle: "Password mismatch" }
+        { fallbackTitle: "Password mismatch" },
       );
       return;
     }
@@ -116,7 +214,7 @@ export default function UserDashboardSettings() {
         <p className="mt-1 text-xs text-slate-500">
           Email cannot be updated from settings.
         </p>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
+        <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">Name</label>
         <input
           type="text"
           value={name}
@@ -137,6 +235,190 @@ export default function UserDashboardSettings() {
           {nameLoading ? "Updating..." : "Update Name"}
         </button>
       </form>
+
+      {isFamilyUser ? (
+        <form
+          onSubmit={handleCareProfileUpdate}
+          className="rounded-xl border border-slate-200 bg-white p-5"
+        >
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Care Profile</h2>
+          <p className="mb-4 text-sm text-slate-500">
+            Share medical context, preferred services, and optional documents with CareMatch.
+          </p>
+
+          <label className="mb-1 block text-sm font-medium text-slate-700">Bio</label>
+          <textarea
+            value={careForm.bio}
+            onChange={(e) => setCareForm((prev) => ({ ...prev, bio: e.target.value }))}
+            rows={3}
+            placeholder="Short introduction about the care seeker or family situation"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+          />
+
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+            Medical Issues
+          </label>
+          <textarea
+            value={careForm.medical_issues}
+            onChange={(e) =>
+              setCareForm((prev) => ({ ...prev, medical_issues: e.target.value }))
+            }
+            rows={3}
+            placeholder="Diagnoses, mobility needs, medications, or conditions to keep in mind"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+          />
+
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+            Background
+          </label>
+          <textarea
+            value={careForm.care_background}
+            onChange={(e) =>
+              setCareForm((prev) => ({ ...prev, care_background: e.target.value }))
+            }
+            rows={3}
+            placeholder="Living situation, prior care history, timeline, or other context"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+          />
+
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+            Services Wanted — Use Comma in Between
+          </label>
+          <input
+            type="text"
+            value={careForm.desired_services}
+            onChange={(e) =>
+              setCareForm((prev) => ({ ...prev, desired_services: e.target.value }))
+            }
+            placeholder="e.g. medication management, physical therapy, memory care"
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+          />
+
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+            Amenities Wanted — Use Comma in Between
+          </label>
+          <input
+            type="text"
+            value={careForm.desired_amenities}
+            onChange={(e) =>
+              setCareForm((prev) => ({ ...prev, desired_amenities: e.target.value }))
+            }
+            placeholder="e.g. private rooms, garden, pet friendly"
+            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+          />
+
+          <div className="mt-4">
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Images / Documents (optional)
+            </label>
+            <p className="mb-2 text-xs text-slate-500">
+              Upload images or PDFs/docs (max 6 files, 8MB each).
+            </p>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+              <ImagePlus className="h-4 w-4 text-[#00B8DB]" />
+              Add files
+              <input
+                type="file"
+                accept="image/*,.pdf,.doc,.docx,application/pdf"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  if (!picked.length) return;
+                  setNewFiles((prev) => [...prev, ...picked].slice(0, 6));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+
+            {(keptDocuments.length > 0 || newFilePreviews.length > 0) && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {keptDocuments.map((doc) => {
+                  const isImage = String(doc.mimeType || "").startsWith("image/");
+                  const href = resolveUploadUrl(doc.path);
+                  return (
+                    <div
+                      key={doc.path}
+                      className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2"
+                    >
+                      {isImage ? (
+                        <img
+                          src={href}
+                          alt={doc.originalName || "Document"}
+                          className="h-12 w-12 rounded object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100">
+                          <FileText className="h-5 w-5 text-slate-500" />
+                        </div>
+                      )}
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="min-w-0 flex-1 truncate text-xs font-medium text-[#00B8DB] hover:underline"
+                      >
+                        {doc.originalName || doc.path}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setKeptDocuments((prev) =>
+                            prev.filter((item) => item.path !== doc.path),
+                          )
+                        }
+                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        aria-label="Remove document"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+                {newFilePreviews.map((item, index) => (
+                  <div
+                    key={`${item.file.name}-${index}`}
+                    className="flex items-center gap-2 rounded-lg border border-cyan-100 bg-cyan-50/40 p-2"
+                  >
+                    {item.url ? (
+                      <img
+                        src={item.url}
+                        alt={item.file.name}
+                        className="h-12 w-12 rounded object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded bg-white">
+                        <FileText className="h-5 w-5 text-slate-500" />
+                      </div>
+                    )}
+                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">
+                      {item.file.name}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNewFiles((prev) => prev.filter((_, i) => i !== index))
+                      }
+                      className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+                      aria-label="Remove new file"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={careLoading}
+            className="mt-5 rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {careLoading ? "Saving..." : "Save Care Profile"}
+          </button>
+        </form>
+      ) : null}
 
       <form
         onSubmit={handlePasswordUpdate}
@@ -280,4 +562,3 @@ export default function UserDashboardSettings() {
     </div>
   );
 }
-

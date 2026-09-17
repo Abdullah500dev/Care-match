@@ -1,5 +1,7 @@
 import validator from "email-validator";
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import jwt from "jsonwebtoken";
 
 import catchAsyncError from "../middleware/catchAsyncErrors.js";
@@ -345,10 +347,9 @@ export const getUserInfo = catchAsyncError(async (req, res, next) => {
   }
 });
 
-// Update user info
+// Update user info (name + family care profile fields / optional uploads)
 export const updateUserInfo = catchAsyncError(async (req, res, next) => {
   try {
-    const { name } = req.body;
     const userId = req.user?.id;
     const user = await User.findById(userId);
 
@@ -356,14 +357,129 @@ export const updateUserInfo = catchAsyncError(async (req, res, next) => {
       return next(new ErrorHandler("User not found", 404));
     }
 
-    if (name) {
-      user.name = name;
+    const {
+      name,
+      bio,
+      medical_issues,
+      care_background,
+      desired_services,
+      desired_amenities,
+      keep_document_paths,
+    } = req.body || {};
+
+    if (name != null && String(name).trim()) {
+      user.name = String(name).trim();
+    }
+
+    const isFamilyUser =
+      user.role === "user" &&
+      !["admin", "authenticator", "moderator"].includes(user.user_type);
+
+    if (isFamilyUser) {
+      if (bio != null) {
+        user.bio = String(bio).trim().slice(0, 2000);
+      }
+      if (medical_issues != null) {
+        user.medical_issues = String(medical_issues).trim().slice(0, 4000);
+      }
+      if (care_background != null) {
+        user.care_background = String(care_background).trim().slice(0, 4000);
+      }
+
+      const toStringList = (value) => {
+        if (Array.isArray(value)) {
+          return value
+            .map((item) => String(item || "").trim())
+            .filter(Boolean)
+            .slice(0, 40);
+        }
+        if (value == null) return null;
+        if (value === "") return [];
+        return String(value)
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .slice(0, 40);
+      };
+
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "desired_services")) {
+        const services = toStringList(desired_services);
+        if (services) user.desired_services = services;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "desired_amenities")) {
+        const amenities = toStringList(desired_amenities);
+        if (amenities) user.desired_amenities = amenities;
+      }
+
+      const previousDocs = Array.isArray(user.care_documents)
+        ? user.care_documents
+        : [];
+      const uploaded = Array.isArray(req.files) ? req.files : [];
+      const shouldUpdateDocuments =
+        uploaded.length > 0 ||
+        Object.prototype.hasOwnProperty.call(req.body || {}, "keep_document_paths");
+
+      if (shouldUpdateDocuments) {
+        let keepPaths = previousDocs.map((doc) => doc.path).filter(Boolean);
+
+        if (keep_document_paths != null && keep_document_paths !== "") {
+          try {
+            const parsed =
+              typeof keep_document_paths === "string"
+                ? JSON.parse(keep_document_paths)
+                : keep_document_paths;
+            if (Array.isArray(parsed)) {
+              const allowed = new Set(previousDocs.map((doc) => doc.path));
+              keepPaths = parsed
+                .map((p) => String(p || "").trim())
+                .filter((p) => allowed.has(p));
+            }
+          } catch {
+            // keep previous paths on parse failure
+          }
+        } else if (
+          Object.prototype.hasOwnProperty.call(req.body || {}, "keep_document_paths")
+        ) {
+          keepPaths = [];
+        }
+
+        const keptDocs = previousDocs.filter((doc) => keepPaths.includes(doc.path));
+        const removedDocs = previousDocs.filter((doc) => !keepPaths.includes(doc.path));
+
+        for (const doc of removedDocs) {
+          try {
+            const relative = String(doc.path || "").replace(/^\//, "");
+            if (relative.startsWith("uploads/user-care/")) {
+              const absolute = path.join(process.cwd(), relative);
+              if (fs.existsSync(absolute)) fs.unlinkSync(absolute);
+            }
+          } catch {
+            // ignore file cleanup errors
+          }
+        }
+
+        const newDocs = uploaded.map((file) => ({
+          path: `/uploads/user-care/${file.filename}`,
+          originalName: file.originalname || file.filename,
+          mimeType: file.mimetype || "",
+          size: file.size || 0,
+          uploadedAt: new Date(),
+        }));
+
+        user.care_documents = [...keptDocs, ...newDocs].slice(0, 12);
+        user.markModified("care_documents");
+      }
+
+      user.markModified("desired_services");
+      user.markModified("desired_amenities");
     }
 
     await user.save();
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
+      message: "Profile updated successfully",
       user,
     });
   } catch (error) {
