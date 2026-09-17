@@ -31,7 +31,7 @@ const envFile = process.env.NODE_ENV === "production" ? ".env.production" : ".en
 dotenv.config({ path: path.resolve(__dirname, envFile) });
 
 const app = express();
-const port = process.env.PORT;
+const port = Number.parseInt(String(process.env.PORT || "3002"), 10) || 3002;
 const httpServer = http.createServer(app);
 const corsOrigin = process.env.CLIENT_BASE_URL;
 const io = initSocketServer(httpServer, corsOrigin);
@@ -63,6 +63,16 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use("/uploads", express.static("uploads"));
+
+/** Lightweight health probe for deploy / load balancers (no DB dependency). */
+app.get("/health", (_req, res) => {
+  res.status(200).json({
+    ok: true,
+    service: process.env.PROJECT_NAME || "care-match-ai",
+    port,
+    env: process.env.NODE_ENV || "development",
+  });
+});
 
 // Swagger Documentation
 app.use(

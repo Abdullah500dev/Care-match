@@ -79,22 +79,37 @@ jobs:
           rm -f package-lock.json
           yarn install --frozen-lockfile
 
-          # Restart PM2 app (server listens on PORT from env, default 3002 in start script)
+          # Restart PM2 app — env must be set via ecosystem (inline PORT=… is not passed to the app)
           pm2 delete care-match-server || true
           pm2 flush care-match-server || true
-          sleep 5
+          sleep 2
 
-          # Start server with Node (PM2 defaults to node; do not use `yarn`/`npm` as the script — they are shell, not JS)
-          cd /home/ubuntu/care-match-ai/server
-          if ! NODE_ENV=production PORT=3002 pm2 start index.js --name "care-match-server" --cwd /home/ubuntu/care-match-ai/server; then
+          cat > /home/ubuntu/care-match-ai/server/ecosystem.config.cjs <<'EOF'
+          module.exports = {
+            apps: [
+              {
+                name: "care-match-server",
+                script: "index.js",
+                cwd: "/home/ubuntu/care-match-ai/server",
+                instances: 1,
+                exec_mode: "fork",
+                env: {
+                  NODE_ENV: "production",
+                  PORT: "3002",
+                },
+              },
+            ],
+          };
+          EOF
+
+          if ! pm2 start /home/ubuntu/care-match-ai/server/ecosystem.config.cjs; then
             echo "❌ Failed to start server"
+            pm2 logs care-match-server --lines 80 --nostream || true
             exit 1
           fi
-          
-          # Wait for server to start
-          sleep 5
 
-          # Save PM2 configuration
+          # Wait for listen
+          sleep 8
           pm2 save
 
     - name: Verify Deployment
@@ -114,9 +129,25 @@ jobs:
             exit 1
           fi
 
-          # Check server health (matches server package.json: PORT=3002)
-          if ! curl -s http://localhost:3002/ > /dev/null; then
+          # Health check with retries (PORT=3002 via ecosystem)
+          HEALTH_OK=0
+          for i in 1 2 3 4 5 6 7 8; do
+            if curl -sf "http://127.0.0.1:3002/health" >/dev/null; then
+              HEALTH_OK=1
+              break
+            fi
+            echo "Waiting for health endpoint… attempt $i"
+            sleep 2
+          done
+
+          if [ "$HEALTH_OK" -ne 1 ]; then
             echo "❌ Server health check failed on port 3002"
+            echo "--- pm2 describe ---"
+            pm2 describe care-match-server || true
+            echo "--- recent logs ---"
+            pm2 logs care-match-server --lines 100 --nostream || true
+            echo "--- listening ports ---"
+            ss -tlnp | grep -E '3002|node' || netstat -tlnp 2>/dev/null | grep -E '3002|node' || true
             exit 1
           fi
 
