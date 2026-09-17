@@ -79,28 +79,10 @@ jobs:
           rm -f package-lock.json
           yarn install --frozen-lockfile
 
-          # Restart PM2 app — env must be set via ecosystem (inline PORT=… is not passed to the app)
+          # Restart PM2 (PORT/NODE_ENV come from committed ecosystem.config.cjs)
           pm2 delete care-match-server || true
           pm2 flush care-match-server || true
           sleep 2
-
-          cat > /home/ubuntu/care-match-ai/server/ecosystem.config.cjs <<'EOF'
-          module.exports = {
-            apps: [
-              {
-                name: "care-match-server",
-                script: "index.js",
-                cwd: "/home/ubuntu/care-match-ai/server",
-                instances: 1,
-                exec_mode: "fork",
-                env: {
-                  NODE_ENV: "production",
-                  PORT: "3002",
-                },
-              },
-            ],
-          };
-          EOF
 
           if ! pm2 start /home/ubuntu/care-match-ai/server/ecosystem.config.cjs; then
             echo "❌ Failed to start server"
