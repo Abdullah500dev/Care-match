@@ -347,7 +347,7 @@ export const getUserInfo = catchAsyncError(async (req, res, next) => {
   }
 });
 
-// Update user info (name + family care profile fields / optional uploads)
+// Update user info (name + family medical record fields / optional uploads)
 export const updateUserInfo = catchAsyncError(async (req, res, next) => {
   try {
     const userId = req.user?.id;

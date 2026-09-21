@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
 import { Eye, EyeOff, FileText, ImagePlus, X } from "lucide-react";
 import SEO from "@/components/common/SEO";
 import { authServices } from "../../services/authServices";
@@ -21,6 +22,7 @@ const listToCsv = (value) =>
 
 export default function UserDashboardSettings() {
   const dispatch = useDispatch();
+  const location = useLocation();
   const { userData, token } = useSelector(getUser);
   const isFamilyUser =
     userData?.role === "user" &&
@@ -72,6 +74,17 @@ export default function UserDashboardSettings() {
       Array.isArray(userData?.care_documents) ? userData.care_documents : [],
     );
   }, [userData]);
+
+  useEffect(() => {
+    if (!isFamilyUser || location.hash !== "#medical-record") return undefined;
+    const timer = window.setTimeout(() => {
+      document.getElementById("medical-record")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [isFamilyUser, location.hash, location.pathname]);
 
   const newFilePreviews = useMemo(
     () =>
@@ -141,10 +154,10 @@ export default function UserDashboardSettings() {
         );
         setNewFiles([]);
       }
-      toastAuthSuccess("Care profile saved", "Your care preferences were updated.");
+      toastAuthSuccess("Medical record saved", "Your care preferences were updated.");
     } catch (error) {
       toastAuthError(error, {
-        fallbackTitle: "Could not save care profile",
+        fallbackTitle: "Could not save medical record",
         fallbackDescription: "Please check your files and try again.",
       });
     } finally {
@@ -238,10 +251,11 @@ export default function UserDashboardSettings() {
 
       {isFamilyUser ? (
         <form
+          id="medical-record"
           onSubmit={handleCareProfileUpdate}
-          className="rounded-xl border border-slate-200 bg-white p-5"
+          className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-5"
         >
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Care Profile</h2>
+          <h2 className="mb-1 text-lg font-semibold text-slate-900">Medical Record</h2>
           <p className="mb-4 text-sm text-slate-500">
             Share medical context, preferred services, and optional documents with CareMatch.
           </p>
@@ -415,7 +429,7 @@ export default function UserDashboardSettings() {
             disabled={careLoading}
             className="mt-5 rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
-            {careLoading ? "Saving..." : "Save Care Profile"}
+            {careLoading ? "Saving..." : "Save Medical Record"}
           </button>
         </form>
       ) : null}

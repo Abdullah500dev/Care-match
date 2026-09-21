@@ -105,7 +105,7 @@ const userSchema = new mongoose.Schema(
       sparse: true,
       index: true,
     },
-    /** Family care profile — preferences shared with facilities / matching. */
+    /** Family medical record — preferences shared with facilities / matching. */
     bio: {
       type: String,
       default: "",
