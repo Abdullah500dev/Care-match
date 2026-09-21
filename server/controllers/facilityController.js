@@ -2639,6 +2639,7 @@ export const getGooglePlacePhotoByPlaceIdProxy = catchAsyncError(async (req, res
 /**
  * POST /api/facilities/recommend-from-profile
  * Carrie-style GPT intake extraction from a family medical record.
+ * Also analyzes uploaded care images (vision) and PDF text when present.
  * Returns preferences for the same /discover → Care Explorer path.
  */
 export const postRecommendFromProfile = catchAsyncError(async (req, res, next) => {
@@ -2662,9 +2663,36 @@ export const postRecommendFromProfile = catchAsyncError(async (req, res, next) =
     );
   }
 
+  // Only analyze documents that belong to this user (path allow-list).
+  let documents = [];
+  try {
+    const user = await User.findById(req.user?.id).select("care_documents").lean();
+    const owned = Array.isArray(user?.care_documents) ? user.care_documents : [];
+    const ownedByPath = new Map(
+      owned
+        .filter((d) => d?.path)
+        .map((d) => [String(d.path), d]),
+    );
+
+    const requested = Array.isArray(body.document_paths)
+      ? body.document_paths.map((p) => String(p || "").trim()).filter(Boolean)
+      : [];
+
+    if (requested.length > 0) {
+      documents = requested
+        .map((p) => ownedByPath.get(p))
+        .filter(Boolean)
+        .slice(0, 4);
+    } else {
+      documents = owned.slice(0, 4);
+    }
+  } catch {
+    documents = [];
+  }
+
   let result;
   try {
-    result = await extractPreferencesFromMedicalProfile(body);
+    result = await extractPreferencesFromMedicalProfile(body, documents);
   } catch (err) {
     return next(
       new ErrorHandler(
@@ -2681,11 +2709,13 @@ export const postRecommendFromProfile = catchAsyncError(async (req, res, next) =
       message:
         "Add a 5-digit ZIP code (and budget/radius if needed) so we can search nearby communities.",
       preferences: result?.preferences || null,
+      documentsAnalyzed: result?.documentsAnalyzed || 0,
     });
   }
 
   res.status(200).json({
     success: true,
     preferences: result.preferences,
+    documentsAnalyzed: result.documentsAnalyzed || 0,
   });
 });

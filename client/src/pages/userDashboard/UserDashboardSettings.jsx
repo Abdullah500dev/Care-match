@@ -258,6 +258,38 @@ export default function UserDashboardSettings() {
 
     setRecommendLoading(true);
     try {
+      // Persist any new uploads so the server can analyze them.
+      let docsForRecommend = keptDocuments;
+      if (newFiles.length > 0) {
+        const payload = new FormData();
+        payload.append("name", name.trim() || userData?.name || "");
+        payload.append("bio", careForm.bio);
+        payload.append("medical_issues", careForm.medical_issues);
+        payload.append("care_background", careForm.care_background);
+        payload.append("desired_services", careForm.desired_services);
+        payload.append("desired_amenities", careForm.desired_amenities);
+        payload.append("search_zip_code", careForm.search_zip_code);
+        payload.append("search_location", careForm.search_location);
+        payload.append("budget_max_monthly", careForm.budget_max_monthly);
+        payload.append("max_distance_miles", careForm.max_distance_miles);
+        payload.append(
+          "keep_document_paths",
+          JSON.stringify(keptDocuments.map((doc) => doc.path).filter(Boolean)),
+        );
+        newFiles.forEach((file) => payload.append("documents", file));
+
+        const saveRes = await authServices.updateUserInfo(payload);
+        const updatedUser = saveRes?.data?.user;
+        if (updatedUser) {
+          dispatch(setUser({ user: updatedUser, token, tokenExpire: null }));
+          docsForRecommend = Array.isArray(updatedUser.care_documents)
+            ? updatedUser.care_documents
+            : [];
+          setKeptDocuments(docsForRecommend);
+          setNewFiles([]);
+        }
+      }
+
       const profilePayload = {
         bio: careForm.bio,
         medical_issues: careForm.medical_issues,
@@ -268,6 +300,7 @@ export default function UserDashboardSettings() {
         search_location: careForm.search_location,
         budget_max_monthly: careForm.budget_max_monthly || undefined,
         max_distance_miles: careForm.max_distance_miles || 25,
+        document_paths: docsForRecommend.map((doc) => doc.path).filter(Boolean),
       };
 
       const { data } = await postRecommendFromProfile(profilePayload);
@@ -287,9 +320,18 @@ export default function UserDashboardSettings() {
         : [];
       setLastMatchCount(matches.length);
 
+      const docsNote =
+        Number(data.documentsAnalyzed) > 0
+          ? ` Used ${data.documentsAnalyzed} uploaded file(s) in matching.`
+          : "";
+
       if (matches.length === 0) {
         toast.message("No facilities found nearby", {
-          description: "Try a wider radius or a different ZIP.",
+          description: `Try a wider radius or a different ZIP.${docsNote}`,
+        });
+      } else if (docsNote) {
+        toast.success("Recommendations ready", {
+          description: docsNote.trim(),
         });
       }
 
@@ -549,7 +591,8 @@ export default function UserDashboardSettings() {
               Images / Documents (optional)
             </label>
             <p className="mb-2 text-xs text-slate-500">
-              Upload images or PDFs/docs (max 6 files, 8MB each).
+              Upload images or PDFs (max 6 files, 8MB each). Images and PDFs are
+              reviewed by Carrie when you tap Get Recommendations.
             </p>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
               <ImagePlus className="h-4 w-4 text-[#00B8DB]" />
