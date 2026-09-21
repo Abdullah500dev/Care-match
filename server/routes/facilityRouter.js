@@ -10,6 +10,7 @@ import {
   listFacilities,
   listPublicFacilities,
   postDiscoverFacilities,
+  postRecommendFromProfile,
   getGooglePlacePhotoProxy,
   getGooglePlacePhotoByPlaceIdProxy,
   getFacility,
@@ -31,6 +32,7 @@ const router = express.Router();
 
 router.get("/public", listPublicFacilities);
 router.post("/discover", postDiscoverFacilities);
+router.post("/recommend-from-profile", isAutheticated, postRecommendFromProfile);
 router.get("/google-place-photo", getGooglePlacePhotoProxy);
 router.get("/google-place-photo-by-place-id", getGooglePlacePhotoByPlaceIdProxy);
 router.get("/apify-sync-status", isAutheticated, getApifySchedulerStatus);

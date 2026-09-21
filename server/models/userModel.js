@@ -132,6 +132,27 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    /** Search prefs used for medical-record → facility recommendations. */
+    search_zip_code: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 10,
+    },
+    search_location: {
+      type: String,
+      default: "",
+      trim: true,
+      maxlength: 200,
+    },
+    budget_max_monthly: {
+      type: Number,
+      default: null,
+    },
+    max_distance_miles: {
+      type: Number,
+      default: null,
+    },
     care_documents: {
       type: [
         {

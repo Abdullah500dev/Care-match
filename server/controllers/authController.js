@@ -364,6 +364,10 @@ export const updateUserInfo = catchAsyncError(async (req, res, next) => {
       care_background,
       desired_services,
       desired_amenities,
+      search_zip_code,
+      search_location,
+      budget_max_monthly,
+      max_distance_miles,
       keep_document_paths,
     } = req.body || {};
 
@@ -384,6 +388,29 @@ export const updateUserInfo = catchAsyncError(async (req, res, next) => {
       }
       if (care_background != null) {
         user.care_background = String(care_background).trim().slice(0, 4000);
+      }
+
+      if (search_zip_code != null) {
+        user.search_zip_code = String(search_zip_code)
+          .replace(/\D/g, "")
+          .slice(0, 5);
+      }
+      if (search_location != null) {
+        user.search_location = String(search_location).trim().slice(0, 200);
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(req.body || {}, "budget_max_monthly")
+      ) {
+        const n = Number(budget_max_monthly);
+        user.budget_max_monthly =
+          Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+      }
+      if (
+        Object.prototype.hasOwnProperty.call(req.body || {}, "max_distance_miles")
+      ) {
+        const n = Number(max_distance_miles);
+        user.max_distance_miles =
+          Number.isFinite(n) && n > 0 ? Math.round(n) : null;
       }
 
       const toStringList = (value) => {

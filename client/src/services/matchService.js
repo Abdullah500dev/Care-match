@@ -15,3 +15,11 @@ export function postMatchRecommendations(preferences) {
 export function postDiscoverFacilities(payload) {
   return apiClient.post("/api/facilities/discover", payload);
 }
+
+/**
+ * Carrie-style GPT extraction from medical record → intake preferences.
+ * @param {object} profile
+ */
+export function postRecommendFromProfile(profile) {
+  return apiClient.post("/api/facilities/recommend-from-profile", profile);
+}

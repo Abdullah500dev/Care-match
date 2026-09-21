@@ -31,6 +31,7 @@ import { OPENAI_CHAT_MODEL } from "../config/chatConstants.js";
 import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.js";
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
+import { extractPreferencesFromMedicalProfile } from "../services/medicalProfileRecommend.js";
 import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
 import {
   isAggregatorListingUrl,
@@ -2633,4 +2634,58 @@ export const getGooglePlacePhotoByPlaceIdProxy = catchAsyncError(async (req, res
   res.setHeader("Content-Type", contentType);
   res.setHeader("Cache-Control", "public, max-age=86400");
   res.status(200).send(body);
+});
+
+/**
+ * POST /api/facilities/recommend-from-profile
+ * Carrie-style GPT intake extraction from a family medical record.
+ * Returns preferences for the same /discover → Care Explorer path.
+ */
+export const postRecommendFromProfile = catchAsyncError(async (req, res, next) => {
+  const body = req.body || {};
+  const bio = String(body.bio || "").trim();
+  const medicalIssues = String(body.medical_issues || "").trim();
+  const background = String(body.care_background || "").trim();
+  const hasServices =
+    (Array.isArray(body.desired_services) && body.desired_services.some(Boolean)) ||
+    String(body.desired_services || "").trim().length > 0;
+  const hasAmenities =
+    (Array.isArray(body.desired_amenities) && body.desired_amenities.some(Boolean)) ||
+    String(body.desired_amenities || "").trim().length > 0;
+
+  if (!bio || !medicalIssues || (!background && !hasServices && !hasAmenities)) {
+    return next(
+      new ErrorHandler(
+        "Complete your medical record (bio, medical issues, and background or preferences) before requesting recommendations.",
+        400,
+      ),
+    );
+  }
+
+  let result;
+  try {
+    result = await extractPreferencesFromMedicalProfile(body);
+  } catch (err) {
+    return next(
+      new ErrorHandler(
+        err?.message || "Could not build recommendations from your medical record",
+        err?.statusCode || 502,
+      ),
+    );
+  }
+
+  if (!result?.preferences || (Array.isArray(result.missing) && result.missing.length > 0)) {
+    return res.status(200).json({
+      success: false,
+      missing: result?.missing || ["searchZipCode"],
+      message:
+        "Add a 5-digit ZIP code (and budget/radius if needed) so we can search nearby communities.",
+      preferences: result?.preferences || null,
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    preferences: result.preferences,
+  });
 });
