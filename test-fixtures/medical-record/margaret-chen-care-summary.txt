@@ -1,0 +1,33 @@
+CAREMATCH TEST FIXTURE — NOT A REAL PATIENT
+Discharge / Care Summary
+
+Patient: Margaret Chen  Age: 78  DOB: 03/14/1947
+Address context: Scottsdale, AZ  ZIP 85251
+
+Primary diagnoses:
+- Mild cognitive impairment / early memory concerns
+- Essential hypertension
+- Type 2 diabetes mellitus (oral medications)
+- Osteoarthritis with intermittent walker use outdoors
+- History of fall (2025) — no fracture
+
+Functional needs:
+- Medication management (multiple daily meds)
+- Assistance with bathing and dressing 2-3x/week
+- Diabetic-friendly meal planning
+- Fall-prevention and mobility support
+- Light physical therapy / balance exercises
+
+Accessibility / environment preferences:
+- Private room preferred
+- Wheelchair-accessible entrance and bathroom
+- Outdoor garden or walking path
+- On-site parking for family visits
+
+Care setting recommendation: Assisted Living
+Timeline: prefer move-in within 30-60 days
+Monthly budget guidance: up to approximately $6,500
+Search radius: about 25 miles from 85251
+
+Notes: Friendly, enjoys calm social activities.
+Family visits weekly. Avoid large, high-stimulus campuses.

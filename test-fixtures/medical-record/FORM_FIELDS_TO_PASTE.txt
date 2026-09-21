@@ -1,0 +1,28 @@
+CAREMATCH MEDICAL RECORD — TEST PASTE (fictional)
+
+Bio:
+Daughter of 78-year-old Margaret Chen. Looking for assisted living near Phoenix so family can visit weekly. She is friendly, enjoys light social activities, and wants a calm community—not a large busy campus.
+
+Medical Issues:
+Mild cognitive decline (early memory care concern), hypertension, type 2 diabetes (oral meds), osteoarthritis with walker use outdoors, history of one fall in 2025. Needs medication management, help with bathing/dressing 2–3x/week, and diabetic-friendly meals. No dialysis. No oxygen.
+
+Background:
+Lived alone in Scottsdale for 12 years after spouse passed. Recently moved in with daughter temporarily after a fall. Previously independent with home health 2 days/week. Timeline: prefer move-in within 30–60 days. Budget flexible for the right fit with private room and outdoor space.
+
+Desired services:
+medication management, bathing assistance, diabetic meal support, physical therapy, memory support, fall prevention
+
+Amenities wanted:
+private room, garden or outdoor space, wheelchair accessible, on-site parking, activities for seniors
+
+Search ZIP: 85251
+City / Area: Scottsdale, AZ
+Max monthly budget: 6500
+Search radius (miles): 25
+
+UPLOAD (from test-fixtures/medical-record/):
+1. margaret-chen-care-summary.pdf
+2. margaret-chen-med-list.png
+3. (optional) margaret-chen-physician-note.pdf
+
+Then Save Medical Record → Get Recommendations

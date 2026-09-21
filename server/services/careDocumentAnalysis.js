@@ -1,7 +1,10 @@
 import fs from "fs";
 import path from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { fileURLToPath } from "url";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -61,6 +64,37 @@ function mimeForExt(ext) {
 }
 
 /**
+ * Extract text from a PDF. Prefers system `pdftotext`, falls back to pdf-parse.
+ * @param {string} absPath
+ * @returns {Promise<string>}
+ */
+async function extractPdfText(absPath) {
+  try {
+    const { stdout } = await execFileAsync(
+      "pdftotext",
+      ["-layout", absPath, "-"],
+      { timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+    );
+    const text = String(stdout || "").replace(/\s+/g, " ").trim();
+    if (text) return text.slice(0, MAX_PDF_CHARS);
+  } catch {
+    // fall through
+  }
+
+  try {
+    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
+    const buf = fs.readFileSync(absPath);
+    const parsed = await pdfParse(buf);
+    return String(parsed?.text || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, MAX_PDF_CHARS);
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Read allowed care documents into text excerpts + image data-URLs for GPT.
  * @param {Array<{ path?: string, originalName?: string, mimeType?: string }>} docs
  * @returns {Promise<{ textNotes: string, imageParts: object[], analyzedCount: number }>}
@@ -105,22 +139,19 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
       }
 
       if (PDF_EXTS.has(ext)) {
-        const buf = fs.readFileSync(abs);
-        const parsed = await pdfParse(buf);
-        const text = String(parsed?.text || "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, MAX_PDF_CHARS);
+        const text = await extractPdfText(abs);
         if (text) {
           textChunks.push(`--- PDF "${label}" ---\n${text}`);
           analyzedCount += 1;
         } else {
-          textChunks.push(`[PDF "${label}" had little extractable text]`);
+          // Image-only / scanned PDF: still count as present; vision path prefers PNG/JPG.
+          textChunks.push(
+            `[PDF "${label}" had little extractable text — prefer a text PDF or PNG/JPG photo of the page]`,
+          );
         }
         continue;
       }
 
-      // .doc / .docx — filename only (binary); prefer PDF/images for analysis
       textChunks.push(
         `[Document "${label}" uploaded (${ext || "unknown"}). Prefer PDF/image for auto-analysis; use form fields for key needs.]`,
       );

@@ -1,0 +1,17 @@
+CareMatch Medical Record — test pack (fictional patient: Margaret Chen)
+
+FILES (upload these):
+1) margaret-chen-care-summary.pdf   ← discharge summary (text PDF)
+2) margaret-chen-med-list.png       ← medication list image (vision test)
+3) margaret-chen-physician-note.pdf ← short doctor note (optional)
+
+FOLDER:
+/home/abdullah/care-match/care-match-ai/test-fixtures/medical-record/
+
+STEPS:
+1. Open portal Settings → Medical Record
+2. Paste all fields from FORM_FIELDS_TO_PASTE.txt
+3. Upload PDF + PNG above
+4. Save Medical Record
+5. Click Get Recommendations
+6. Expect Care Explorer matches near Scottsdale / Phoenix (ZIP 85251)
