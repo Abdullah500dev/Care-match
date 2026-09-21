@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, FileText, ImagePlus, Loader2, Sparkles, X } from "lucide-react";
 import SEO from "@/components/common/SEO";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authServices } from "../../services/authServices";
 import {
   postDiscoverFacilities,
@@ -75,6 +76,13 @@ export default function UserDashboardSettings() {
   );
   const [newFiles, setNewFiles] = useState([]);
 
+  const tabFromHash = (hash) => {
+    if (hash === "#medical-record" && isFamilyUser) return "medical-record";
+    if (hash === "#password") return "password";
+    return "profile";
+  };
+  const [activeTab, setActiveTab] = useState(() => tabFromHash(location.hash));
+
   useEffect(() => {
     setName(userData?.name || "");
     setCareForm({
@@ -96,7 +104,11 @@ export default function UserDashboardSettings() {
   }, [userData]);
 
   useEffect(() => {
-    if (!isFamilyUser || location.hash !== "#medical-record") return undefined;
+    setActiveTab(tabFromHash(location.hash));
+  }, [location.hash, isFamilyUser]);
+
+  useEffect(() => {
+    if (!isFamilyUser || activeTab !== "medical-record") return undefined;
     const timer = window.setTimeout(() => {
       document.getElementById("medical-record")?.scrollIntoView({
         behavior: "smooth",
@@ -104,7 +116,19 @@ export default function UserDashboardSettings() {
       });
     }, 80);
     return () => window.clearTimeout(timer);
-  }, [isFamilyUser, location.hash, location.pathname]);
+  }, [isFamilyUser, activeTab, location.pathname]);
+
+  const handleTabChange = (value) => {
+    setActiveTab(value);
+    const nextHash =
+      value === "medical-record"
+        ? "#medical-record"
+        : value === "password"
+          ? "#password"
+          : "";
+    const base = `${location.pathname}${location.search}`;
+    navigate(`${base}${nextHash}`, { replace: true });
+  };
 
   const newFilePreviews = useMemo(
     () =>
@@ -401,465 +425,502 @@ export default function UserDashboardSettings() {
       <SEO title="Settings – CareMatch AI" />
       <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
 
-      <form
-        onSubmit={handleNameUpdate}
-        className="rounded-xl border border-slate-200 bg-white p-5"
-      >
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">Profile</h2>
-        <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
-        <input
-          type="email"
-          value={userData?.email || ""}
-          disabled
-          title="Email is locked and cannot be edited"
-          className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 opacity-90"
-        />
-        <p className="mt-1 text-xs text-slate-500">
-          Email cannot be updated from settings.
-        </p>
-        <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            if (nameError) setNameError("");
-          }}
-          className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
-            nameError ? "border-red-400" : "border-slate-200"
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList
+          className={`grid h-auto w-full gap-1 bg-slate-100 p-1 ${
+            isFamilyUser ? "grid-cols-3" : "grid-cols-2"
           }`}
-        />
-        {nameError ? <p className="mt-1 text-xs text-red-600">{nameError}</p> : null}
-        <button
-          type="submit"
-          disabled={nameLoading}
-          className="mt-4 rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
-          {nameLoading ? "Updating..." : "Update Name"}
-        </button>
-      </form>
+          <TabsTrigger
+            value="profile"
+            className="rounded-md px-3 py-2 text-sm data-[state=active]:bg-white data-[state=active]:text-[#00B8DB] data-[state=active]:shadow-sm"
+          >
+            Profile
+          </TabsTrigger>
+          {isFamilyUser ? (
+            <TabsTrigger
+              value="medical-record"
+              className="rounded-md px-3 py-2 text-sm data-[state=active]:bg-white data-[state=active]:text-[#00B8DB] data-[state=active]:shadow-sm"
+            >
+              Medical Record
+            </TabsTrigger>
+          ) : null}
+          <TabsTrigger
+            value="password"
+            className="rounded-md px-3 py-2 text-sm data-[state=active]:bg-white data-[state=active]:text-[#00B8DB] data-[state=active]:shadow-sm"
+          >
+            Password
+          </TabsTrigger>
+        </TabsList>
 
-      {isFamilyUser ? (
-        <form
-          id="medical-record"
-          onSubmit={handleCareProfileUpdate}
-          className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-5"
-        >
-          <h2 className="mb-1 text-lg font-semibold text-slate-900">Medical Record</h2>
-          <p className="mb-4 text-sm text-slate-500">
-            Share medical context, preferred services, and optional documents with CareMatch.
-          </p>
-
-          <label className="mb-1 block text-sm font-medium text-slate-700">Bio</label>
-          <textarea
-            value={careForm.bio}
-            onChange={(e) => setCareForm((prev) => ({ ...prev, bio: e.target.value }))}
-            rows={3}
-            placeholder="Short introduction about the care seeker or family situation"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-          />
-
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-            Medical Issues
-          </label>
-          <textarea
-            value={careForm.medical_issues}
-            onChange={(e) =>
-              setCareForm((prev) => ({ ...prev, medical_issues: e.target.value }))
-            }
-            rows={3}
-            placeholder="Diagnoses, mobility needs, medications, or conditions to keep in mind"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-          />
-
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-            Background
-          </label>
-          <textarea
-            value={careForm.care_background}
-            onChange={(e) =>
-              setCareForm((prev) => ({ ...prev, care_background: e.target.value }))
-            }
-            rows={3}
-            placeholder="Living situation, prior care history, timeline, or other context"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-          />
-
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-            Services Wanted — Use Comma in Between
-          </label>
-          <input
-            type="text"
-            value={careForm.desired_services}
-            onChange={(e) =>
-              setCareForm((prev) => ({ ...prev, desired_services: e.target.value }))
-            }
-            placeholder="e.g. medication management, physical therapy, memory care"
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-          />
-
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-            Amenities Wanted — Use Comma in Between
-          </label>
-          <input
-            type="text"
-            value={careForm.desired_amenities}
-            onChange={(e) =>
-              setCareForm((prev) => ({ ...prev, desired_amenities: e.target.value }))
-            }
-            placeholder="e.g. private rooms, garden, pet friendly"
-            className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-          />
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Search ZIP <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={5}
-                value={careForm.search_zip_code}
-                onChange={(e) =>
-                  setCareForm((prev) => ({
-                    ...prev,
-                    search_zip_code: e.target.value.replace(/\D/g, "").slice(0, 5),
-                  }))
-                }
-                placeholder="e.g. 85001"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                City / Area (optional)
-              </label>
-              <input
-                type="text"
-                value={careForm.search_location}
-                onChange={(e) =>
-                  setCareForm((prev) => ({ ...prev, search_location: e.target.value }))
-                }
-                placeholder="e.g. Phoenix, AZ"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Max monthly budget (USD)
-              </label>
-              <input
-                type="number"
-                min={500}
-                step={100}
-                value={careForm.budget_max_monthly}
-                onChange={(e) =>
-                  setCareForm((prev) => ({
-                    ...prev,
-                    budget_max_monthly: e.target.value,
-                  }))
-                }
-                placeholder="e.g. 6000"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Search radius (miles)
-              </label>
-              <input
-                type="number"
-                min={5}
-                max={100}
-                step={5}
-                value={careForm.max_distance_miles}
-                onChange={(e) =>
-                  setCareForm((prev) => ({
-                    ...prev,
-                    max_distance_miles: e.target.value,
-                  }))
-                }
-                placeholder="25"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Images / Documents (optional)
-            </label>
-            <p className="mb-2 text-xs text-slate-500">
-              Upload images or PDFs (max 6 files, 8MB each). Images and PDFs are
-              reviewed by Carrie when you tap Get Recommendations.
+        <TabsContent value="profile" className="mt-4">
+          <form
+            onSubmit={handleNameUpdate}
+            className="rounded-xl border border-slate-200 bg-white p-5"
+          >
+            <h2 className="mb-3 text-lg font-semibold text-slate-900">Profile</h2>
+            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+            <input
+              type="email"
+              value={userData?.email || ""}
+              disabled
+              title="Email is locked and cannot be edited"
+              className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 opacity-90"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Email cannot be updated from settings.
             </p>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
-              <ImagePlus className="h-4 w-4 text-[#00B8DB]" />
-              Add files
-              <input
-                type="file"
-                accept="image/*,.pdf,.doc,.docx,application/pdf"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  const picked = Array.from(e.target.files || []);
-                  if (!picked.length) return;
-                  setNewFiles((prev) => [...prev, ...picked].slice(0, 6));
-                  e.target.value = "";
-                }}
-              />
-            </label>
-
-            {(keptDocuments.length > 0 || newFilePreviews.length > 0) && (
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {keptDocuments.map((doc) => {
-                  const isImage = String(doc.mimeType || "").startsWith("image/");
-                  const href = resolveUploadUrl(doc.path);
-                  return (
-                    <div
-                      key={doc.path}
-                      className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2"
-                    >
-                      {isImage ? (
-                        <img
-                          src={href}
-                          alt={doc.originalName || "Document"}
-                          className="h-12 w-12 rounded object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100">
-                          <FileText className="h-5 w-5 text-slate-500" />
-                        </div>
-                      )}
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="min-w-0 flex-1 truncate text-xs font-medium text-[#00B8DB] hover:underline"
-                      >
-                        {doc.originalName || doc.path}
-                      </a>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setKeptDocuments((prev) =>
-                            prev.filter((item) => item.path !== doc.path),
-                          )
-                        }
-                        className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                        aria-label="Remove document"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-                {newFilePreviews.map((item, index) => (
-                  <div
-                    key={`${item.file.name}-${index}`}
-                    className="flex items-center gap-2 rounded-lg border border-cyan-100 bg-cyan-50/40 p-2"
-                  >
-                    {item.url ? (
-                      <img
-                        src={item.url}
-                        alt={item.file.name}
-                        className="h-12 w-12 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-12 w-12 items-center justify-center rounded bg-white">
-                        <FileText className="h-5 w-5 text-slate-500" />
-                      </div>
-                    )}
-                    <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">
-                      {item.file.name}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNewFiles((prev) => prev.filter((_, i) => i !== index))
-                      }
-                      className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700"
-                      aria-label="Remove new file"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError("");
+              }}
+              className={`h-10 w-full rounded-lg border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
+                nameError ? "border-red-400" : "border-slate-200"
+              }`}
+            />
+            {nameError ? <p className="mt-1 text-xs text-red-600">{nameError}</p> : null}
             <button
               type="submit"
-              disabled={careLoading || recommendLoading}
-              className="rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              disabled={nameLoading}
+              className="mt-4 rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
             >
-              {careLoading ? "Saving..." : "Save Medical Record"}
+              {nameLoading ? "Updating..." : "Update Name"}
             </button>
-            <button
-              type="button"
-              onClick={handleGetRecommendations}
-              disabled={!isMedicalRecordComplete || recommendLoading || careLoading}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#00B8DB] bg-white px-4 py-2 text-sm font-semibold text-[#00B8DB] hover:bg-[#ECFEFF] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {recommendLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
-              )}
-              {recommendLoading ? "Finding matches..." : "Get Recommendations"}
-            </button>
-            {!isMedicalRecordComplete ? (
-              <p className="w-full text-xs text-slate-500">
-                Fill bio, medical issues, preferences, and a 5-digit ZIP to unlock
-                recommendations (same Carrie / ChatGPT matching flow).
-              </p>
-            ) : null}
-          </div>
-        </form>
-      ) : null}
+          </form>
+        </TabsContent>
 
-      <form
-        onSubmit={handlePasswordUpdate}
-        className="rounded-xl border border-slate-200 bg-white p-5"
-      >
-        <h2 className="mb-3 text-lg font-semibold text-slate-900">Password</h2>
-        <div className="space-y-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Current Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword.oldPassword ? "text" : "password"}
-                value={passwordForm.oldPassword}
-                onChange={(e) => {
-                  setPasswordForm((prev) => ({ ...prev, oldPassword: e.target.value }));
-                  if (passwordErrors.oldPassword) {
-                    setPasswordErrors((prev) => ({ ...prev, oldPassword: "" }));
-                  }
-                }}
-                className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
-                  passwordErrors.oldPassword ? "border-red-400" : "border-slate-200"
-                }`}
+        {isFamilyUser ? (
+          <TabsContent value="medical-record" className="mt-4">
+            <form
+              id="medical-record"
+              onSubmit={handleCareProfileUpdate}
+              className="scroll-mt-6 rounded-xl border border-slate-200 bg-white p-5"
+            >
+              <h2 className="mb-1 text-lg font-semibold text-slate-900">Medical Record</h2>
+              <p className="mb-4 text-sm text-slate-500">
+                Share medical context, preferred services, and optional documents with CareMatch.
+              </p>
+
+              <label className="mb-1 block text-sm font-medium text-slate-700">Bio</label>
+              <textarea
+                value={careForm.bio}
+                onChange={(e) => setCareForm((prev) => ({ ...prev, bio: e.target.value }))}
+                rows={3}
+                placeholder="Short introduction about the care seeker or family situation"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword((prev) => ({
-                    ...prev,
-                    oldPassword: !prev.oldPassword,
-                  }))
+
+              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+                Medical Issues
+              </label>
+              <textarea
+                value={careForm.medical_issues}
+                onChange={(e) =>
+                  setCareForm((prev) => ({ ...prev, medical_issues: e.target.value }))
                 }
-                className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
-                aria-label={showPassword.oldPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword.oldPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            {passwordErrors.oldPassword ? (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.oldPassword}</p>
-            ) : null}
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword.newPassword ? "text" : "password"}
-                value={passwordForm.newPassword}
-                onChange={(e) => {
-                  setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }));
-                  if (passwordErrors.newPassword || passwordErrors.confirmPassword) {
-                    setPasswordErrors((prev) => ({
-                      ...prev,
-                      newPassword: "",
-                      confirmPassword: "",
-                    }));
-                  }
-                }}
-                className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
-                  passwordErrors.newPassword ? "border-red-400" : "border-slate-200"
-                }`}
+                rows={3}
+                placeholder="Diagnoses, mobility needs, medications, or conditions to keep in mind"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword((prev) => ({
-                    ...prev,
-                    newPassword: !prev.newPassword,
-                  }))
+
+              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+                Background
+              </label>
+              <textarea
+                value={careForm.care_background}
+                onChange={(e) =>
+                  setCareForm((prev) => ({ ...prev, care_background: e.target.value }))
                 }
-                className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
-                aria-label={showPassword.newPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword.newPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-            {passwordErrors.newPassword ? (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.newPassword}</p>
-            ) : null}
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              Confirm New Password
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword.confirmPassword ? "text" : "password"}
-                value={passwordForm.confirmPassword}
-                onChange={(e) => {
-                  setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
-                  if (passwordErrors.confirmPassword) {
-                    setPasswordErrors((prev) => ({ ...prev, confirmPassword: "" }));
-                  }
-                }}
-                className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
-                  passwordErrors.confirmPassword ? "border-red-400" : "border-slate-200"
-                }`}
+                rows={3}
+                placeholder="Living situation, prior care history, timeline, or other context"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
-              <button
-                type="button"
-                onClick={() =>
-                  setShowPassword((prev) => ({
-                    ...prev,
-                    confirmPassword: !prev.confirmPassword,
-                  }))
+
+              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+                Services Wanted — Use Comma in Between
+              </label>
+              <input
+                type="text"
+                value={careForm.desired_services}
+                onChange={(e) =>
+                  setCareForm((prev) => ({ ...prev, desired_services: e.target.value }))
                 }
-                className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
-                aria-label={showPassword.confirmPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword.confirmPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
+                placeholder="e.g. medication management, physical therapy, memory care"
+                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+              />
+
+              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
+                Amenities Wanted — Use Comma in Between
+              </label>
+              <input
+                type="text"
+                value={careForm.desired_amenities}
+                onChange={(e) =>
+                  setCareForm((prev) => ({ ...prev, desired_amenities: e.target.value }))
+                }
+                placeholder="e.g. private rooms, garden, pet friendly"
+                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+              />
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Search ZIP <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    value={careForm.search_zip_code}
+                    onChange={(e) =>
+                      setCareForm((prev) => ({
+                        ...prev,
+                        search_zip_code: e.target.value.replace(/\D/g, "").slice(0, 5),
+                      }))
+                    }
+                    placeholder="e.g. 85001"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    City / Area (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={careForm.search_location}
+                    onChange={(e) =>
+                      setCareForm((prev) => ({ ...prev, search_location: e.target.value }))
+                    }
+                    placeholder="e.g. Phoenix, AZ"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Max monthly budget (USD)
+                  </label>
+                  <input
+                    type="number"
+                    min={500}
+                    step={100}
+                    value={careForm.budget_max_monthly}
+                    onChange={(e) =>
+                      setCareForm((prev) => ({
+                        ...prev,
+                        budget_max_monthly: e.target.value,
+                      }))
+                    }
+                    placeholder="e.g. 6000"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Search radius (miles)
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={100}
+                    step={5}
+                    value={careForm.max_distance_miles}
+                    onChange={(e) =>
+                      setCareForm((prev) => ({
+                        ...prev,
+                        max_distance_miles: e.target.value,
+                      }))
+                    }
+                    placeholder="25"
+                    className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Images / Documents (optional)
+                </label>
+                <p className="mb-2 text-xs text-slate-500">
+                  Upload images or PDFs (max 6 files, 8MB each). Images and PDFs are
+                  reviewed by Carrie when you tap Get Recommendations.
+                </p>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100">
+                  <ImagePlus className="h-4 w-4 text-[#00B8DB]" />
+                  Add files
+                  <input
+                    type="file"
+                    accept="image/*,.pdf,.doc,.docx,application/pdf"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      const picked = Array.from(e.target.files || []);
+                      if (!picked.length) return;
+                      setNewFiles((prev) => [...prev, ...picked].slice(0, 6));
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+
+                {(keptDocuments.length > 0 || newFilePreviews.length > 0) && (
+                  <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {keptDocuments.map((doc) => {
+                      const isImage = String(doc.mimeType || "").startsWith("image/");
+                      const href = resolveUploadUrl(doc.path);
+                      return (
+                        <div
+                          key={doc.path}
+                          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-2"
+                        >
+                          {isImage ? (
+                            <img
+                              src={href}
+                              alt={doc.originalName || "Document"}
+                              className="h-12 w-12 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100">
+                              <FileText className="h-5 w-5 text-slate-500" />
+                            </div>
+                          )}
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 flex-1 truncate text-xs font-medium text-[#00B8DB] hover:underline"
+                          >
+                            {doc.originalName || doc.path}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setKeptDocuments((prev) =>
+                                prev.filter((item) => item.path !== doc.path),
+                              )
+                            }
+                            className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            aria-label="Remove document"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {newFilePreviews.map((item, index) => (
+                      <div
+                        key={`${item.file.name}-${index}`}
+                        className="flex items-center gap-2 rounded-lg border border-cyan-100 bg-cyan-50/40 p-2"
+                      >
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.file.name}
+                            className="h-12 w-12 rounded object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded bg-white">
+                            <FileText className="h-5 w-5 text-slate-500" />
+                          </div>
+                        )}
+                        <p className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">
+                          {item.file.name}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNewFiles((prev) => prev.filter((_, i) => i !== index))
+                          }
+                          className="rounded p-1 text-slate-400 hover:bg-white hover:text-slate-700"
+                          aria-label="Remove new file"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
-              </button>
+              </div>
+
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={careLoading || recommendLoading}
+                  className="rounded-lg bg-[#00B8DB] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                >
+                  {careLoading ? "Saving..." : "Save Medical Record"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGetRecommendations}
+                  disabled={!isMedicalRecordComplete || recommendLoading || careLoading}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[#00B8DB] bg-white px-4 py-2 text-sm font-semibold text-[#00B8DB] hover:bg-[#ECFEFF] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {recommendLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  {recommendLoading ? "Finding matches..." : "Get Recommendations"}
+                </button>
+                {!isMedicalRecordComplete ? (
+                  <p className="w-full text-xs text-slate-500">
+                    Fill bio, medical issues, preferences, and a 5-digit ZIP to unlock
+                    recommendations (same Carrie / ChatGPT matching flow).
+                  </p>
+                ) : null}
+              </div>
+            </form>
+          </TabsContent>
+        ) : null}
+
+        <TabsContent value="password" className="mt-4">
+          <form
+            onSubmit={handlePasswordUpdate}
+            className="rounded-xl border border-slate-200 bg-white p-5"
+          >
+            <h2 className="mb-3 text-lg font-semibold text-slate-900">Password</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword.oldPassword ? "text" : "password"}
+                    value={passwordForm.oldPassword}
+                    onChange={(e) => {
+                      setPasswordForm((prev) => ({ ...prev, oldPassword: e.target.value }));
+                      if (passwordErrors.oldPassword) {
+                        setPasswordErrors((prev) => ({ ...prev, oldPassword: "" }));
+                      }
+                    }}
+                    className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
+                      passwordErrors.oldPassword ? "border-red-400" : "border-slate-200"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowPassword((prev) => ({
+                        ...prev,
+                        oldPassword: !prev.oldPassword,
+                      }))
+                    }
+                    className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
+                    aria-label={showPassword.oldPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword.oldPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {passwordErrors.oldPassword ? (
+                  <p className="mt-1 text-xs text-red-600">{passwordErrors.oldPassword}</p>
+                ) : null}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword.newPassword ? "text" : "password"}
+                    value={passwordForm.newPassword}
+                    onChange={(e) => {
+                      setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }));
+                      if (passwordErrors.newPassword || passwordErrors.confirmPassword) {
+                        setPasswordErrors((prev) => ({
+                          ...prev,
+                          newPassword: "",
+                          confirmPassword: "",
+                        }));
+                      }
+                    }}
+                    className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
+                      passwordErrors.newPassword ? "border-red-400" : "border-slate-200"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowPassword((prev) => ({
+                        ...prev,
+                        newPassword: !prev.newPassword,
+                      }))
+                    }
+                    className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
+                    aria-label={showPassword.newPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword.newPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {passwordErrors.newPassword ? (
+                  <p className="mt-1 text-xs text-red-600">{passwordErrors.newPassword}</p>
+                ) : null}
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Confirm New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword.confirmPassword ? "text" : "password"}
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => {
+                      setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }));
+                      if (passwordErrors.confirmPassword) {
+                        setPasswordErrors((prev) => ({ ...prev, confirmPassword: "" }));
+                      }
+                    }}
+                    className={`h-10 w-full rounded-lg border px-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40 ${
+                      passwordErrors.confirmPassword ? "border-red-400" : "border-slate-200"
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowPassword((prev) => ({
+                        ...prev,
+                        confirmPassword: !prev.confirmPassword,
+                      }))
+                    }
+                    className="absolute inset-y-0 right-2 my-auto text-slate-500 hover:text-slate-700"
+                    aria-label={
+                      showPassword.confirmPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    {showPassword.confirmPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                {passwordErrors.confirmPassword ? (
+                  <p className="mt-1 text-xs text-red-600">{passwordErrors.confirmPassword}</p>
+                ) : null}
+              </div>
             </div>
-            {passwordErrors.confirmPassword ? (
-              <p className="mt-1 text-xs text-red-600">{passwordErrors.confirmPassword}</p>
-            ) : null}
-          </div>
-        </div>
-        <button
-          type="submit"
-          disabled={passwordLoading}
-          className="mt-4 rounded-lg bg-[#132329] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          {passwordLoading ? "Updating..." : "Update Password"}
-        </button>
-      </form>
+            <button
+              type="submit"
+              disabled={passwordLoading}
+              className="mt-4 rounded-lg bg-[#132329] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              {passwordLoading ? "Updating..." : "Update Password"}
+            </button>
+          </form>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
