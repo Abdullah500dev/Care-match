@@ -27,6 +27,16 @@ const resolveUploadUrl = (path) => {
 const listToCsv = (value) =>
   Array.isArray(value) ? value.filter(Boolean).join(", ") : String(value || "");
 
+const listFromValue = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
 export default function UserDashboardSettings() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -62,14 +72,18 @@ export default function UserDashboardSettings() {
     bio: userData?.bio || "",
     medical_issues: userData?.medical_issues || "",
     care_background: userData?.care_background || "",
-    desired_services: listToCsv(userData?.desired_services),
-    desired_amenities: listToCsv(userData?.desired_amenities),
+    desired_services: listFromValue(userData?.desired_services),
+    desired_amenities: listFromValue(userData?.desired_amenities),
     search_zip_code: userData?.search_zip_code || "",
     search_location: userData?.search_location || "",
     budget_max_monthly:
       userData?.budget_max_monthly != null ? String(userData.budget_max_monthly) : "",
     max_distance_miles:
       userData?.max_distance_miles != null ? String(userData.max_distance_miles) : "25",
+  });
+  const [tagDrafts, setTagDrafts] = useState({
+    desired_services: "",
+    desired_amenities: "",
   });
   const [keptDocuments, setKeptDocuments] = useState(
     Array.isArray(userData?.care_documents) ? userData.care_documents : [],
@@ -89,8 +103,8 @@ export default function UserDashboardSettings() {
       bio: userData?.bio || "",
       medical_issues: userData?.medical_issues || "",
       care_background: userData?.care_background || "",
-      desired_services: listToCsv(userData?.desired_services),
-      desired_amenities: listToCsv(userData?.desired_amenities),
+      desired_services: listFromValue(userData?.desired_services),
+      desired_amenities: listFromValue(userData?.desired_amenities),
       search_zip_code: userData?.search_zip_code || "",
       search_location: userData?.search_location || "",
       budget_max_monthly:
@@ -98,6 +112,7 @@ export default function UserDashboardSettings() {
       max_distance_miles:
         userData?.max_distance_miles != null ? String(userData.max_distance_miles) : "25",
     });
+    setTagDrafts({ desired_services: "", desired_amenities: "" });
     setKeptDocuments(
       Array.isArray(userData?.care_documents) ? userData.care_documents : [],
     );
@@ -181,8 +196,8 @@ export default function UserDashboardSettings() {
       payload.append("bio", careForm.bio);
       payload.append("medical_issues", careForm.medical_issues);
       payload.append("care_background", careForm.care_background);
-      payload.append("desired_services", careForm.desired_services);
-      payload.append("desired_amenities", careForm.desired_amenities);
+      payload.append("desired_services", listToCsv(careForm.desired_services));
+      payload.append("desired_amenities", listToCsv(careForm.desired_amenities));
       payload.append("search_zip_code", careForm.search_zip_code);
       payload.append("search_location", careForm.search_location);
       payload.append("budget_max_monthly", careForm.budget_max_monthly);
@@ -217,8 +232,8 @@ export default function UserDashboardSettings() {
     const zip = String(careForm.search_zip_code || "").replace(/\D/g, "");
     const hasContext =
       Boolean(careForm.care_background?.trim()) ||
-      Boolean(careForm.desired_services?.trim()) ||
-      Boolean(careForm.desired_amenities?.trim());
+      careForm.desired_services.length > 0 ||
+      careForm.desired_amenities.length > 0;
     return (
       Boolean(careForm.bio?.trim()) &&
       Boolean(careForm.medical_issues?.trim()) &&
@@ -226,6 +241,41 @@ export default function UserDashboardSettings() {
       zip.length === 5
     );
   }, [careForm]);
+
+  const addTags = (field, rawValue) => {
+    const next = listFromValue(rawValue);
+    if (!next.length) return;
+    setCareForm((prev) => {
+      const current = Array.isArray(prev[field]) ? prev[field] : [];
+      const merged = [...current];
+      next.forEach((item) => {
+        if (!merged.some((existing) => existing.toLowerCase() === item.toLowerCase())) {
+          merged.push(item);
+        }
+      });
+      return { ...prev, [field]: merged };
+    });
+  };
+
+  const handleTagInputKeyDown = (field, event) => {
+    if (event.key !== "Enter" && event.key !== ",") return;
+    event.preventDefault();
+    addTags(field, tagDrafts[field]);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleTagInputBlur = (field) => {
+    if (!String(tagDrafts[field] || "").trim()) return;
+    addTags(field, tagDrafts[field]);
+    setTagDrafts((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const removeTag = (field, index) => {
+    setCareForm((prev) => ({
+      ...prev,
+      [field]: (Array.isArray(prev[field]) ? prev[field] : []).filter((_, i) => i !== index),
+    }));
+  };
 
   const buildDiscoverPayloadFromPrefs = (prefs) => {
     const safePrefs = prefs && typeof prefs === "object" ? prefs : {};
@@ -254,10 +304,9 @@ export default function UserDashboardSettings() {
       amenities: Array.isArray(safePrefs.amenityMustHaves)
         ? safePrefs.amenityMustHaves.map((x) => String(x || "").trim()).filter(Boolean)
         : [],
-      services: String(careForm.desired_services || "")
-        .split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
+      services: Array.isArray(careForm.desired_services)
+        ? careForm.desired_services
+        : [],
       keywords: [],
       max_distance_miles: Number.isFinite(maxDistance) && maxDistance > 0
         ? Math.round(maxDistance)
@@ -290,8 +339,8 @@ export default function UserDashboardSettings() {
         payload.append("bio", careForm.bio);
         payload.append("medical_issues", careForm.medical_issues);
         payload.append("care_background", careForm.care_background);
-        payload.append("desired_services", careForm.desired_services);
-        payload.append("desired_amenities", careForm.desired_amenities);
+        payload.append("desired_services", listToCsv(careForm.desired_services));
+        payload.append("desired_amenities", listToCsv(careForm.desired_amenities));
         payload.append("search_zip_code", careForm.search_zip_code);
         payload.append("search_location", careForm.search_location);
         payload.append("budget_max_monthly", careForm.budget_max_monthly);
@@ -318,8 +367,8 @@ export default function UserDashboardSettings() {
         bio: careForm.bio,
         medical_issues: careForm.medical_issues,
         care_background: careForm.care_background,
-        desired_services: careForm.desired_services,
-        desired_amenities: careForm.desired_amenities,
+        desired_services: listToCsv(careForm.desired_services),
+        desired_amenities: listToCsv(careForm.desired_amenities),
         search_zip_code: careForm.search_zip_code,
         search_location: careForm.search_location,
         budget_max_monthly: careForm.budget_max_monthly || undefined,
@@ -540,31 +589,81 @@ export default function UserDashboardSettings() {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
 
-              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-                Services Wanted — Use Comma in Between
-              </label>
-              <input
-                type="text"
-                value={careForm.desired_services}
-                onChange={(e) =>
-                  setCareForm((prev) => ({ ...prev, desired_services: e.target.value }))
-                }
-                placeholder="e.g. medication management, physical therapy, memory care"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
+              <div className="mt-3 space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Services Wanted — Use Comma in Between
+                </label>
+                <input
+                  type="text"
+                  value={tagDrafts.desired_services}
+                  onChange={(e) =>
+                    setTagDrafts((prev) => ({
+                      ...prev,
+                      desired_services: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => handleTagInputKeyDown("desired_services", e)}
+                  onBlur={() => handleTagInputBlur("desired_services")}
+                  placeholder="Type service and press Enter or comma"
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {careForm.desired_services.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-cyan-900 shadow-sm"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeTag("desired_services", index)}
+                        className="rounded-full p-0.5 text-cyan-900/70 transition hover:bg-cyan-900/10 hover:text-cyan-900"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
 
-              <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">
-                Amenities Wanted — Use Comma in Between
-              </label>
-              <input
-                type="text"
-                value={careForm.desired_amenities}
-                onChange={(e) =>
-                  setCareForm((prev) => ({ ...prev, desired_amenities: e.target.value }))
-                }
-                placeholder="e.g. private rooms, garden, pet friendly"
-                className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
-              />
+              <div className="mt-3 space-y-2">
+                <label className="block text-sm font-medium text-slate-700">
+                  Amenities Wanted — Use Comma in Between
+                </label>
+                <input
+                  type="text"
+                  value={tagDrafts.desired_amenities}
+                  onChange={(e) =>
+                    setTagDrafts((prev) => ({
+                      ...prev,
+                      desired_amenities: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => handleTagInputKeyDown("desired_amenities", e)}
+                  onBlur={() => handleTagInputBlur("desired_amenities")}
+                  placeholder="Type amenity and press Enter or comma"
+                  className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
+                />
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {careForm.desired_amenities.map((item, index) => (
+                    <span
+                      key={`${item}-${index}`}
+                      className="tag-chip inline-flex animate-[tagPop_220ms_ease-out] items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold text-violet-900 shadow-sm"
+                    >
+                      {item}
+                      <button
+                        type="button"
+                        onClick={() => removeTag("desired_amenities", index)}
+                        className="rounded-full p-0.5 text-violet-900/70 transition hover:bg-violet-900/10 hover:text-violet-900"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div>
@@ -921,6 +1020,32 @@ export default function UserDashboardSettings() {
           </form>
         </TabsContent>
       </Tabs>
+
+      <style>{`
+        @keyframes tagPop {
+          0% {
+            opacity: 0;
+            transform: translateY(8px) scale(0.95);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        .tag-chip:nth-child(3n + 1) {
+          background: linear-gradient(135deg, #cffafe, #bae6fd);
+          border-color: #a5f3fc;
+        }
+        .tag-chip:nth-child(3n + 2) {
+          background: linear-gradient(135deg, #ede9fe, #ddd6fe);
+          border-color: #c4b5fd;
+        }
+        .tag-chip:nth-child(3n + 3) {
+          background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+          border-color: #86efac;
+        }
+      `}</style>
     </div>
   );
 }

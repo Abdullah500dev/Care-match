@@ -5,7 +5,6 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
-  Phone,
   Mail,
   Globe,
 } from "lucide-react";
@@ -136,7 +135,6 @@ const FacilityCard = ({
       ? rawPrice
       : "";
   const hasDisplayPrice = Boolean(displayPriceRange);
-  const displayPhone = String(phone || "").trim();
   const displayEmail = String(email || "").trim();
   const hasRealEmail = displayEmail && !isPlaceholderEmail(displayEmail);
   const careLevelList = Array.isArray(careLevels) ? careLevels : [];
@@ -395,25 +393,14 @@ const FacilityCard = ({
             )}
 
             <div className="space-y-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] p-4">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                <div className="min-w-0 flex-1">
-                  <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
-                    Address
-                  </p>
-                  <p className="break-words text-sm text-[#132329]">
-                    {formatAddressWithZip(address, zipCode)}
-                  </p>
-                </div>
-                <div className="w-full shrink-0 sm:w-[11.5rem] sm:text-right">
-                  <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b] sm:justify-end">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
-                    Phone
-                  </p>
-                  <p className="break-words text-sm text-[#132329]">
-                    {displayPhone && displayPhone !== "N/A" ? displayPhone : "N/A"}
-                  </p>
-                </div>
+              <div className="min-w-0">
+                <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#64748b]">
+                  <MapPin className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
+                  Address
+                </p>
+                <p className="break-words text-sm text-[#132329]">
+                  {formatAddressWithZip(address, zipCode)}
+                </p>
               </div>
               {(hasRealEmail || hasOperatorWebsite) && (
                 <div className="grid gap-3 border-t border-[#E2E8F0] pt-3 sm:grid-cols-2">
@@ -723,9 +710,7 @@ const FacilityCard = ({
                 Contact Details
               </p>
 
-              <div
-                className={`grid grid-cols-1 min-[390px]:grid-cols-2 gap-2 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}
-              >
+              <div className={`min-w-0 ${compact ? "text-[10px] sm:text-xs" : "text-xs sm:text-sm"}`}>
                 <div className="min-w-0 rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
                   <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
                     <MapPin className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
@@ -733,16 +718,6 @@ const FacilityCard = ({
                   </p>
                   <p className="mt-1 break-words font-medium text-[#132329]">
                     {formatAddressWithZip(address, zipCode)}
-                  </p>
-                </div>
-
-                <div className="min-w-0 rounded-xl border border-[#E2E8F0] bg-white/85 px-2.5 py-2">
-                  <p className="flex items-center gap-1.5 font-semibold text-[#64748b] uppercase tracking-wide text-[10px]">
-                    <Phone className="h-3.5 w-3.5 shrink-0 text-[#155DFC]" />
-                    Phone
-                  </p>
-                  <p className="mt-1 break-words font-medium text-[#132329]">
-                    {displayPhone && displayPhone !== "N/A" ? displayPhone : "N/A"}
                   </p>
                 </div>
               </div>
