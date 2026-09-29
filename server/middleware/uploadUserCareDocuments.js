@@ -44,6 +44,8 @@ const fileFilter = (_, file, cb) => {
   const mime = String(file.mimetype || "").toLowerCase();
   const okExt = allowedExtensions.has(ext);
   const okMime =
+    !mime ||
+    mime === "application/octet-stream" ||
     allowedMimePrefixes.some((prefix) => mime.startsWith(prefix)) ||
     allowedMimeTypes.has(mime);
 

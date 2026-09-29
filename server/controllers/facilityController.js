@@ -2791,13 +2791,16 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     );
   }
 
-  if (!fields?.medical_issues && !fields?.documentsAnalyzed) {
+  if (!fields?.medical_issues) {
     return res.status(200).json({
       success: false,
       message:
-        "Could not extract medical history from that file. Try a clearer PDF or photo.",
+        fields?.documentsAnalyzed > 0
+          ? "The file was uploaded, but AI could not find usable medical details. Try another page or a clearer photo."
+          : "Could not read that file. Upload a text PDF or a clear JPG/PNG photo of the medical record.",
       fields: null,
       documents: owned,
+      documentsAnalyzed: fields?.documentsAnalyzed || 0,
     });
   }
 

@@ -1,4 +1,5 @@
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -12,8 +13,9 @@ const CARE_UPLOAD_DIR = path.resolve(__dirname, "../uploads/user-care");
 
 const MAX_DOCS = 4;
 const MAX_IMAGES = 3;
-const MAX_PDF_CHARS = 6000;
+const MAX_PDF_CHARS = 8000;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MIN_USEFUL_PDF_CHARS = 40;
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif"]);
 const PDF_EXTS = new Set([".pdf"]);
@@ -95,9 +97,70 @@ async function extractPdfText(absPath) {
 }
 
 /**
+ * Rasterize first pages of a PDF to PNG data-URLs for vision models.
+ * @param {string} absPath
+ * @param {number} [maxPages]
+ * @returns {Promise<object[]>}
+ */
+async function pdfPagesToImageParts(absPath, maxPages = 2) {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "carematch-pdf-"));
+  const prefix = path.join(tmpRoot, "page");
+  try {
+    await execFileAsync(
+      "pdftoppm",
+      ["-png", "-r", "150", "-f", "1", "-l", String(maxPages), absPath, prefix],
+      { timeout: 20000 },
+    );
+    const files = fs
+      .readdirSync(tmpRoot)
+      .filter((name) => name.endsWith(".png"))
+      .sort()
+      .slice(0, maxPages);
+
+    return files.map((name) => {
+      const buf = fs.readFileSync(path.join(tmpRoot, name));
+      return {
+        type: "image_url",
+        image_url: {
+          url: `data:image/png;base64,${buf.toString("base64")}`,
+          detail: "high",
+        },
+      };
+    });
+  } catch {
+    return [];
+  } finally {
+    try {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+}
+
+function pushImageFromFile(absPath, mimeType, imageParts) {
+  if (imageParts.length >= MAX_IMAGES) return false;
+  const stat = fs.statSync(absPath);
+  if (stat.size > MAX_IMAGE_BYTES) return false;
+  const buf = fs.readFileSync(absPath);
+  const ext = path.extname(absPath).toLowerCase();
+  const mime = String(mimeType || "").startsWith("image/")
+    ? mimeType
+    : mimeForExt(ext);
+  imageParts.push({
+    type: "image_url",
+    image_url: {
+      url: `data:${mime};base64,${buf.toString("base64")}`,
+      detail: "high",
+    },
+  });
+  return true;
+}
+
+/**
  * Read allowed care documents into text excerpts + image data-URLs for GPT.
  * @param {Array<{ path?: string, originalName?: string, mimeType?: string }>} docs
- * @returns {Promise<{ textNotes: string, imageParts: object[], analyzedCount: number }>}
+ * @returns {Promise<{ textNotes: string, imageParts: object[], analyzedCount: number, rawPdfText: string }>}
  */
 export async function prepareCareDocumentsForRecommend(docs = []) {
   const list = (Array.isArray(docs) ? docs : [])
@@ -107,53 +170,65 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
   const textChunks = [];
   const imageParts = [];
   let analyzedCount = 0;
+  let rawPdfText = "";
 
   for (const doc of list) {
     const abs = resolveCareDocumentAbsPath(doc.path);
-    if (!abs) continue;
+    if (!abs) {
+      textChunks.push(
+        `[Could not open uploaded file "${String(doc.originalName || doc.path || "").slice(0, 80)}"]`,
+      );
+      continue;
+    }
 
     const ext = path.extname(abs).toLowerCase();
     const label = String(doc.originalName || path.basename(abs)).slice(0, 120);
 
     try {
-      if (IMAGE_EXTS.has(ext) && imageParts.length < MAX_IMAGES) {
-        const stat = fs.statSync(abs);
-        if (stat.size > MAX_IMAGE_BYTES) {
+      if (IMAGE_EXTS.has(ext)) {
+        const ok = pushImageFromFile(abs, doc.mimeType, imageParts);
+        if (ok) analyzedCount += 1;
+        else {
           textChunks.push(`[Image "${label}" skipped — file too large for analysis]`);
-          continue;
         }
-        const buf = fs.readFileSync(abs);
-        const b64 = buf.toString("base64");
-        const mime = String(doc.mimeType || "").startsWith("image/")
-          ? doc.mimeType
-          : mimeForExt(ext);
-        imageParts.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${mime};base64,${b64}`,
-            detail: "low",
-          },
-        });
-        analyzedCount += 1;
         continue;
       }
 
       if (PDF_EXTS.has(ext)) {
         const text = await extractPdfText(abs);
-        if (text) {
+        if (text && text.length >= MIN_USEFUL_PDF_CHARS) {
           textChunks.push(`--- PDF "${label}" ---\n${text}`);
+          rawPdfText = `${rawPdfText}\n${text}`.trim().slice(0, MAX_PDF_CHARS);
           analyzedCount += 1;
         } else {
-          // Image-only / scanned PDF: still count as present; vision path prefers PNG/JPG.
-          textChunks.push(
-            `[PDF "${label}" had little extractable text — prefer a text PDF or PNG/JPG photo of the page]`,
-          );
+          const pageImages = await pdfPagesToImageParts(abs, 2);
+          if (pageImages.length > 0) {
+            for (const part of pageImages) {
+              if (imageParts.length >= MAX_IMAGES) break;
+              imageParts.push(part);
+            }
+            analyzedCount += 1;
+            textChunks.push(
+              `[PDF "${label}" rendered as image(s) for AI reading${text ? `; partial text also found` : ""}]`,
+            );
+            if (text) {
+              rawPdfText = `${rawPdfText}\n${text}`.trim().slice(0, MAX_PDF_CHARS);
+            }
+          } else if (text) {
+            textChunks.push(`--- PDF "${label}" ---\n${text}`);
+            rawPdfText = `${rawPdfText}\n${text}`.trim().slice(0, MAX_PDF_CHARS);
+            analyzedCount += 1;
+          } else {
+            textChunks.push(
+              `[PDF "${label}" could not be read as text or image — try a PNG/JPG photo]`,
+            );
+          }
         }
         continue;
       }
 
       textChunks.push(
-        `[Document "${label}" uploaded (${ext || "unknown"}). Prefer PDF/image for auto-analysis; use form fields for key needs.]`,
+        `[Document "${label}" uploaded (${ext || "unknown"}). Prefer PDF/image for auto-analysis.]`,
       );
     } catch (err) {
       textChunks.push(
@@ -166,7 +241,21 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
     textNotes: textChunks.join("\n\n").trim(),
     imageParts,
     analyzedCount,
+    rawPdfText,
   };
+}
+
+function parseJsonObject(raw) {
+  const text = String(raw || "").trim();
+  if (!text) return {};
+  try {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = fenced ? fenced[1].trim() : text;
+    const jsonMatch = candidate.match(/\{[\s\S]*\}/);
+    return JSON.parse(jsonMatch ? jsonMatch[0] : candidate);
+  } catch {
+    return { medical_issues: text.slice(0, 4000) };
+  }
 }
 
 /**
@@ -183,7 +272,12 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
   }
 
   const prepared = await prepareCareDocumentsForRecommend(docs);
-  if (!prepared.analyzedCount && !prepared.textNotes && prepared.imageParts.length === 0) {
+  if (
+    !prepared.analyzedCount &&
+    !prepared.textNotes &&
+    prepared.imageParts.length === 0 &&
+    !prepared.rawPdfText
+  ) {
     return {
       medical_issues: "",
       bio: "",
@@ -211,8 +305,8 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     `- Do not invent facts not supported by the documents.\n` +
     `- Keep arrays short (max 12 items each).\n` +
     `- If a field is unknown, use "" or [].\n\n` +
-    (prepared.textNotes
-      ? `Extracted document text:\n${prepared.textNotes}`
+    (prepared.textNotes || prepared.rawPdfText
+      ? `Document notes / extracted text:\n${prepared.textNotes || prepared.rawPdfText}`
       : "Use the attached image(s) as the source.");
 
   const userContent =
@@ -238,8 +332,9 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
           },
           { role: "user", content: userContent },
         ],
-        max_tokens: 900,
+        max_tokens: 1200,
         temperature: 0.1,
+        response_format: { type: "json_object" },
       }),
     });
   } catch (err) {
@@ -257,13 +352,7 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
   }
 
   const raw = String(data?.choices?.[0]?.message?.content || "").trim();
-  let parsed = {};
-  try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
-  } catch {
-    parsed = { medical_issues: raw.slice(0, 4000) };
-  }
+  const parsed = parseJsonObject(raw);
 
   const toList = (value) => {
     if (Array.isArray(value)) {
@@ -277,12 +366,18 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
       .slice(0, 12);
   };
 
+  let medicalIssues = String(parsed.medical_issues || "").trim().slice(0, 4000);
+  // Hard fallback: if model returned empty but we have PDF text, use that.
+  if (!medicalIssues && prepared.rawPdfText) {
+    medicalIssues = prepared.rawPdfText.slice(0, 4000);
+  }
+
   return {
-    medical_issues: String(parsed.medical_issues || "").trim().slice(0, 4000),
+    medical_issues: medicalIssues,
     bio: String(parsed.bio || "").trim().slice(0, 2000),
     care_background: String(parsed.care_background || "").trim().slice(0, 4000),
     desired_services: toList(parsed.desired_services),
     desired_amenities: toList(parsed.desired_amenities),
-    documentsAnalyzed: prepared.analyzedCount,
+    documentsAnalyzed: prepared.analyzedCount || (medicalIssues ? 1 : 0),
   };
 }
