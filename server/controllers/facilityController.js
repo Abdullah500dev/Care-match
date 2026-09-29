@@ -2804,17 +2804,49 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     });
   }
 
+  // Persist extracted text onto the user so UI sync (setUser → useEffect) keeps the values.
+  const nextServices = Array.isArray(fields.desired_services)
+    ? fields.desired_services.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
+    : [];
+  const nextAmenities = Array.isArray(fields.desired_amenities)
+    ? fields.desired_amenities.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
+    : [];
+
+  user.medical_issues = String(fields.medical_issues || "").trim().slice(0, 4000);
+  if (fields.bio && !String(user.bio || "").trim()) {
+    user.bio = String(fields.bio).trim().slice(0, 2000);
+  }
+  if (fields.care_background && !String(user.care_background || "").trim()) {
+    user.care_background = String(fields.care_background).trim().slice(0, 4000);
+  }
+  if (
+    (!Array.isArray(user.desired_services) || user.desired_services.length === 0) &&
+    nextServices.length > 0
+  ) {
+    user.desired_services = nextServices;
+    user.markModified("desired_services");
+  }
+  if (
+    (!Array.isArray(user.desired_amenities) || user.desired_amenities.length === 0) &&
+    nextAmenities.length > 0
+  ) {
+    user.desired_amenities = nextAmenities;
+    user.markModified("desired_amenities");
+  }
+  user.markModified("care_documents");
+  await user.save();
+
   res.status(200).json({
     success: true,
     fields: {
-      medical_issues: fields.medical_issues || "",
-      bio: fields.bio || "",
-      care_background: fields.care_background || "",
-      desired_services: fields.desired_services || [],
-      desired_amenities: fields.desired_amenities || [],
+      medical_issues: user.medical_issues || "",
+      bio: user.bio || "",
+      care_background: user.care_background || "",
+      desired_services: Array.isArray(user.desired_services) ? user.desired_services : [],
+      desired_amenities: Array.isArray(user.desired_amenities) ? user.desired_amenities : [],
     },
     documentsAnalyzed: fields.documentsAnalyzed || 0,
-    documents: owned,
+    documents: Array.isArray(user.care_documents) ? user.care_documents : owned,
     user,
   });
 });

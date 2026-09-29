@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FileText, ImagePlus, Loader2, Sparkles, Upload, X } from "lucide-react";
@@ -71,8 +71,13 @@ export default function UserDashboardMedicalHistory() {
     Array.isArray(userData?.care_documents) ? userData.care_documents : [],
   );
   const [newFiles, setNewFiles] = useState([]);
+  const skipUserFormSyncRef = useRef(false);
 
   useEffect(() => {
+    if (skipUserFormSyncRef.current) {
+      skipUserFormSyncRef.current = false;
+      return;
+    }
     setName(userData?.name || "");
     setCareForm({
       bio: userData?.bio || "",
@@ -285,24 +290,28 @@ export default function UserDashboardMedicalHistory() {
       }
 
       const fields = data.fields;
+      const nextForm = {
+        bio: fields.bio || "",
+        medical_issues: fields.medical_issues || "",
+        care_background: fields.care_background || "",
+        desired_services: listFromValue(fields.desired_services),
+        desired_amenities: listFromValue(fields.desired_amenities),
+      };
+
+      skipUserFormSyncRef.current = true;
       setCareForm((prev) => ({
         ...prev,
-        medical_issues: fields.medical_issues
-          ? fields.medical_issues
-          : prev.medical_issues,
-        bio: !prev.bio?.trim() && fields.bio ? fields.bio : prev.bio,
-        care_background:
-          !prev.care_background?.trim() && fields.care_background
-            ? fields.care_background
-            : prev.care_background,
+        medical_issues: nextForm.medical_issues || prev.medical_issues,
+        bio: nextForm.bio || prev.bio,
+        care_background: nextForm.care_background || prev.care_background,
         desired_services:
-          prev.desired_services.length > 0
-            ? prev.desired_services
-            : listFromValue(fields.desired_services),
+          nextForm.desired_services.length > 0
+            ? nextForm.desired_services
+            : prev.desired_services,
         desired_amenities:
-          prev.desired_amenities.length > 0
-            ? prev.desired_amenities
-            : listFromValue(fields.desired_amenities),
+          nextForm.desired_amenities.length > 0
+            ? nextForm.desired_amenities
+            : prev.desired_amenities,
       }));
 
       if (Array.isArray(data.documents)) {
@@ -316,7 +325,7 @@ export default function UserDashboardMedicalHistory() {
       toast.success("Medical History filled from your document", {
         description:
           Number(data.documentsAnalyzed) > 0
-            ? `AI reviewed ${data.documentsAnalyzed} file(s). Review and edit before saving.`
+            ? `AI reviewed ${data.documentsAnalyzed} file(s). Scroll down to review the text.`
             : "Review the Medical History field and edit if needed.",
       });
 
@@ -325,7 +334,8 @@ export default function UserDashboardMedicalHistory() {
           behavior: "smooth",
           block: "center",
         });
-      }, 100);
+        document.getElementById("medical-history-field")?.focus?.();
+      }, 150);
     } catch (error) {
       toastAuthError(error, {
         fallbackTitle: "Could not read document",
