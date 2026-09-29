@@ -264,28 +264,45 @@ function parseJsonObject(raw) {
  * @returns {Promise<{ medical_issues: string, bio: string, care_background: string, desired_services: string[], desired_amenities: string[], documentsAnalyzed: number }>}
  */
 export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
-  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
-  if (!apiKey) {
-    const err = new Error("OpenAI is not configured");
-    err.statusCode = 503;
-    throw err;
-  }
-
   const prepared = await prepareCareDocumentsForRecommend(docs);
+  const empty = {
+    medical_issues: "",
+    bio: "",
+    care_background: "",
+    desired_services: [],
+    desired_amenities: [],
+    documentsAnalyzed: 0,
+  };
+
   if (
     !prepared.analyzedCount &&
     !prepared.textNotes &&
     prepared.imageParts.length === 0 &&
     !prepared.rawPdfText
   ) {
+    return empty;
+  }
+
+  const fallbackFromPdf = () => {
+    const text = String(prepared.rawPdfText || "").trim();
+    if (!text) return null;
     return {
-      medical_issues: "",
+      medical_issues: text.slice(0, 4000),
       bio: "",
       care_background: "",
       desired_services: [],
       desired_amenities: [],
-      documentsAnalyzed: 0,
+      documentsAnalyzed: prepared.analyzedCount || 1,
     };
+  };
+
+  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey) {
+    const fallback = fallbackFromPdf();
+    if (fallback) return fallback;
+    const err = new Error("OpenAI is not configured");
+    err.statusCode = 503;
+    throw err;
   }
 
   const { OPENAI_CHAT_MODEL } = await import("../config/chatConstants.js");
@@ -338,6 +355,8 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
       }),
     });
   } catch (err) {
+    const fallback = fallbackFromPdf();
+    if (fallback) return fallback;
     const error = new Error(err?.message || "Failed to reach OpenAI");
     error.statusCode = 502;
     throw error;
@@ -345,6 +364,8 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    const fallback = fallbackFromPdf();
+    if (fallback) return fallback;
     const rawMsg = String(data?.error?.message || "").trim();
     const error = new Error(rawMsg || `OpenAI error (${response.status})`);
     error.statusCode = response.status >= 500 ? 502 : 400;
@@ -367,7 +388,6 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
   };
 
   let medicalIssues = String(parsed.medical_issues || "").trim().slice(0, 4000);
-  // Hard fallback: if model returned empty but we have PDF text, use that.
   if (!medicalIssues && prepared.rawPdfText) {
     medicalIssues = prepared.rawPdfText.slice(0, 4000);
   }
