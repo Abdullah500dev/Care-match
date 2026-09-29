@@ -2812,39 +2812,46 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     ? fields.desired_amenities.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
     : [];
 
+  // Fresh document parse should fill the form from the file (overwrite empty or prior extract).
   user.medical_issues = String(fields.medical_issues || "").trim().slice(0, 4000);
-  if (fields.bio && !String(user.bio || "").trim()) {
+  if (fields.bio) {
     user.bio = String(fields.bio).trim().slice(0, 2000);
   }
-  if (fields.care_background && !String(user.care_background || "").trim()) {
+  if (fields.care_background) {
     user.care_background = String(fields.care_background).trim().slice(0, 4000);
   }
-  if (
-    (!Array.isArray(user.desired_services) || user.desired_services.length === 0) &&
-    nextServices.length > 0
-  ) {
+  if (nextServices.length > 0) {
     user.desired_services = nextServices;
     user.markModified("desired_services");
   }
-  if (
-    (!Array.isArray(user.desired_amenities) || user.desired_amenities.length === 0) &&
-    nextAmenities.length > 0
-  ) {
+  if (nextAmenities.length > 0) {
     user.desired_amenities = nextAmenities;
     user.markModified("desired_amenities");
   }
   user.markModified("care_documents");
   await user.save();
 
+  const responseFields = {
+    medical_issues: String(fields.medical_issues || user.medical_issues || "").trim(),
+    bio: String(fields.bio || user.bio || "").trim(),
+    care_background: String(fields.care_background || user.care_background || "").trim(),
+    desired_services:
+      nextServices.length > 0
+        ? nextServices
+        : Array.isArray(user.desired_services)
+          ? user.desired_services
+          : [],
+    desired_amenities:
+      nextAmenities.length > 0
+        ? nextAmenities
+        : Array.isArray(user.desired_amenities)
+          ? user.desired_amenities
+          : [],
+  };
+
   res.status(200).json({
     success: true,
-    fields: {
-      medical_issues: user.medical_issues || "",
-      bio: user.bio || "",
-      care_background: user.care_background || "",
-      desired_services: Array.isArray(user.desired_services) ? user.desired_services : [],
-      desired_amenities: Array.isArray(user.desired_amenities) ? user.desired_amenities : [],
-    },
+    fields: responseFields,
     documentsAnalyzed: fields.documentsAnalyzed || 0,
     documents: Array.isArray(user.care_documents) ? user.care_documents : owned,
     user,

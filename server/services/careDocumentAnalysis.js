@@ -286,10 +286,45 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
   const fallbackFromPdf = () => {
     const text = String(prepared.rawPdfText || "").trim();
     if (!text) return null;
+
+    const compact = text.replace(/\s+/g, " ").trim();
+    const patient =
+      compact.match(/Patient:\s*([A-Za-z][A-Za-z .'-]{1,60}?)(?:\s+Age:|\s+\d{1,3}\s|$)/i)?.[1]?.trim() ||
+      "";
+    const age = compact.match(/Age:\s*(\d{1,3})/i)?.[1] || "";
+    const address =
+      compact.match(
+        /Address context:\s*([A-Za-z0-9 ,.-]{3,80}?)(?:\s+Primary diagnoses:|\s+Functional needs:|$)/i,
+      )?.[1]?.trim() || "";
+    const notes =
+      compact.match(
+        /Notes:\s*(.+?)(?:\s*$)/i,
+      )?.[1]?.trim() || "";
+    const setting =
+      compact.match(
+        /Care setting recommendation:\s*([A-Za-z /-]{3,60}?)(?:\s+Timeline:|\s+Monthly|$)/i,
+      )?.[1]?.trim() || "";
+    const timeline =
+      compact.match(
+        /Timeline:\s*([^.]+?(?:days|weeks|months)[^.]*?)(?:\s+Monthly|\s+Search|\.|$)/i,
+      )?.[1]?.trim() || "";
+
+    const bioParts = [];
+    if (patient && age) bioParts.push(`${patient} is ${age} years old`);
+    else if (patient) bioParts.push(patient);
+    if (address) bioParts.push(`Looking for care near ${address}`);
+    if (notes) bioParts.push(notes);
+    const bio = bioParts.join(". ").replace(/\s+/g, " ").trim();
+
+    const bgParts = [];
+    if (setting) bgParts.push(`Seeking ${setting}`);
+    if (timeline) bgParts.push(timeline);
+    const care_background = bgParts.join(". ").replace(/\s+/g, " ").trim();
+
     return {
       medical_issues: text.slice(0, 4000),
-      bio: "",
-      care_background: "",
+      bio: bio.slice(0, 2000),
+      care_background: care_background.slice(0, 4000),
       desired_services: [],
       desired_amenities: [],
       documentsAnalyzed: prepared.analyzedCount || 1,
@@ -312,16 +347,18 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     `Return ONLY valid JSON (no markdown) with this shape:\n` +
     `{\n` +
     `  "medical_issues": "diagnoses, medications, mobility, conditions — clear plain sentences",\n` +
-    `  "bio": "short family / care-seeker introduction if present, else empty string",\n` +
-    `  "care_background": "living situation, prior care, timeline if present, else empty string",\n` +
+    `  "bio": "1-3 sentence intro: patient name, age, location, personality / family context from the doc",\n` +
+    `  "care_background": "living situation, prior care, care setting, timeline, budget if present",\n` +
     `  "desired_services": ["short service phrases"],\n` +
     `  "desired_amenities": ["short amenity phrases"]\n` +
     `}\n\n` +
     `Rules:\n` +
     `- medical_issues is REQUIRED when any clinical content exists; write a complete readable summary.\n` +
+    `- bio is REQUIRED when patient name/age/notes exist — synthesize a short intro from those facts (do not leave blank).\n` +
+    `- care_background should include timeline / setting / living situation when mentioned.\n` +
     `- Do not invent facts not supported by the documents.\n` +
     `- Keep arrays short (max 12 items each).\n` +
-    `- If a field is unknown, use "" or [].\n\n` +
+    `- If a field is truly unknown, use "" or [].\n\n` +
     (prepared.textNotes || prepared.rawPdfText
       ? `Document notes / extracted text:\n${prepared.textNotes || prepared.rawPdfText}`
       : "Use the attached image(s) as the source.");
