@@ -82,6 +82,9 @@ const UserDashboardMessages = lazyWithRetry(
 const UserDashboardSettings = lazyWithRetry(
   () => import("../pages/userDashboard/UserDashboardSettings"),
 );
+const UserDashboardMedicalHistory = lazyWithRetry(
+  () => import("../pages/userDashboard/UserDashboardMedicalHistory"),
+);
 const UserDashboardFacilities = lazyWithRetry(
   () => import("../pages/userDashboard/UserDashboardFacilities"),
 );
@@ -573,6 +576,10 @@ export default function Navigation() {
                 />
                 <Route path="snf" element={<UserDashboardSnfs />} />
                 <Route path="messages" element={<UserDashboardMessages />} />
+                <Route
+                  path="medical-history"
+                  element={<UserDashboardMedicalHistory />}
+                />
                 <Route path="settings" element={<UserDashboardSettings />} />
               </Route>
 

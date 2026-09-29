@@ -31,11 +31,10 @@ const NAV_ITEMS = [
   { to: "/admin/messages", label: "Messages", icon: MessageSquare },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart2 },
   {
-    to: "/admin/settings#medical-record",
+    to: "/admin/medical-history",
     label: "Medical History",
     icon: ClipboardPlus,
     userOnly: true,
-    hash: "medical-record",
   },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
@@ -92,9 +91,8 @@ function NavContent({ onNavClick }) {
 
   return (
     <nav className="flex w-full flex-1 flex-col space-y-1 px-[10%] text-base">
-      {finalItems.map(({ to, label, icon: Icon, exact, hash }) => {
+      {finalItems.map(({ to, label, icon: Icon, exact }) => {
         const resolvedTo = to.replace("/admin", basePath);
-        const settingsPath = `${basePath}/settings`;
 
         return (
         <NavLink
@@ -104,16 +102,7 @@ function NavContent({ onNavClick }) {
           onClick={onNavClick}
           className="group flex w-full items-center gap-3 rounded-lg py-2.5 font-bold transition-colors hover:bg-slate-50 hover:text-slate-900"
         >
-          {({ isActive: pathActive }) => {
-            const onSettings = location.pathname === settingsPath;
-            const hashActive = hash
-              ? onSettings && location.hash === `#${hash}`
-              : label === "Settings"
-                ? onSettings && location.hash !== "#medical-record"
-                : pathActive;
-            const isActive = Boolean(hashActive);
-
-            return (
+          {({ isActive }) => (
             <>
               <span
                 className="relative flex w-full items-center gap-3 rounded-lg px-4 py-2.5"
@@ -155,8 +144,7 @@ function NavContent({ onNavClick }) {
                 ) : null}
               </span>
             </>
-            );
-          }}
+          )}
         </NavLink>
         );
       })}

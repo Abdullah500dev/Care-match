@@ -1173,6 +1173,8 @@ const CareExplorer = () => {
   const carrieMatches = location.state?.carrieMatches;
   const carrieFilters = location.state?.carrieFilters;
   const fromCarrie = Boolean(location.state?.fromCarrie);
+  const searchSource = String(location.state?.searchSource || "").trim()
+    || (fromCarrie ? "carrie" : "manual");
   const carrieLocationQuery = String(
     carrieFilters?.locationQuery || carrieFilters?.searchLocation || "",
   ).trim();
@@ -2838,7 +2840,45 @@ const CareExplorer = () => {
             </div>
             <div className="md:border-l-2 md:border-[#E2E8F0] md:pl-8 flex-1 flex items-center justify-center min-w-0 max-w-5xl w-full">
               <p className="text-xs sm:text-sm text-[#64748b] text-center sm:text-left md:text-center">
-                {fromCarrie && liveFacilities ? (
+                {fromCarrie && liveFacilities && searchSource === "medical-record" ? (
+                  <>
+                    This search was done by{" "}
+                    <span className="font-semibold text-[#132329]">medical record</span>.
+                    {promptCriteria.length > 0 && (
+                      <>
+                        {" "}Criteria:{" "}
+                        {promptCriteria.map((item, idx) => (
+                          <React.Fragment key={item.label}>
+                            {idx > 0 ? "; " : ""}
+                            <span className="font-semibold text-[#132329]">{item.label}:</span>{" "}
+                            <span className="font-semibold text-[#132329]">{item.value}</span>
+                          </React.Fragment>
+                        ))}
+                        .
+                      </>
+                    )}
+                    Always confirm details on a tour.
+                  </>
+                ) : fromCarrie && liveFacilities && searchSource === "manual" ? (
+                  <>
+                    This search was done via{" "}
+                    <span className="font-semibold text-[#132329]">manual search</span>.
+                    {promptCriteria.length > 0 && (
+                      <>
+                        {" "}Criteria:{" "}
+                        {promptCriteria.map((item, idx) => (
+                          <React.Fragment key={item.label}>
+                            {idx > 0 ? "; " : ""}
+                            <span className="font-semibold text-[#132329]">{item.label}:</span>{" "}
+                            <span className="font-semibold text-[#132329]">{item.value}</span>
+                          </React.Fragment>
+                        ))}
+                        .
+                      </>
+                    )}
+                    Always confirm details on a tour.
+                  </>
+                ) : fromCarrie && liveFacilities ? (
                   <>
                     These communities are{" "}
                     <span className="font-semibold text-[#132329]">

@@ -411,6 +411,7 @@ export default function SearchBar() {
               skipInitialBudgetPrefill: !hasBudgetRangeInCarriePrefs(matchedPreferences),
             },
             fromCarrie: true,
+            searchSource: "carrie",
           },
         });
         return;
@@ -490,6 +491,7 @@ export default function SearchBar() {
       navigate("/care-explorer", {
         state: {
           fromCarrie: true,
+          searchSource: "manual",
           carrieMatches: matches,
           carrieFilters: {
             source: "quickSearch",
@@ -516,6 +518,7 @@ export default function SearchBar() {
       navigate("/care-explorer", {
         state: {
           fromCarrie: true,
+          searchSource: "manual",
           carrieMatches: [],
           carrieFilters: {
             source: "quickSearch",

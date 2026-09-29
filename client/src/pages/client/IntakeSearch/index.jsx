@@ -371,6 +371,7 @@ export default function IntakeSearch() {
           navigate("/care-explorer", {
             state: {
               fromCarrie: true,
+              searchSource: "manual",
               carrieMatches: recs,
               carrieFilters: mappedFilters,
             },
@@ -388,6 +389,7 @@ export default function IntakeSearch() {
           navigate("/care-explorer", {
             state: {
               fromCarrie: true,
+              searchSource: "manual",
               carrieMatches: [],
               carrieFilters: {
                 ...mappedFilters,
