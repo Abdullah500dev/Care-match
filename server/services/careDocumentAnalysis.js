@@ -168,3 +168,121 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
     analyzedCount,
   };
 }
+
+/**
+ * Use OpenAI to turn uploaded medical docs/images into form field values.
+ * @param {Array<{ path?: string, originalName?: string, mimeType?: string }>} docs
+ * @returns {Promise<{ medical_issues: string, bio: string, care_background: string, desired_services: string[], desired_amenities: string[], documentsAnalyzed: number }>}
+ */
+export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
+  const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey) {
+    const err = new Error("OpenAI is not configured");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  const prepared = await prepareCareDocumentsForRecommend(docs);
+  if (!prepared.analyzedCount && !prepared.textNotes && prepared.imageParts.length === 0) {
+    return {
+      medical_issues: "",
+      bio: "",
+      care_background: "",
+      desired_services: [],
+      desired_amenities: [],
+      documentsAnalyzed: 0,
+    };
+  }
+
+  const { OPENAI_CHAT_MODEL } = await import("../config/chatConstants.js");
+
+  const promptText =
+    `Read the attached medical record document(s) / images and extract structured care fields for a family medical history form.\n\n` +
+    `Return ONLY valid JSON (no markdown) with this shape:\n` +
+    `{\n` +
+    `  "medical_issues": "diagnoses, medications, mobility, conditions — clear plain sentences",\n` +
+    `  "bio": "short family / care-seeker introduction if present, else empty string",\n` +
+    `  "care_background": "living situation, prior care, timeline if present, else empty string",\n` +
+    `  "desired_services": ["short service phrases"],\n` +
+    `  "desired_amenities": ["short amenity phrases"]\n` +
+    `}\n\n` +
+    `Rules:\n` +
+    `- medical_issues is REQUIRED when any clinical content exists; write a complete readable summary.\n` +
+    `- Do not invent facts not supported by the documents.\n` +
+    `- Keep arrays short (max 12 items each).\n` +
+    `- If a field is unknown, use "" or [].\n\n` +
+    (prepared.textNotes
+      ? `Extracted document text:\n${prepared.textNotes}`
+      : "Use the attached image(s) as the source.");
+
+  const userContent =
+    prepared.imageParts.length > 0
+      ? [{ type: "text", text: promptText }, ...prepared.imageParts]
+      : promptText;
+
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_CHAT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You extract medical history fields from documents for CareMatch. Reply with JSON only.",
+          },
+          { role: "user", content: userContent },
+        ],
+        max_tokens: 900,
+        temperature: 0.1,
+      }),
+    });
+  } catch (err) {
+    const error = new Error(err?.message || "Failed to reach OpenAI");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const rawMsg = String(data?.error?.message || "").trim();
+    const error = new Error(rawMsg || `OpenAI error (${response.status})`);
+    error.statusCode = response.status >= 500 ? 502 : 400;
+    throw error;
+  }
+
+  const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+  let parsed = {};
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+  } catch {
+    parsed = { medical_issues: raw.slice(0, 4000) };
+  }
+
+  const toList = (value) => {
+    if (Array.isArray(value)) {
+      return value.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 12);
+    }
+    if (value == null || value === "") return [];
+    return String(value)
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+  };
+
+  return {
+    medical_issues: String(parsed.medical_issues || "").trim().slice(0, 4000),
+    bio: String(parsed.bio || "").trim().slice(0, 2000),
+    care_background: String(parsed.care_background || "").trim().slice(0, 4000),
+    desired_services: toList(parsed.desired_services),
+    desired_amenities: toList(parsed.desired_amenities),
+    documentsAnalyzed: prepared.analyzedCount,
+  };
+}

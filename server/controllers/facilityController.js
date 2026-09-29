@@ -32,6 +32,7 @@ import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
 import { extractPreferencesFromMedicalProfile } from "../services/medicalProfileRecommend.js";
+import { extractMedicalHistoryFieldsFromDocuments } from "../services/careDocumentAnalysis.js";
 import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
 import {
   isAggregatorListingUrl,
@@ -2717,5 +2718,100 @@ export const postRecommendFromProfile = catchAsyncError(async (req, res, next) =
     success: true,
     preferences: result.preferences,
     documentsAnalyzed: result.documentsAnalyzed || 0,
+  });
+});
+
+/**
+ * POST /api/facilities/parse-medical-documents
+ * Upload medical docs/images → AI fills medical history form fields.
+ * Also appends uploaded files to the user's care_documents.
+ */
+export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) => {
+  const user = await User.findById(req.user?.id);
+  if (!user) {
+    return next(new ErrorHandler("User not found", 404));
+  }
+
+  const uploaded = Array.isArray(req.files) ? req.files : [];
+  const bodyPaths = Array.isArray(req.body?.document_paths)
+    ? req.body.document_paths.map((p) => String(p || "").trim()).filter(Boolean)
+    : typeof req.body?.document_paths === "string" && req.body.document_paths
+      ? (() => {
+          try {
+            const parsed = JSON.parse(req.body.document_paths);
+            return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+          } catch {
+            return [String(req.body.document_paths).trim()].filter(Boolean);
+          }
+        })()
+      : [];
+
+  const previousDocs = Array.isArray(user.care_documents) ? user.care_documents : [];
+  const newDocs = uploaded.map((file) => ({
+    path: `/uploads/user-care/${file.filename}`,
+    originalName: file.originalname || file.filename,
+    mimeType: file.mimetype || "",
+    size: file.size || 0,
+    uploadedAt: new Date(),
+  }));
+
+  if (newDocs.length > 0) {
+    user.care_documents = [...previousDocs, ...newDocs].slice(0, 12);
+    user.markModified("care_documents");
+    await user.save();
+  }
+
+  const owned = Array.isArray(user.care_documents) ? user.care_documents : [];
+  const ownedByPath = new Map(
+    owned.filter((d) => d?.path).map((d) => [String(d.path), d]),
+  );
+
+  let documents = [];
+  if (newDocs.length > 0) {
+    documents = newDocs;
+  } else if (bodyPaths.length > 0) {
+    documents = bodyPaths.map((p) => ownedByPath.get(p)).filter(Boolean).slice(0, 4);
+  } else {
+    documents = owned.slice(-4);
+  }
+
+  if (!documents.length) {
+    return next(new ErrorHandler("Upload a PDF or image to fill Medical History.", 400));
+  }
+
+  let fields;
+  try {
+    fields = await extractMedicalHistoryFieldsFromDocuments(documents);
+  } catch (err) {
+    return next(
+      new ErrorHandler(
+        err?.message || "Could not read medical documents",
+        err?.statusCode || 502,
+      ),
+    );
+  }
+
+  if (!fields?.medical_issues && !fields?.documentsAnalyzed) {
+    return res.status(200).json({
+      success: false,
+      message:
+        "Could not extract medical history from that file. Try a clearer PDF or photo.",
+      fields: null,
+      documents: owned,
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    fields: {
+      medical_issues: fields.medical_issues || "",
+      bio: fields.bio || "",
+      care_background: fields.care_background || "",
+      desired_services: fields.desired_services || [],
+      desired_amenities: fields.desired_amenities || [],
+    },
+    documentsAnalyzed: fields.documentsAnalyzed || 0,
+    documents: owned,
+    user,
   });
 });

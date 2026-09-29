@@ -23,3 +23,11 @@ export function postDiscoverFacilities(payload) {
 export function postRecommendFromProfile(profile) {
   return apiClient.post("/api/facilities/recommend-from-profile", profile);
 }
+
+/**
+ * Upload medical docs/images → AI fills Medical History form fields.
+ * @param {FormData} formData
+ */
+export function postParseMedicalDocuments(formData) {
+  return apiClient.post("/api/facilities/parse-medical-documents", formData);
+}

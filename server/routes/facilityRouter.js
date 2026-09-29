@@ -11,6 +11,7 @@ import {
   listPublicFacilities,
   postDiscoverFacilities,
   postRecommendFromProfile,
+  postParseMedicalDocuments,
   getGooglePlacePhotoProxy,
   getGooglePlacePhotoByPlaceIdProxy,
   getFacility,
@@ -26,6 +27,7 @@ import {
 } from "../controllers/facilityController.js";
 import { notifyExploreClick } from "../controllers/exploreNotifyController.js";
 import uploadFacilityImages from "../middleware/uploadFacilityImages.js";
+import uploadUserCareDocuments from "../middleware/uploadUserCareDocuments.js";
 import { getApifySchedulerStatus } from "../controllers/apifySyncController.js";
 
 const router = express.Router();
@@ -33,6 +35,12 @@ const router = express.Router();
 router.get("/public", listPublicFacilities);
 router.post("/discover", postDiscoverFacilities);
 router.post("/recommend-from-profile", isAutheticated, postRecommendFromProfile);
+router.post(
+  "/parse-medical-documents",
+  isAutheticated,
+  uploadUserCareDocuments.array("documents", 6),
+  postParseMedicalDocuments,
+);
 router.get("/google-place-photo", getGooglePlacePhotoProxy);
 router.get("/google-place-photo-by-place-id", getGooglePlacePhotoByPlaceIdProxy);
 router.get("/apify-sync-status", isAutheticated, getApifySchedulerStatus);

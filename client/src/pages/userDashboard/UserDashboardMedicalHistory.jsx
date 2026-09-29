@@ -7,6 +7,7 @@ import { authServices } from "../../services/authServices";
 import {
   postDiscoverFacilities,
   postRecommendFromProfile,
+  postParseMedicalDocuments,
 } from "../../services/matchService";
 import { setLastMatchCount } from "../../lib/userDashboardStats";
 import { getUser, setUser } from "../../store/auth/authSlice";
@@ -48,6 +49,7 @@ export default function UserDashboardMedicalHistory() {
   const [nameError, setNameError] = useState("");
   const [careLoading, setCareLoading] = useState(false);
   const [recommendLoading, setRecommendLoading] = useState(false);
+  const [parseLoading, setParseLoading] = useState(false);
   const [careForm, setCareForm] = useState({
     bio: userData?.bio || "",
     medical_issues: userData?.medical_issues || "",
@@ -265,6 +267,75 @@ export default function UserDashboardMedicalHistory() {
     };
   };
 
+  const handleUploadAndParse = async (pickedFiles) => {
+    const picked = Array.isArray(pickedFiles) ? pickedFiles.filter(Boolean) : [];
+    if (!picked.length) return;
+
+    setParseLoading(true);
+    try {
+      const formData = new FormData();
+      picked.forEach((file) => formData.append("documents", file));
+
+      const { data } = await postParseMedicalDocuments(formData);
+      if (!data?.success || !data?.fields) {
+        toast.error(data?.message || "Could not read that document", {
+          description: "Try a clearer PDF or photo of the medical record.",
+        });
+        return;
+      }
+
+      const fields = data.fields;
+      setCareForm((prev) => ({
+        ...prev,
+        medical_issues: fields.medical_issues
+          ? fields.medical_issues
+          : prev.medical_issues,
+        bio: !prev.bio?.trim() && fields.bio ? fields.bio : prev.bio,
+        care_background:
+          !prev.care_background?.trim() && fields.care_background
+            ? fields.care_background
+            : prev.care_background,
+        desired_services:
+          prev.desired_services.length > 0
+            ? prev.desired_services
+            : listFromValue(fields.desired_services),
+        desired_amenities:
+          prev.desired_amenities.length > 0
+            ? prev.desired_amenities
+            : listFromValue(fields.desired_amenities),
+      }));
+
+      if (Array.isArray(data.documents)) {
+        setKeptDocuments(data.documents);
+        setNewFiles([]);
+      }
+      if (data.user) {
+        dispatch(setUser({ user: data.user, token, tokenExpire: null }));
+      }
+
+      toast.success("Medical History filled from your document", {
+        description:
+          Number(data.documentsAnalyzed) > 0
+            ? `AI reviewed ${data.documentsAnalyzed} file(s). Review and edit before saving.`
+            : "Review the Medical History field and edit if needed.",
+      });
+
+      window.setTimeout(() => {
+        document.getElementById("medical-history-field")?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }, 100);
+    } catch (error) {
+      toastAuthError(error, {
+        fallbackTitle: "Could not read document",
+        fallbackDescription: "Please try another PDF or image.",
+      });
+    } finally {
+      setParseLoading(false);
+    }
+  };
+
   const handleGetRecommendations = async () => {
     if (!isMedicalRecordComplete) {
       toast.error("Complete your medical history first", {
@@ -412,28 +483,41 @@ export default function UserDashboardMedicalHistory() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Upload Medical Records</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Upload images or PDFs (max 6 files, 8MB each). Carrie reviews these when you
-                get recommendations.
+                Upload a PDF or photo — AI will read it and fill the Medical History field
+                automatically (max 6 files, 8MB each).
               </p>
             </div>
           </div>
 
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 bg-white/80 px-4 py-10 text-center transition hover:border-[#00B8DB] hover:bg-[#ECFEFF]/40">
-            <ImagePlus className="h-8 w-8 text-[#00B8DB]" />
+          <label
+            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-10 text-center transition ${
+              parseLoading
+                ? "pointer-events-none border-[#00B8DB] bg-[#ECFEFF]/60 opacity-80"
+                : "border-slate-300 bg-white/80 hover:border-[#00B8DB] hover:bg-[#ECFEFF]/40"
+            }`}
+          >
+            {parseLoading ? (
+              <Loader2 className="h-8 w-8 animate-spin text-[#00B8DB]" />
+            ) : (
+              <ImagePlus className="h-8 w-8 text-[#00B8DB]" />
+            )}
             <span className="text-sm font-semibold text-slate-800">
-              Drop files here or click to browse
+              {parseLoading
+                ? "AI is reading your document..."
+                : "Drop files here or click to browse"}
             </span>
-            <span className="text-xs text-slate-500">JPG, PNG, WEBP, PDF, DOC, DOCX</span>
+            <span className="text-xs text-slate-500">JPG, PNG, WEBP, PDF</span>
             <input
               type="file"
-              accept="image/*,.pdf,.doc,.docx,application/pdf"
+              accept="image/*,.pdf,application/pdf"
               multiple
+              disabled={parseLoading}
               className="hidden"
               onChange={(e) => {
                 const picked = Array.from(e.target.files || []);
-                if (!picked.length) return;
-                setNewFiles((prev) => [...prev, ...picked].slice(0, 6));
                 e.target.value = "";
+                if (!picked.length) return;
+                handleUploadAndParse(picked);
               }}
             />
           </label>
@@ -614,12 +698,13 @@ export default function UserDashboardMedicalHistory() {
           </label>
           <p className="mb-2 text-xs text-slate-500">{FIELD_HINT}</p>
           <textarea
+            id="medical-history-field"
             value={careForm.medical_issues}
             onChange={(e) =>
               setCareForm((prev) => ({ ...prev, medical_issues: e.target.value }))
             }
-            rows={3}
-            placeholder="Diagnoses, mobility needs, medications, or conditions to keep in mind"
+            rows={5}
+            placeholder="Diagnoses, mobility needs, medications, or conditions — or upload a document above to auto-fill"
             className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
           />
 
