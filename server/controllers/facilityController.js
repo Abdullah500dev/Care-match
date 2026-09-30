@@ -32,7 +32,7 @@ import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
 import { extractPreferencesFromMedicalProfile } from "../services/medicalProfileRecommend.js";
-import { extractMedicalHistoryFieldsFromDocuments } from "../services/careDocumentAnalysis.js";
+import { extractMedicalHistoryFieldsFromDocuments, resolveCareDocumentAbsPath } from "../services/careDocumentAnalysis.js";
 import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
 import {
   isAggregatorListingUrl,
@@ -2724,7 +2724,7 @@ export const postRecommendFromProfile = catchAsyncError(async (req, res, next) =
 /**
  * POST /api/facilities/parse-medical-documents
  * Upload medical docs/images → AI fills medical history form fields.
- * Also appends uploaded files to the user's care_documents.
+ * Only keeps files that successfully fill Medical History (deduped by original name).
  */
 export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) => {
   const user = await User.findById(req.user?.id);
@@ -2746,7 +2746,7 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
         })()
       : [];
 
-  const previousDocs = Array.isArray(user.care_documents) ? user.care_documents : [];
+  const previousDocs = Array.isArray(user.care_documents) ? [...user.care_documents] : [];
   const newDocs = uploaded.map((file) => ({
     path: `/uploads/user-care/${file.filename}`,
     originalName: file.originalname || file.filename,
@@ -2755,15 +2755,31 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     uploadedAt: new Date(),
   }));
 
-  if (newDocs.length > 0) {
-    user.care_documents = [...previousDocs, ...newDocs].slice(0, 12);
-    user.markModified("care_documents");
-    await user.save();
-  }
+  const unlinkUploaded = () => {
+    for (const file of uploaded) {
+      try {
+        if (file?.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  };
 
-  const owned = Array.isArray(user.care_documents) ? user.care_documents : [];
+  const dedupeByOriginalName = (docs) => {
+    const map = new Map();
+    for (const doc of docs || []) {
+      if (!doc?.path) continue;
+      const key = String(doc.originalName || doc.path)
+        .trim()
+        .toLowerCase();
+      if (!key) continue;
+      map.set(key, doc);
+    }
+    return Array.from(map.values()).slice(-12);
+  };
+
   const ownedByPath = new Map(
-    owned.filter((d) => d?.path).map((d) => [String(d.path), d]),
+    previousDocs.filter((d) => d?.path).map((d) => [String(d.path), d]),
   );
 
   let documents = [];
@@ -2772,7 +2788,7 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
   } else if (bodyPaths.length > 0) {
     documents = bodyPaths.map((p) => ownedByPath.get(p)).filter(Boolean).slice(0, 4);
   } else {
-    documents = owned.slice(-4);
+    documents = previousDocs.slice(-4);
   }
 
   if (!documents.length) {
@@ -2783,6 +2799,7 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
   try {
     fields = await extractMedicalHistoryFieldsFromDocuments(documents);
   } catch (err) {
+    unlinkUploaded();
     return next(
       new ErrorHandler(
         err?.message || "Could not read medical documents",
@@ -2792,6 +2809,7 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
   }
 
   if (!fields?.medical_issues) {
+    unlinkUploaded();
     return res.status(200).json({
       success: false,
       message:
@@ -2799,12 +2817,11 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
           ? "The file was uploaded, but AI could not find usable medical details. Try another page or a clearer photo."
           : "Could not read that file. Upload a text PDF or a clear JPG/PNG photo of the medical record.",
       fields: null,
-      documents: owned,
+      documents: dedupeByOriginalName(previousDocs),
       documentsAnalyzed: fields?.documentsAnalyzed || 0,
     });
   }
 
-  // Persist extracted text onto the user so UI sync (setUser → useEffect) keeps the values.
   const nextServices = Array.isArray(fields.desired_services)
     ? fields.desired_services.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
     : [];
@@ -2812,7 +2829,33 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     ? fields.desired_amenities.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 40)
     : [];
 
-  // Fresh document parse should fill the form from the file (overwrite empty or prior extract).
+  // Only keep successfully parsed uploads; replace same originalName.
+  if (newDocs.length > 0) {
+    const removedPaths = new Set();
+    const incomingNames = new Set(
+      newDocs.map((d) => String(d.originalName || "").trim().toLowerCase()).filter(Boolean),
+    );
+    const keptPrevious = previousDocs.filter((doc) => {
+      const key = String(doc.originalName || "").trim().toLowerCase();
+      if (key && incomingNames.has(key)) {
+        if (doc.path) removedPaths.add(String(doc.path));
+        return false;
+      }
+      return true;
+    });
+    user.care_documents = dedupeByOriginalName([...keptPrevious, ...newDocs]);
+
+    // Best-effort cleanup of replaced duplicates on disk
+    for (const rel of removedPaths) {
+      try {
+        const abs = resolveCareDocumentAbsPath(rel);
+        if (abs) fs.unlinkSync(abs);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
   user.medical_issues = String(fields.medical_issues || "").trim().slice(0, 4000);
   if (fields.bio) {
     user.bio = String(fields.bio).trim().slice(0, 2000);
@@ -2828,6 +2871,23 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     user.desired_amenities = nextAmenities;
     user.markModified("desired_amenities");
   }
+
+  const zip = String(fields.search_zip_code || "").replace(/\D/g, "").slice(0, 5);
+  if (zip.length === 5) {
+    user.search_zip_code = zip;
+  }
+  if (fields.search_location) {
+    user.search_location = String(fields.search_location).trim().slice(0, 120);
+  }
+  if (fields.budget_max_monthly != null) {
+    const n = Number(fields.budget_max_monthly);
+    if (Number.isFinite(n) && n >= 500) user.budget_max_monthly = Math.round(n);
+  }
+  if (fields.max_distance_miles != null) {
+    const n = Number(fields.max_distance_miles);
+    if (Number.isFinite(n) && n >= 1) user.max_distance_miles = Math.round(n);
+  }
+
   user.markModified("care_documents");
   await user.save();
 
@@ -2847,13 +2907,23 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
         : Array.isArray(user.desired_amenities)
           ? user.desired_amenities
           : [],
+    search_zip_code: zip.length === 5 ? zip : String(user.search_zip_code || ""),
+    search_location: String(fields.search_location || user.search_location || "").trim(),
+    budget_max_monthly:
+      fields.budget_max_monthly != null
+        ? fields.budget_max_monthly
+        : user.budget_max_monthly ?? null,
+    max_distance_miles:
+      fields.max_distance_miles != null
+        ? fields.max_distance_miles
+        : user.max_distance_miles ?? null,
   };
 
   res.status(200).json({
     success: true,
     fields: responseFields,
     documentsAnalyzed: fields.documentsAnalyzed || 0,
-    documents: Array.isArray(user.care_documents) ? user.care_documents : owned,
+    documents: Array.isArray(user.care_documents) ? user.care_documents : [],
     user,
   });
 });

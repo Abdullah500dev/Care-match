@@ -13,6 +13,7 @@ import { setLastMatchCount } from "../../lib/userDashboardStats";
 import { getUser, setUser } from "../../store/auth/authSlice";
 import { toastAuthError, toastAuthSuccess } from "../../lib/authFeedback";
 import { toast } from "sonner";
+import { getGoogleMapsApiKey, loadGoogleMapsScript } from "../../lib/loadGoogleMaps";
 
 const API_BASE = String(import.meta.env.VITE_REACT_APP_API_BASE_URL || "").replace(/\/$/, "");
 
@@ -35,6 +36,19 @@ const listFromValue = (value) => {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean);
+};
+
+const dedupeDocuments = (docs) => {
+  const map = new Map();
+  for (const doc of Array.isArray(docs) ? docs : []) {
+    if (!doc?.path) continue;
+    const key = String(doc.originalName || doc.path)
+      .trim()
+      .toLowerCase();
+    if (!key) continue;
+    map.set(key, doc);
+  }
+  return Array.from(map.values());
 };
 
 const FIELD_HINT = "Add Any Pertinent Info In Addition to Medical Record";
@@ -68,10 +82,12 @@ export default function UserDashboardMedicalHistory() {
     desired_amenities: "",
   });
   const [keptDocuments, setKeptDocuments] = useState(
-    Array.isArray(userData?.care_documents) ? userData.care_documents : [],
+    dedupeDocuments(userData?.care_documents),
   );
   const [newFiles, setNewFiles] = useState([]);
   const skipUserFormSyncRef = useRef(false);
+  const zipInputRef = useRef(null);
+  const zipAutocompleteRef = useRef(null);
 
   useEffect(() => {
     if (skipUserFormSyncRef.current) {
@@ -93,10 +109,65 @@ export default function UserDashboardMedicalHistory() {
         userData?.max_distance_miles != null ? String(userData.max_distance_miles) : "25",
     });
     setTagDrafts({ desired_services: "", desired_amenities: "" });
-    setKeptDocuments(
-      Array.isArray(userData?.care_documents) ? userData.care_documents : [],
-    );
+    setKeptDocuments(dedupeDocuments(userData?.care_documents));
   }, [userData]);
+
+  // Google Places ZIP suggestions (same pattern as Care Explorer filters)
+  useEffect(() => {
+    const apiKey = getGoogleMapsApiKey();
+    if (!apiKey || !zipInputRef.current) return undefined;
+    let cancelled = false;
+
+    const attach = () => {
+      if (cancelled || !zipInputRef.current || !window.google?.maps?.places) return;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+      zipAutocompleteRef.current = new window.google.maps.places.Autocomplete(
+        zipInputRef.current,
+        {
+          types: ["geocode"],
+          componentRestrictions: { country: "us" },
+          fields: ["address_components", "formatted_address", "geometry", "name"],
+        },
+      );
+      zipAutocompleteRef.current.addListener("place_changed", () => {
+        if (cancelled) return;
+        const place = zipAutocompleteRef.current.getPlace();
+        const comps = place?.address_components || [];
+        const postalCode =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        const nextLocation = city && state ? `${city}, ${state}` : "";
+        setCareForm((prev) => ({
+          ...prev,
+          ...(String(postalCode).replace(/\D/g, "").length === 5
+            ? { search_zip_code: String(postalCode).replace(/\D/g, "").slice(0, 5) }
+            : {}),
+          ...(nextLocation ? { search_location: nextLocation } : {}),
+        }));
+      });
+    };
+
+    if (window.google?.maps?.places?.Autocomplete) {
+      attach();
+    } else {
+      loadGoogleMapsScript(apiKey).then(attach).catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+      if (zipAutocompleteRef.current && window.google?.maps?.event) {
+        window.google.maps.event.clearInstanceListeners(zipAutocompleteRef.current);
+      }
+    };
+  }, []);
 
   const newFilePreviews = useMemo(
     () =>
@@ -283,6 +354,10 @@ export default function UserDashboardMedicalHistory() {
 
       const { data } = await postParseMedicalDocuments(formData);
       if (!data?.success || !data?.fields) {
+        if (Array.isArray(data?.documents)) {
+          setKeptDocuments(dedupeDocuments(data.documents));
+        }
+        setNewFiles([]);
         toast.error(data?.message || "Could not read that document", {
           description: "Try a clearer PDF or photo of the medical record.",
         });
@@ -290,32 +365,38 @@ export default function UserDashboardMedicalHistory() {
       }
 
       const fields = data.fields;
-      const nextForm = {
-        bio: fields.bio || "",
-        medical_issues: fields.medical_issues || "",
-        care_background: fields.care_background || "",
-        desired_services: listFromValue(fields.desired_services),
-        desired_amenities: listFromValue(fields.desired_amenities),
-      };
+      const nextZip = String(fields.search_zip_code || "").replace(/\D/g, "").slice(0, 5);
+      const nextBudget =
+        fields.budget_max_monthly != null && fields.budget_max_monthly !== ""
+          ? String(fields.budget_max_monthly)
+          : "";
+      const nextMiles =
+        fields.max_distance_miles != null && fields.max_distance_miles !== ""
+          ? String(fields.max_distance_miles)
+          : "";
 
       skipUserFormSyncRef.current = true;
       setCareForm((prev) => ({
         ...prev,
-        medical_issues: nextForm.medical_issues || prev.medical_issues,
-        bio: nextForm.bio || prev.bio,
-        care_background: nextForm.care_background || prev.care_background,
-        desired_services:
-          nextForm.desired_services.length > 0
-            ? nextForm.desired_services
-            : prev.desired_services,
-        desired_amenities:
-          nextForm.desired_amenities.length > 0
-            ? nextForm.desired_amenities
-            : prev.desired_amenities,
+        medical_issues: fields.medical_issues || prev.medical_issues,
+        bio: fields.bio || prev.bio,
+        care_background: fields.care_background || prev.care_background,
+        desired_services: listFromValue(fields.desired_services).length
+          ? listFromValue(fields.desired_services)
+          : prev.desired_services,
+        desired_amenities: listFromValue(fields.desired_amenities).length
+          ? listFromValue(fields.desired_amenities)
+          : prev.desired_amenities,
+        ...(nextZip.length === 5 ? { search_zip_code: nextZip } : {}),
+        ...(fields.search_location
+          ? { search_location: String(fields.search_location) }
+          : {}),
+        ...(nextBudget ? { budget_max_monthly: nextBudget } : {}),
+        ...(nextMiles ? { max_distance_miles: nextMiles } : {}),
       }));
 
       if (Array.isArray(data.documents)) {
-        setKeptDocuments(data.documents);
+        setKeptDocuments(dedupeDocuments(data.documents));
         setNewFiles([]);
       }
       if (data.user) {
@@ -565,7 +646,7 @@ export default function UserDashboardMedicalHistory() {
                       type="button"
                       onClick={() =>
                         setKeptDocuments((prev) =>
-                          prev.filter((item) => item.path !== doc.path),
+                          dedupeDocuments(prev.filter((item) => item.path !== doc.path)),
                         )
                       }
                       className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
@@ -621,6 +702,7 @@ export default function UserDashboardMedicalHistory() {
                 Search ZIP <span className="text-red-500">*</span>
               </label>
               <input
+                ref={zipInputRef}
                 type="text"
                 inputMode="numeric"
                 maxLength={5}
@@ -632,6 +714,7 @@ export default function UserDashboardMedicalHistory() {
                   }))
                 }
                 placeholder="e.g. 85001"
+                autoComplete="off"
                 className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#00B8DB]/40"
               />
             </div>
