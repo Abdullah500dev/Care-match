@@ -187,18 +187,10 @@ export default function UserDashboardMedicalHistory() {
   }, [newFilePreviews]);
 
   const isMedicalRecordComplete = useMemo(() => {
+    // Bio / medical / background / tags are optional — only a search ZIP is required.
     const zip = String(careForm.search_zip_code || "").replace(/\D/g, "");
-    const hasContext =
-      Boolean(careForm.care_background?.trim()) ||
-      careForm.desired_services.length > 0 ||
-      careForm.desired_amenities.length > 0;
-    return (
-      Boolean(careForm.bio?.trim()) &&
-      Boolean(careForm.medical_issues?.trim()) &&
-      hasContext &&
-      zip.length === 5
-    );
-  }, [careForm]);
+    return zip.length === 5;
+  }, [careForm.search_zip_code]);
 
   const addTags = (field, rawValue) => {
     const next = listFromValue(rawValue);
@@ -429,8 +421,8 @@ export default function UserDashboardMedicalHistory() {
 
   const handleGetRecommendations = async () => {
     if (!isMedicalRecordComplete) {
-      toast.error("Complete your medical history first", {
-        description: "Fill bio, medical history, preferences, and a 5-digit ZIP.",
+      toast.error("Add a search ZIP first", {
+        description: "Enter a 5-digit ZIP so we can find nearby communities.",
       });
       return;
     }
@@ -908,8 +900,8 @@ export default function UserDashboardMedicalHistory() {
             </button>
             {!isMedicalRecordComplete ? (
               <p className="w-full text-xs text-slate-500">
-                Fill bio, medical history, preferences, and a 5-digit ZIP to unlock
-                recommendations.
+                Enter a 5-digit Search ZIP above to unlock recommendations. Bio,
+                medical history, and preferences are optional.
               </p>
             ) : null}
           </div>

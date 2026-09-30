@@ -2645,20 +2645,16 @@ export const getGooglePlacePhotoByPlaceIdProxy = catchAsyncError(async (req, res
  */
 export const postRecommendFromProfile = catchAsyncError(async (req, res, next) => {
   const body = req.body || {};
-  const bio = String(body.bio || "").trim();
-  const medicalIssues = String(body.medical_issues || "").trim();
-  const background = String(body.care_background || "").trim();
-  const hasServices =
-    (Array.isArray(body.desired_services) && body.desired_services.some(Boolean)) ||
-    String(body.desired_services || "").trim().length > 0;
-  const hasAmenities =
-    (Array.isArray(body.desired_amenities) && body.desired_amenities.some(Boolean)) ||
-    String(body.desired_amenities || "").trim().length > 0;
+  const zip = String(body.search_zip_code || body.zip_code || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
 
-  if (!bio || !medicalIssues || (!background && !hasServices && !hasAmenities)) {
+  // Bio / medical history / background / tags are optional.
+  // ZIP is required so discovery can search nearby communities.
+  if (zip.length !== 5) {
     return next(
       new ErrorHandler(
-        "Complete your medical record (bio, medical issues, and background or preferences) before requesting recommendations.",
+        "Enter a 5-digit Search ZIP so we can find nearby communities.",
         400,
       ),
     );
@@ -2693,7 +2689,10 @@ export const postRecommendFromProfile = catchAsyncError(async (req, res, next) =
 
   let result;
   try {
-    result = await extractPreferencesFromMedicalProfile(body, documents);
+    result = await extractPreferencesFromMedicalProfile(
+      { ...body, search_zip_code: zip },
+      documents,
+    );
   } catch (err) {
     return next(
       new ErrorHandler(
