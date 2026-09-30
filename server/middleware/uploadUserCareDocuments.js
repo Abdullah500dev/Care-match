@@ -16,8 +16,13 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (_, file, cb) => {
-    const safeName = file.originalname.replace(/\s+/g, "-").toLowerCase();
-    cb(null, `${Date.now()}-${safeName}`);
+    const safeName = String(file.originalname || "file")
+      .replace(/[()[\]]+/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .toLowerCase();
+    cb(null, `${Date.now()}-${safeName || "upload.pdf"}`);
   },
 });
 

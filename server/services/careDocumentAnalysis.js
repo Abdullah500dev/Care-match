@@ -71,28 +71,59 @@ function mimeForExt(ext) {
  * @returns {Promise<string>}
  */
 async function extractPdfText(absPath) {
+  // Copy to a simple temp path so spaces/parentheses in filenames never break tools.
+  const tmpPath = path.join(
+    os.tmpdir(),
+    `carematch-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.pdf`,
+  );
   try {
-    const { stdout } = await execFileAsync(
-      "pdftotext",
-      ["-layout", absPath, "-"],
-      { timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
-    );
-    const text = String(stdout || "").replace(/\s+/g, " ").trim();
-    if (text) return text.slice(0, MAX_PDF_CHARS);
+    fs.copyFileSync(absPath, tmpPath);
   } catch {
-    // fall through
+    return "";
   }
 
   try {
-    const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
-    const buf = fs.readFileSync(absPath);
-    const parsed = await pdfParse(buf);
-    return String(parsed?.text || "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, MAX_PDF_CHARS);
-  } catch {
-    return "";
+    try {
+      const { stdout } = await execFileAsync(
+        "pdftotext",
+        ["-layout", tmpPath, "-"],
+        { timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+      );
+      const text = String(stdout || "").replace(/\s+/g, " ").trim();
+      if (text) return text.slice(0, MAX_PDF_CHARS);
+    } catch {
+      // fall through
+    }
+
+    try {
+      const { stdout } = await execFileAsync(
+        "pdftotext",
+        ["-raw", tmpPath, "-"],
+        { timeout: 15000, maxBuffer: 2 * 1024 * 1024 },
+      );
+      const text = String(stdout || "").replace(/\s+/g, " ").trim();
+      if (text) return text.slice(0, MAX_PDF_CHARS);
+    } catch {
+      // fall through
+    }
+
+    try {
+      const pdfParse = (await import("pdf-parse/lib/pdf-parse.js")).default;
+      const buf = fs.readFileSync(tmpPath);
+      const parsed = await pdfParse(buf);
+      return String(parsed?.text || "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, MAX_PDF_CHARS);
+    } catch {
+      return "";
+    }
+  } finally {
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -104,11 +135,13 @@ async function extractPdfText(absPath) {
  */
 async function pdfPagesToImageParts(absPath, maxPages = 2) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "carematch-pdf-"));
+  const safePdf = path.join(tmpRoot, "input.pdf");
   const prefix = path.join(tmpRoot, "page");
   try {
+    fs.copyFileSync(absPath, safePdf);
     await execFileAsync(
       "pdftoppm",
-      ["-png", "-r", "150", "-f", "1", "-l", String(maxPages), absPath, prefix],
+      ["-png", "-r", "150", "-f", "1", "-l", String(maxPages), safePdf, prefix],
       { timeout: 20000 },
     );
     const files = fs
@@ -171,13 +204,12 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
   const imageParts = [];
   let analyzedCount = 0;
   let rawPdfText = "";
+  let openFailures = 0;
 
   for (const doc of list) {
     const abs = resolveCareDocumentAbsPath(doc.path);
     if (!abs) {
-      textChunks.push(
-        `[Could not open uploaded file "${String(doc.originalName || doc.path || "").slice(0, 80)}"]`,
-      );
+      openFailures += 1;
       continue;
     }
 
@@ -188,9 +220,6 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
       if (IMAGE_EXTS.has(ext)) {
         const ok = pushImageFromFile(abs, doc.mimeType, imageParts);
         if (ok) analyzedCount += 1;
-        else {
-          textChunks.push(`[Image "${label}" skipped — file too large for analysis]`);
-        }
         continue;
       }
 
@@ -208,10 +237,8 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
               imageParts.push(part);
             }
             analyzedCount += 1;
-            textChunks.push(
-              `[PDF "${label}" rendered as image(s) for AI reading${text ? `; partial text also found` : ""}]`,
-            );
             if (text) {
+              textChunks.push(`--- PDF "${label}" ---\n${text}`);
               rawPdfText = `${rawPdfText}\n${text}`.trim().slice(0, MAX_PDF_CHARS);
             }
           } else if (text) {
@@ -219,21 +246,15 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
             rawPdfText = `${rawPdfText}\n${text}`.trim().slice(0, MAX_PDF_CHARS);
             analyzedCount += 1;
           } else {
-            textChunks.push(
-              `[PDF "${label}" could not be read as text or image — try a PNG/JPG photo]`,
-            );
+            openFailures += 1;
           }
         }
         continue;
       }
 
-      textChunks.push(
-        `[Document "${label}" uploaded (${ext || "unknown"}). Prefer PDF/image for auto-analysis.]`,
-      );
-    } catch (err) {
-      textChunks.push(
-        `[Could not analyze "${label}": ${String(err?.message || "read error").slice(0, 120)}]`,
-      );
+      openFailures += 1;
+    } catch {
+      openFailures += 1;
     }
   }
 
@@ -242,6 +263,7 @@ export async function prepareCareDocumentsForRecommend(docs = []) {
     imageParts,
     analyzedCount,
     rawPdfText,
+    openFailures,
   };
 }
 
@@ -324,6 +346,29 @@ export function extractSearchPrefsFromText(text) {
   };
 }
 
+function isInternalStatusNote(text) {
+  const t = String(text || "").trim();
+  if (!t) return true;
+  return (
+    /^\[(?:PDF|Image|Could not|Document)\b/i.test(t) ||
+    /could not be read as text or image/i.test(t) ||
+    /could not open uploaded file/i.test(t) ||
+    /try a PNG\/JPG photo/i.test(t)
+  );
+}
+
+function usableMedicalText(text) {
+  const raw = String(text || "").trim();
+  if (!raw || isInternalStatusNote(raw)) return "";
+  // Drop bracketed status lines mixed into longer extracts
+  const cleaned = raw
+    .split("\n")
+    .filter((line) => !isInternalStatusNote(line.trim()))
+    .join("\n")
+    .trim();
+  return isInternalStatusNote(cleaned) ? "" : cleaned;
+}
+
 function emptyExtractResult() {
   return {
     medical_issues: "",
@@ -377,18 +422,20 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
   const prepared = await prepareCareDocumentsForRecommend(docs);
 
   if (
-    !prepared.analyzedCount &&
-    !prepared.textNotes &&
-    prepared.imageParts.length === 0 &&
-    !prepared.rawPdfText
+    !prepared.analyzedCount ||
+    (!prepared.rawPdfText &&
+      !prepared.textNotes &&
+      prepared.imageParts.length === 0)
   ) {
     return emptyExtractResult();
   }
 
-  const sourceText = `${prepared.textNotes || ""}\n${prepared.rawPdfText || ""}`.trim();
+  const sourceText = usableMedicalText(
+    `${prepared.rawPdfText || ""}\n${prepared.textNotes || ""}`.trim(),
+  );
 
   const fallbackFromPdf = () => {
-    const text = String(prepared.rawPdfText || prepared.textNotes || "").trim();
+    const text = usableMedicalText(prepared.rawPdfText || "");
     if (!text || text.length < 20) return null;
 
     const compact = text.replace(/\s+/g, " ").trim();
@@ -540,13 +587,14 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
       .slice(0, 12);
   };
 
-  let medicalIssues = String(parsed.medical_issues || "").trim().slice(0, 4000);
-  if (!medicalIssues && prepared.rawPdfText) {
-    medicalIssues = prepared.rawPdfText.slice(0, 4000);
+  let medicalIssues = usableMedicalText(parsed.medical_issues || "").slice(0, 4000);
+  if (!medicalIssues) {
+    medicalIssues = usableMedicalText(prepared.rawPdfText || "").slice(0, 4000);
   }
   if (!medicalIssues) {
     const fallback = fallbackFromPdf();
     if (fallback?.medical_issues) return fallback;
+    return emptyExtractResult();
   }
 
   const prefs = mergeSearchPrefs(parsed, sourceText || medicalIssues);
@@ -558,6 +606,6 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     desired_services: toList(parsed.desired_services),
     desired_amenities: toList(parsed.desired_amenities),
     ...prefs,
-    documentsAnalyzed: prepared.analyzedCount || (medicalIssues ? 1 : 0),
+    documentsAnalyzed: prepared.analyzedCount || 1,
   };
 }
