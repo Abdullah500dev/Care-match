@@ -38,6 +38,28 @@ const listFromValue = (value) => {
     .filter(Boolean);
 };
 
+const mergeTextFields = (existing, incoming, maxLen = 4000) => {
+  const a = String(existing || "").trim();
+  const b = String(incoming || "").trim();
+  if (!b) return a;
+  if (!a) return b.slice(0, maxLen);
+  if (a.toLowerCase().includes(b.toLowerCase())) return a.slice(0, maxLen);
+  if (b.toLowerCase().includes(a.toLowerCase())) return b.slice(0, maxLen);
+  return `${a}\n\n${b}`.slice(0, maxLen);
+};
+
+const mergeTagLists = (existing, incoming) => {
+  const out = [];
+  const seen = new Set();
+  for (const item of [...listFromValue(existing), ...listFromValue(incoming)]) {
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+};
+
 const dedupeDocuments = (docs) => {
   const map = new Map();
   for (const doc of Array.isArray(docs) ? docs : []) {
@@ -370,15 +392,18 @@ export default function UserDashboardMedicalHistory() {
       skipUserFormSyncRef.current = true;
       setCareForm((prev) => ({
         ...prev,
-        medical_issues: fields.medical_issues || prev.medical_issues,
-        bio: fields.bio || prev.bio,
-        care_background: fields.care_background || prev.care_background,
-        desired_services: listFromValue(fields.desired_services).length
-          ? listFromValue(fields.desired_services)
-          : prev.desired_services,
-        desired_amenities: listFromValue(fields.desired_amenities).length
-          ? listFromValue(fields.desired_amenities)
-          : prev.desired_amenities,
+        medical_issues: mergeTextFields(prev.medical_issues, fields.medical_issues, 4000),
+        bio: mergeTextFields(prev.bio, fields.bio, 2000),
+        care_background: mergeTextFields(
+          prev.care_background,
+          fields.care_background,
+          4000,
+        ),
+        desired_services: mergeTagLists(prev.desired_services, fields.desired_services),
+        desired_amenities: mergeTagLists(
+          prev.desired_amenities,
+          fields.desired_amenities,
+        ),
         ...(nextZip.length === 5 ? { search_zip_code: nextZip } : {}),
         ...(fields.search_location
           ? { search_location: String(fields.search_location) }
@@ -395,10 +420,10 @@ export default function UserDashboardMedicalHistory() {
         dispatch(setUser({ user: data.user, token, tokenExpire: null }));
       }
 
-      toast.success("Medical History filled from your document", {
+      toast.success("Medical History updated from your document(s)", {
         description:
           Number(data.documentsAnalyzed) > 0
-            ? `AI reviewed ${data.documentsAnalyzed} file(s). Scroll down to review the text.`
+            ? `Merged details from ${data.documentsAnalyzed} file(s). Prior fields were kept and new facts added.`
             : "Review the Medical History field and edit if needed.",
       });
 

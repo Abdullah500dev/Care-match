@@ -384,6 +384,83 @@ function emptyExtractResult() {
   };
 }
 
+/** Merge free-text extracts without dropping either side. */
+export function mergeExtractText(existing, incoming, maxLen = 4000) {
+  const a = String(existing || "").trim();
+  const b = String(incoming || "").trim();
+  if (!b) return a.slice(0, maxLen);
+  if (!a) return b.slice(0, maxLen);
+  if (a.toLowerCase().includes(b.toLowerCase())) return a.slice(0, maxLen);
+  if (b.toLowerCase().includes(a.toLowerCase())) return b.slice(0, maxLen);
+  return `${a}\n\n${b}`.slice(0, maxLen);
+}
+
+/** Union string lists (case-insensitive), preserving order. */
+export function mergeExtractLists(existing, incoming, max = 40) {
+  const out = [];
+  const seen = new Set();
+  for (const item of [
+    ...(Array.isArray(existing) ? existing : []),
+    ...(Array.isArray(incoming) ? incoming : []),
+  ]) {
+    const t = String(item || "").trim();
+    if (!t) continue;
+    const key = t.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * Merge multiple per-document extract results into one form payload.
+ * Always additive — later docs add to earlier ones, never wipe them.
+ */
+export function mergeExtractedFieldSets(parts = []) {
+  let acc = emptyExtractResult();
+  for (const part of Array.isArray(parts) ? parts : []) {
+    if (!part || typeof part !== "object") continue;
+    const zip = String(part.search_zip_code || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+    acc = {
+      medical_issues: mergeExtractText(acc.medical_issues, part.medical_issues, 4000),
+      bio: mergeExtractText(acc.bio, part.bio, 2000),
+      care_background: mergeExtractText(
+        acc.care_background,
+        part.care_background,
+        4000,
+      ),
+      desired_services: mergeExtractLists(
+        acc.desired_services,
+        part.desired_services,
+        40,
+      ),
+      desired_amenities: mergeExtractLists(
+        acc.desired_amenities,
+        part.desired_amenities,
+        40,
+      ),
+      search_zip_code: zip.length === 5 ? zip : acc.search_zip_code,
+      search_location:
+        String(part.search_location || "").trim() || acc.search_location,
+      budget_max_monthly:
+        part.budget_max_monthly != null
+          ? part.budget_max_monthly
+          : acc.budget_max_monthly,
+      max_distance_miles:
+        part.max_distance_miles != null
+          ? part.max_distance_miles
+          : acc.max_distance_miles,
+      documentsAnalyzed:
+        Number(acc.documentsAnalyzed || 0) + Number(part.documentsAnalyzed || 0),
+    };
+  }
+  return acc;
+}
+
 function mergeSearchPrefs(parsed = {}, text = "") {
   const fromText = extractSearchPrefsFromText(text);
   const zipFromParsed = String(parsed.search_zip_code || "")
@@ -416,10 +493,43 @@ function mergeSearchPrefs(parsed = {}, text = "") {
 
 /**
  * Use OpenAI to turn uploaded medical docs/images into form field values.
+ * Multiple documents are always extracted one-by-one then merged (never replace).
  * @param {Array<{ path?: string, originalName?: string, mimeType?: string }>} docs
  */
 export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
-  const prepared = await prepareCareDocumentsForRecommend(docs);
+  const list = (Array.isArray(docs) ? docs : [])
+    .filter((d) => d && d.path)
+    .slice(0, MAX_DOCS);
+
+  // Multi-doc: extract each file separately, then always merge results.
+  if (list.length > 1) {
+    const parts = [];
+    for (const doc of list) {
+      try {
+        const one = await extractMedicalHistoryFieldsFromDocuments([doc]);
+        if (
+          one &&
+          (one.medical_issues ||
+            one.bio ||
+            one.care_background ||
+            (one.desired_services || []).length ||
+            (one.desired_amenities || []).length ||
+            one.documentsAnalyzed)
+        ) {
+          parts.push(one);
+        }
+      } catch (err) {
+        console.error(
+          `[care-docs] extract failed for ${doc.originalName || doc.path}:`,
+          err?.message || err,
+        );
+      }
+    }
+    if (!parts.length) return emptyExtractResult();
+    return mergeExtractedFieldSets(parts);
+  }
+
+  const prepared = await prepareCareDocumentsForRecommend(list);
 
   if (
     !prepared.analyzedCount ||
@@ -517,6 +627,7 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     `Rules:\n` +
     `- medical_issues is REQUIRED when any clinical content exists; write a complete readable summary.\n` +
     `- bio is REQUIRED when patient name/age/notes exist — synthesize a short intro from those facts (do not leave blank).\n` +
+    `- Combine facts from ALL attached documents into each field (do not drop earlier docs when multiple are present).\n` +
     `- Always extract search_zip_code, budget_max_monthly, and max_distance_miles when the document mentions ZIP, budget, or miles/radius.\n` +
     `- Never invent placeholder values like "City, ST" — only real values from the document.\n` +
     `- Use null for budget_max_monthly / max_distance_miles when unknown; "" for missing strings; [] for missing arrays.\n` +

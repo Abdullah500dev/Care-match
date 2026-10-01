@@ -32,7 +32,13 @@ import { mapAiDiscoveryFacilityToMatchRow } from "../services/aiDiscoveryBridge.
 import { enrichDiscoveryFacilitiesWithPersonalizedScores } from "../services/discoveryPersonalizedScore.js";
 import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscovery.js";
 import { extractPreferencesFromMedicalProfile } from "../services/medicalProfileRecommend.js";
-import { extractMedicalHistoryFieldsFromDocuments, resolveCareDocumentAbsPath } from "../services/careDocumentAnalysis.js";
+import {
+  extractMedicalHistoryFieldsFromDocuments,
+  resolveCareDocumentAbsPath,
+  mergeExtractText,
+  mergeExtractLists,
+  mergeExtractedFieldSets,
+} from "../services/careDocumentAnalysis.js";
 import { normalizeFacilityWebsite } from "../utils/normalizeFacilityWebsite.js";
 import {
   isAggregatorListingUrl,
@@ -2855,35 +2861,46 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     }
   }
 
-  user.medical_issues = String(fields.medical_issues || "").trim().slice(0, 4000);
-  if (fields.bio) {
-    user.bio = String(fields.bio).trim().slice(0, 2000);
-  }
-  if (fields.care_background) {
-    user.care_background = String(fields.care_background).trim().slice(0, 4000);
-  }
-  if (nextServices.length > 0) {
-    user.desired_services = nextServices;
-    user.markModified("desired_services");
-  }
-  if (nextAmenities.length > 0) {
-    user.desired_amenities = nextAmenities;
-    user.markModified("desired_amenities");
-  }
+  // Always merge with existing profile (multi-doc uploads never wipe prior extract).
+  const merged = mergeExtractedFieldSets([
+    {
+      medical_issues: user.medical_issues,
+      bio: user.bio,
+      care_background: user.care_background,
+      desired_services: user.desired_services,
+      desired_amenities: user.desired_amenities,
+      search_zip_code: user.search_zip_code,
+      search_location: user.search_location,
+      budget_max_monthly: user.budget_max_monthly,
+      max_distance_miles: user.max_distance_miles,
+      documentsAnalyzed: 0,
+    },
+    {
+      ...fields,
+      desired_services: nextServices,
+      desired_amenities: nextAmenities,
+    },
+  ]);
 
-  const zip = String(fields.search_zip_code || "").replace(/\D/g, "").slice(0, 5);
-  if (zip.length === 5) {
-    user.search_zip_code = zip;
+  user.medical_issues = mergeExtractText("", merged.medical_issues, 4000);
+  user.bio = mergeExtractText("", merged.bio, 2000);
+  user.care_background = mergeExtractText("", merged.care_background, 4000);
+  user.desired_services = mergeExtractLists([], merged.desired_services, 40);
+  user.desired_amenities = mergeExtractLists([], merged.desired_amenities, 40);
+  user.markModified("desired_services");
+  user.markModified("desired_amenities");
+
+  const zip = String(merged.search_zip_code || "").replace(/\D/g, "").slice(0, 5);
+  if (zip.length === 5) user.search_zip_code = zip;
+  if (merged.search_location) {
+    user.search_location = String(merged.search_location).trim().slice(0, 120);
   }
-  if (fields.search_location) {
-    user.search_location = String(fields.search_location).trim().slice(0, 120);
-  }
-  if (fields.budget_max_monthly != null) {
-    const n = Number(fields.budget_max_monthly);
+  if (merged.budget_max_monthly != null) {
+    const n = Number(merged.budget_max_monthly);
     if (Number.isFinite(n) && n >= 500) user.budget_max_monthly = Math.round(n);
   }
-  if (fields.max_distance_miles != null) {
-    const n = Number(fields.max_distance_miles);
+  if (merged.max_distance_miles != null) {
+    const n = Number(merged.max_distance_miles);
     if (Number.isFinite(n) && n >= 1) user.max_distance_miles = Math.round(n);
   }
 
@@ -2891,31 +2908,15 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
   await user.save();
 
   const responseFields = {
-    medical_issues: String(fields.medical_issues || user.medical_issues || "").trim(),
-    bio: String(fields.bio || user.bio || "").trim(),
-    care_background: String(fields.care_background || user.care_background || "").trim(),
-    desired_services:
-      nextServices.length > 0
-        ? nextServices
-        : Array.isArray(user.desired_services)
-          ? user.desired_services
-          : [],
-    desired_amenities:
-      nextAmenities.length > 0
-        ? nextAmenities
-        : Array.isArray(user.desired_amenities)
-          ? user.desired_amenities
-          : [],
-    search_zip_code: zip.length === 5 ? zip : String(user.search_zip_code || ""),
-    search_location: String(fields.search_location || user.search_location || "").trim(),
-    budget_max_monthly:
-      fields.budget_max_monthly != null
-        ? fields.budget_max_monthly
-        : user.budget_max_monthly ?? null,
-    max_distance_miles:
-      fields.max_distance_miles != null
-        ? fields.max_distance_miles
-        : user.max_distance_miles ?? null,
+    medical_issues: String(user.medical_issues || "").trim(),
+    bio: String(user.bio || "").trim(),
+    care_background: String(user.care_background || "").trim(),
+    desired_services: Array.isArray(user.desired_services) ? user.desired_services : [],
+    desired_amenities: Array.isArray(user.desired_amenities) ? user.desired_amenities : [],
+    search_zip_code: String(user.search_zip_code || "").replace(/\D/g, "").slice(0, 5),
+    search_location: String(user.search_location || "").trim(),
+    budget_max_monthly: user.budget_max_monthly ?? null,
+    max_distance_miles: user.max_distance_miles ?? null,
   };
 
   res.status(200).json({
