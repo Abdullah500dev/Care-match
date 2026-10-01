@@ -202,7 +202,6 @@ const BY_STATE = {
     "barnstable",
     "pittsfield",
     "attleboro",
-    "everett",
     "salem",
     "dedham",
     "belmont",

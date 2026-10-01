@@ -86,8 +86,9 @@ export function intakePreferencesToAiSearchParams(prefs) {
   let zip = String(prefs.searchZipCode || "").trim();
   if (!zip) zip = extractZipFromText(prefs.searchLocation);
 
-  const locationRaw = String(prefs.searchLocation || "").trim();
+  let locationRaw = String(prefs.searchLocation || "").trim();
   zip = reconcileZipWithLocation(zip, locationRaw);
+  locationRaw = sanitizeLocationForZip(locationRaw, zip);
 
   const careFromLevels = Array.isArray(prefs.careLevels)
     ? prefs.careLevels.map((x) => String(x).trim()).filter(Boolean)
@@ -140,6 +141,37 @@ import {
   isAggregatorListingUrl,
   resolveOperatorWebsite,
 } from "../utils/isAggregatorListingUrl.js";
+import { CITY_DEFAULT_STATE } from "../scripts/usCityDefaultState.js";
+import { stateFromUsZip } from "../scripts/usZipState.js";
+
+/** Prefer ZIP state over conflicting city names like Everett+80220. */
+function sanitizeLocationForZip(location, zip) {
+  const z = String(zip || "").replace(/\D/g, "").slice(0, 5);
+  const loc = String(location || "").trim();
+  const zipState = z.length === 5 ? stateFromUsZip(z) : "";
+  if (!zipState) return loc || z;
+
+  const cityToken = loc
+    .split(",")[0]
+    ?.replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)[0];
+  const cityState =
+    cityToken && CITY_DEFAULT_STATE.has(cityToken)
+      ? CITY_DEFAULT_STATE.get(cityToken)
+      : "";
+
+  if (cityState && cityState !== zipState) {
+    return `${zipState} ${z}`;
+  }
+  if (!loc) return `${zipState} ${z}`;
+  if (!new RegExp(`\\b${zipState}\\b`, "i").test(loc)) {
+    const cityPart = loc.replace(/\b\d{5}(?:-\d{4})?\b/g, "").replace(/,\s*$/, "").trim();
+    return cityPart ? `${cityPart}, ${zipState}` : `${zipState} ${z}`;
+  }
+  return loc;
+}
 
 /**
  * @param {object} f - one facility object from getCareMatchResults().results

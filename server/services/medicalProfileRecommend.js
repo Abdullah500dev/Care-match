@@ -169,6 +169,55 @@ export async function extractPreferencesFromMedicalProfile(profile = {}, documen
     prefs.searchLocation = prefs.searchZipCode;
   }
 
+  // ZIP is geographic truth. Drop GPT cities that conflict with the ZIP's state
+  // (e.g. "Everett" + 80220 must not become a Washington search).
+  try {
+    const { stateFromUsZip } = await import("../scripts/usZipState.js");
+    const { CITY_DEFAULT_STATE } = await import("../scripts/usCityDefaultState.js");
+    const zip = String(prefs.searchZipCode || "").replace(/\D/g, "").slice(0, 5);
+    const zipState = zip.length === 5 ? stateFromUsZip(zip) : "";
+    if (zipState) {
+      const loc = String(prefs.searchLocation || "").trim();
+      const cityToken = loc
+        .split(",")[0]
+        ?.replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)[0];
+      const cityState =
+        cityToken && CITY_DEFAULT_STATE.has(cityToken)
+          ? CITY_DEFAULT_STATE.get(cityToken)
+          : "";
+      if (cityState && cityState !== zipState) {
+        // Prefer form location if it already matches ZIP state; else use "ST ZIP".
+        const overrideCity = locationOverride
+          .split(",")[0]
+          ?.replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+          .trim()
+          .toLowerCase()
+          .split(/\s+/)[0];
+        const overrideState =
+          overrideCity && CITY_DEFAULT_STATE.has(overrideCity)
+            ? CITY_DEFAULT_STATE.get(overrideCity)
+            : "";
+        if (locationOverride && (!overrideState || overrideState === zipState)) {
+          prefs.searchLocation = locationOverride;
+        } else {
+          prefs.searchLocation = `${zipState} ${zip}`;
+        }
+      } else if (!loc) {
+        prefs.searchLocation = `${zipState} ${zip}`;
+      } else if (!new RegExp(`\\b${zipState}\\b`, "i").test(loc)) {
+        prefs.searchLocation = `${loc.replace(/\b\d{5}(?:-\d{4})?\b/g, "").trim()}, ${zipState}`.replace(
+          /^,\s*/,
+          "",
+        );
+      }
+    }
+  } catch {
+    // offline scripts optional
+  }
+
   const budgetMaxOverride = parseBudgetLikeValue(
     profile.budget_max_monthly ?? profile.budget_max,
   );

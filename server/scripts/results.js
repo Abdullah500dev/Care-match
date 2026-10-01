@@ -12,6 +12,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import { CITY_DEFAULT_STATE, inferStateFromCityHint } from "./usCityDefaultState.js";
+import { stateFromUsZip, zipCompatibleWithSearch } from "./usZipState.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,26 +114,72 @@ function validatePayload(body) {
 /** @param {{ zip_code: string, location: string, care_levels: unknown[], amenities: unknown[], services: unknown[] }} payload */
 export function parseGeoAnchorFromPayload(payload) {
   const zip = String(payload.zip_code || "").replace(/\D/g, "").slice(0, 5);
-  const location = String(payload.location || "").trim();
+  let location = String(payload.location || "").trim();
   const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
   let stateAbbr = null;
   let cityHint = "";
-  if (parts.length >= 2 && /^[A-Za-z]{2}$/.test(parts[parts.length - 1])) {
-    stateAbbr = parts[parts.length - 1].toUpperCase();
-    cityHint = parts.slice(0, -1).join(" ").toLowerCase().trim();
-  } else if (parts.length >= 1) {
-    cityHint = parts.join(" ").toLowerCase().trim();
-  }
-  cityHint = cityHint.replace(/\b\d{5}(?:-\d{4})?\b/g, "").replace(/\s+/g, " ").trim();
 
-  if (!stateAbbr) {
+  if (parts.length >= 2) {
+    const last = parts[parts.length - 1];
+    // "CO" OR "CO 80220" OR "Colorado"
+    const stateToken =
+      last.match(/^([A-Za-z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/)?.[1] ||
+      last.match(/\b([A-Za-z]{2})\b/)?.[1] ||
+      "";
+    if (stateToken && /^[A-Za-z]{2}$/.test(stateToken)) {
+      stateAbbr = stateToken.toUpperCase();
+      cityHint = parts
+        .slice(0, -1)
+        .join(" ")
+        .toLowerCase()
+        .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+  }
+
+  if (!cityHint) {
+    cityHint = String(location || "")
+      .toLowerCase()
+      .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+      .replace(/\b[a-z]{2}\b/g, (m) =>
+        ["co", "wa", "ca", "ny", "tx", "fl", "az", "or", "nv", "ut", "nm", "id"].includes(m)
+          ? ""
+          : m,
+      )
+      .replace(/[,\s]+/g, " ")
+      .trim();
+  }
+
+  const zipState = zip.length === 5 ? stateFromUsZip(zip) : "";
+  const cityKey = cityHint.split(/\s+/)[0]?.trim().toLowerCase() || "";
+  const cityDefaultState =
+    cityKey && CITY_DEFAULT_STATE.has(cityKey) ? CITY_DEFAULT_STATE.get(cityKey) : "";
+
+  // ZIP is authoritative. Never let "Everett" imply WA when ZIP is Colorado.
+  if (zipState) {
+    stateAbbr = zipState;
+    const cityConflictsWithZip =
+      Boolean(cityDefaultState) && cityDefaultState !== zipState;
+    // Drop city when it defaults to another state (Everett→WA with ZIP 80220).
+    if (cityConflictsWithZip) {
+      cityHint = "";
+      location = `${zipState} ${zip}`;
+    } else if (cityHint) {
+      location = `${cityHint.replace(/\b(co|wa|ca|ny|tx|fl|az|or|nv|ut)\b/gi, "").trim()}, ${zipState} ${zip}`
+        .replace(/\s+/g, " ")
+        .replace(/^,\s*|,\s*$/g, "")
+        .replace(/\s+,/g, ",")
+        .trim();
+    } else {
+      location = location.includes(zip) ? location : `${zipState} ${zip}`;
+    }
+  } else if (!stateAbbr) {
     const fromCity = inferStateFromCityHint(cityHint);
     if (fromCity) stateAbbr = fromCity;
+    else if (cityDefaultState) stateAbbr = cityDefaultState;
   }
-  const cityKey = cityHint.split(",")[0].trim().toLowerCase();
-  if (!stateAbbr && cityKey && CITY_DEFAULT_STATE.has(cityKey)) {
-    stateAbbr = CITY_DEFAULT_STATE.get(cityKey);
-  }
+
   return { zip, location, stateAbbr, cityHint };
 }
 
@@ -380,7 +427,14 @@ export function filterDiscoveryResultsByAnchor(results, anchor) {
       if (m) rowZip = m[1];
     }
 
+    // ZIP/state gate first — never keep Everett WA for a Colorado ZIP.
+    if (!zipCompatibleWithSearch(anchorZip, rowZip, rowState)) return false;
     if (wantState && rowState.length === 2 && rowState !== wantState) return false;
+    // Infer state from blob when row.state is missing (e.g. ", WA 98201").
+    if (wantState && !rowState) {
+      const blobState = blob.match(/,\s*([a-z]{2})\s+\d{5}/i)?.[1]?.toUpperCase();
+      if (blobState && blobState !== wantState) return false;
+    }
 
     if (wantState === "CA" && /,\s*ma\b|, massachusetts\b|\bdedham\b|\bbrookline\b|\bcambridge,\s*ma\b/.test(blob)) {
       if (!hint || !blob.includes(hint)) return false;
@@ -399,7 +453,11 @@ export function filterDiscoveryResultsByAnchor(results, anchor) {
         if (wantState && rowState.length === 2 && rowState !== wantState) return false;
         return true;
       }
-      return blob.includes(anchorZip);
+      // No facility ZIP: require same-state signal in the address blob.
+      if (wantState && !new RegExp(`\\b${wantState.toLowerCase()}\\b`).test(blob)) {
+        return false;
+      }
+      return blob.includes(anchorZip) || Boolean(wantState);
     }
 
     return false;
@@ -500,19 +558,27 @@ function fallbackGeoSubset(results, anchor) {
   const zipPrefix = anchorZip.length >= 2 ? anchorZip.slice(0, 2) : "";
 
   const sameState = rows.filter((f) => {
-    const rowState = String(f?.location?.state || "").trim().toUpperCase();
+    const loc = f?.location && typeof f.location === "object" ? f.location : {};
+    const rowState = String(loc.state || "").trim().toUpperCase();
+    const rowZip = String(loc.zip_code || "").replace(/\D/g, "").slice(0, 5);
+    if (!zipCompatibleWithSearch(anchorZip, rowZip, rowState)) return false;
     return Boolean(wantState) && rowState.length === 2 && rowState === wantState;
   });
   if (sameState.length > 0) return sameState;
 
   if (zipPrefix) {
     const sameZipPrefix = rows.filter((f) => {
-      const rowZip = String(f?.location?.zip_code || "").replace(/\D/g, "").slice(0, 5);
+      const loc = f?.location && typeof f.location === "object" ? f.location : {};
+      const rowZip = String(loc.zip_code || "").replace(/\D/g, "").slice(0, 5);
+      const rowState = String(loc.state || "").trim().toUpperCase();
+      if (!zipCompatibleWithSearch(anchorZip, rowZip, rowState)) return false;
       return rowZip.length === 5 && rowZip.startsWith(zipPrefix);
     });
     if (sameZipPrefix.length > 0) return sameZipPrefix;
   }
 
+  // Never fall back to cross-state rows when we know the anchor state.
+  if (wantState || anchorZip.length === 5) return [];
   return rows;
 }
 

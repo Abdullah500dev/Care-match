@@ -483,9 +483,84 @@ function mergeSearchPrefs(parsed = {}, text = "") {
     if (Number.isFinite(n) && n >= 1 && n <= 100) miles = Math.round(n);
   }
 
+  let search_zip_code =
+    zipFromParsed.length === 5 ? zipFromParsed : fromText.search_zip_code;
+  let search_location = locFromParsed || fromText.search_location;
+
+  // ZIP is geographic truth — drop cities that map to a different state.
+  try {
+    // Dynamic import avoided: keep sync. Inline ZIP3→state for common conflict cases.
+    const ZIP3_STATE = {
+      800: "CO",
+      801: "CO",
+      802: "CO",
+      803: "CO",
+      804: "CO",
+      805: "CO",
+      806: "CO",
+      807: "CO",
+      808: "CO",
+      809: "CO",
+      810: "CO",
+      811: "CO",
+      812: "CO",
+      813: "CO",
+      814: "CO",
+      815: "CO",
+      816: "CO",
+      980: "WA",
+      981: "WA",
+      982: "WA",
+      983: "WA",
+      984: "WA",
+      985: "WA",
+      986: "WA",
+      987: "WA",
+      988: "WA",
+      989: "WA",
+      990: "WA",
+      991: "WA",
+      992: "WA",
+      993: "WA",
+      994: "WA",
+    };
+    const CITY_STATE = {
+      everett: "WA",
+      seattle: "WA",
+      tacoma: "WA",
+      denver: "CO",
+      aurora: "CO",
+      boulder: "CO",
+    };
+    const z = String(search_zip_code || "").replace(/\D/g, "").slice(0, 5);
+    const zipState = z.length === 5 ? ZIP3_STATE[z.slice(0, 3)] || "" : "";
+    if (zipState && search_location) {
+      const cityToken = String(search_location)
+        .split(",")[0]
+        .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)[0];
+      const cityState = CITY_STATE[cityToken] || "";
+      if (cityState && cityState !== zipState) {
+        search_location = `${zipState} ${z}`;
+      } else if (!new RegExp(`\\b${zipState}\\b`, "i").test(search_location)) {
+        const cityPart = String(search_location)
+          .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+          .replace(/,\s*$/, "")
+          .trim();
+        search_location = cityPart
+          ? `${cityPart}, ${zipState}`.slice(0, 120)
+          : `${zipState} ${z}`;
+      }
+    }
+  } catch {
+    // keep as-is
+  }
+
   return {
-    search_zip_code: zipFromParsed.length === 5 ? zipFromParsed : fromText.search_zip_code,
-    search_location: locFromParsed || fromText.search_location,
+    search_zip_code,
+    search_location,
     budget_max_monthly: budget ?? fromText.budget_max_monthly,
     max_distance_miles: miles ?? fromText.max_distance_miles,
   };
@@ -620,7 +695,7 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     `  "desired_services": ["short service phrases"],\n` +
     `  "desired_amenities": ["short amenity phrases"],\n` +
     `  "search_zip_code": "five digit ZIP when present, otherwise \"\"",\n` +
-    `  "search_location": "real city and state from the document only, otherwise \"\"",\n` +
+    `  "search_location": "real city and state from the document only (hospital/facility address city preferred), otherwise \"\"",\n` +
     `  "budget_max_monthly": null,\n` +
     `  "max_distance_miles": null\n` +
     `}\n\n` +
@@ -629,6 +704,7 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     `- bio is REQUIRED when patient name/age/notes exist — synthesize a short intro from those facts (do not leave blank).\n` +
     `- Combine facts from ALL attached documents into each field (do not drop earlier docs when multiple are present).\n` +
     `- Always extract search_zip_code, budget_max_monthly, and max_distance_miles when the document mentions ZIP, budget, or miles/radius.\n` +
+    `- search_location MUST match the same metro/state as search_zip_code (e.g. Denver CO for ZIP 802xx). Never invent a city in a different state.\n` +
     `- Never invent placeholder values like "City, ST" — only real values from the document.\n` +
     `- Use null for budget_max_monthly / max_distance_miles when unknown; "" for missing strings; [] for missing arrays.\n` +
     `- Do not invent facts not supported by the documents.\n` +

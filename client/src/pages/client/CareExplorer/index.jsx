@@ -689,14 +689,98 @@ function buildEffectiveLocationQuery(locationQuery, zipCode) {
   const zip = String(zipCode || "")
     .replace(/\D/g, "")
     .slice(0, 5);
+
+  // Known city→state conflicts: never append a mismatched city to a ZIP search.
+  // e.g. "Everett" + 80220 (CO) must not become "Everett, CO 80220" (geocodes to WA).
+  const CITY_STATE = {
+    everett: "WA",
+    seattle: "WA",
+    tacoma: "WA",
+    denver: "CO",
+    aurora: "CO",
+    boulder: "CO",
+    phoenix: "AZ",
+    scottsdale: "AZ",
+  };
+  const ZIP_STATE_PREFIX = {
+    "80": "CO",
+    "81": "CO",
+    "98": "WA",
+    "99": "WA",
+    "85": "AZ",
+    "86": "AZ",
+    "90": "CA",
+    "91": "CA",
+    "92": "CA",
+    "93": "CA",
+    "94": "CA",
+  };
+
   if (location && zip) {
     const locationZip = extractFiveDigitZip(location);
     if (location === zip || locationZip === zip) return location;
-    return `${location} ${zip}`;
+
+    const cityToken = location
+      .split(",")[0]
+      .replace(/\b\d{5}(?:-\d{4})?\b/g, "")
+      .trim()
+      .toLowerCase()
+      .split(/\s+/)[0];
+    const cityState = CITY_STATE[cityToken] || "";
+    const zipState = ZIP_STATE_PREFIX[zip.slice(0, 2)] || "";
+    if (cityState && zipState && cityState !== zipState) {
+      // ZIP wins — do not geocode "Everett, CO 80220" (resolves to WA).
+      return `${zipState} ${zip}`;
+    }
+    // Prefer "City, ST ZIP" only when state already matches zip, else zip alone.
+    if (/\b[A-Z]{2}\b/.test(location) && zipState) {
+      const locState = location.match(/\b([A-Z]{2})\b/i)?.[1]?.toUpperCase();
+      if (locState && locState !== zipState) return `${zipState} ${zip}`;
+    }
+    return `${location} ${zip}`.replace(/\s+/g, " ").trim();
   }
   if (location) return location;
   if (zip) return zip;
   return "";
+}
+
+/** Reject facilities whose ZIP/state conflicts with the search ZIP (e.g. WA vs CO). */
+function facilityMatchesSearchZipState(facility, searchZip) {
+  const want = String(searchZip || "").replace(/\D/g, "").slice(0, 5);
+  if (want.length !== 5) return true;
+  const ZIP_STATE_PREFIX = {
+    "80": "CO",
+    "81": "CO",
+    "98": "WA",
+    "99": "WA",
+    "85": "AZ",
+    "86": "AZ",
+    "90": "CA",
+    "91": "CA",
+    "92": "CA",
+    "93": "CA",
+    "94": "CA",
+    "02": "MA",
+    "01": "MA",
+  };
+  const wantState = ZIP_STATE_PREFIX[want.slice(0, 2)] || "";
+  if (!wantState) return true;
+
+  const facZip = String(facility?.zipCode || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  if (facZip.length === 5) {
+    const facState = ZIP_STATE_PREFIX[facZip.slice(0, 2)] || "";
+    if (facState && facState !== wantState) return false;
+  }
+
+  const addr = String(facility?.address || "");
+  const addrState =
+    addr.match(/,\s*([A-Za-z]{2})\s+\d{5}/)?.[1]?.toUpperCase() ||
+    addr.match(/\b([A-Za-z]{2})\s+\d{5}\b/)?.[1]?.toUpperCase() ||
+    "";
+  if (addrState && addrState !== wantState) return false;
+  return true;
 }
 
 function normalizeLocationFieldValue(locationQuery, zipCode) {
@@ -1049,7 +1133,11 @@ function buildDiscoverRequestBody(
 
   // Keep the location scoped to the city/state even when max distance changes,
   // so increasing radius never narrows the base discovery query.
-  let location = normalizeLocationFieldValue(baseLocation, zip) || baseLocation;
+  // ZIP is authoritative when city name conflicts (Everett + 80220 → CO, not WA).
+  let location =
+    buildEffectiveLocationQuery(baseLocation, zip) ||
+    normalizeLocationFieldValue(baseLocation, zip) ||
+    baseLocation;
   if (!location) {
     location = zip;
   }
@@ -1187,7 +1275,12 @@ const CareExplorer = () => {
     carrieZipCode,
   );
   const inferredCarrieLocationQuery =
-    normalizedCarrieLocationQueryRaw || inferCityStateFromMatches(carrieMatches);
+    buildEffectiveLocationQuery(
+      normalizedCarrieLocationQueryRaw || inferCityStateFromMatches(carrieMatches),
+      carrieZipCode,
+    ) ||
+    normalizedCarrieLocationQueryRaw ||
+    inferCityStateFromMatches(carrieMatches);
 
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
@@ -1539,12 +1632,14 @@ const CareExplorer = () => {
       AMENITY_ALIASES,
     );
 
+    const rawCarrieLoc =
+      normalizeLocationFieldValue(carrieLocationQuery, carrieZipCode) ||
+      inferCityStateFromMatches(carrieMatches);
+    // ZIP wins over conflicting city names (Everett + 80220 → "CO 80220", not WA).
+    const safeCarrieLoc = buildEffectiveLocationQuery(rawCarrieLoc, carrieZipCode);
     const nextFilters = {
       ...initialFilters,
-      locationQuery: normalizeLocationFieldValue(
-        carrieLocationQuery,
-        carrieZipCode,
-      ) || inferCityStateFromMatches(carrieMatches),
+      locationQuery: safeCarrieLoc || rawCarrieLoc || "",
       zipCode: carrieZipCode,
       budgetMin: safeMin,
       budgetMax: safeMax,
@@ -2032,6 +2127,11 @@ const CareExplorer = () => {
           fromCarrie ||
           String(facility.sourcePlatform || "").toLowerCase().includes("ai discovery");
         if (!isCarrieResult && !isPartner) return false;
+      }
+
+      // Never show WA facilities for a Colorado ZIP (and similar ZIP/state mismatches).
+      if (!facilityMatchesSearchZipState(facility, activeFilters.zipCode)) {
+        return false;
       }
 
       // Strict radius: only show communities with a verified distance <= max miles from search center.
