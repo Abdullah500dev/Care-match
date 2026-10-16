@@ -24,7 +24,7 @@ import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps"
 import LoadingOverlay from "@/components/client/LoadingOverlay";
 
 const UPLOAD_MEDICAL_DOC_TIP =
-  "Get better matches by uploading a medical document. We only use it to find better facilities for you, and it does not breach the patient's privacy policy.";
+  "You can upload your medical records here for better matches for facilities. We ensure we maintain all patient confidentiality and privacy.";
 
 const HOME_MEDICAL_DOC_INPUT_ID = "home-marketplace-medical-doc-upload";
 
