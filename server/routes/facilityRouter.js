@@ -12,6 +12,7 @@ import {
   postDiscoverFacilities,
   postRecommendFromProfile,
   postParseMedicalDocuments,
+  postExtractSearchZip,
   getGooglePlacePhotoProxy,
   getGooglePlacePhotoByPlaceIdProxy,
   getFacility,
@@ -40,6 +41,11 @@ router.post(
   isAutheticated,
   uploadUserCareDocuments.array("documents", 6),
   postParseMedicalDocuments,
+);
+router.post(
+  "/extract-search-zip",
+  uploadUserCareDocuments.array("documents", 1),
+  postExtractSearchZip,
 );
 router.get("/google-place-photo", getGooglePlacePhotoProxy);
 router.get("/google-place-photo-by-place-id", getGooglePlacePhotoByPlaceIdProxy);

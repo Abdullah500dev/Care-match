@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Loader2, MessageCircle, Mic } from "lucide-react";
+import { ArrowRight, FileUp, Loader2, MessageCircle, Mic } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -9,10 +9,24 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
-import { postDiscoverFacilities } from "@/services/matchService";
+import {
+  postDiscoverFacilities,
+  postExtractSearchZip,
+} from "@/services/matchService";
 import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
 import LoadingOverlay from "@/components/client/LoadingOverlay";
+
+const UPLOAD_MEDICAL_DOC_TIP =
+  "Get better matches by uploading a medical document. We only use it to find better facilities for you, and it does not breach the patient's privacy policy.";
+
+const HOME_MEDICAL_DOC_INPUT_ID = "home-marketplace-medical-doc-upload";
 
 export default function SearchBar() {
   const navigate = useNavigate();
@@ -32,11 +46,13 @@ export default function SearchBar() {
   const [chatComposer, setChatComposer] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [isQuickSearching, setIsQuickSearching] = useState(false);
+  const [isExtractingZip, setIsExtractingZip] = useState(false);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [queryCoords, setQueryCoords] = useState(null);
   const inputRef = useRef(null);
+  const docUploadRef = useRef(null);
   const chatComposerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -443,7 +459,52 @@ export default function SearchBar() {
 
   const resolvedCareLevels = useMemo(() => ["assisted living"], []);
 
-  const runQuickSearch = async (text) => {
+  const resolvePlaceFromAddress = async (address) => {
+    const q = String(address || "").trim();
+    if (!q) return null;
+    try {
+      const apiKey = getGoogleMapsApiKey();
+      if (apiKey) await loadGoogleMapsScript(apiKey);
+    } catch {
+      // continue if Maps already loaded
+    }
+    if (!window.google?.maps?.Geocoder) return null;
+    const geocoder = locationGeocoderRef.current || new window.google.maps.Geocoder();
+    return new Promise((resolve) => {
+      geocoder.geocode({ address: q, componentRestrictions: { country: "US" } }, (results, status) => {
+        if (status !== "OK" || !Array.isArray(results) || !results[0]) {
+          resolve(null);
+          return;
+        }
+        const place = results[0];
+        const loc = place.geometry?.location;
+        const comps = place.address_components || [];
+        const city =
+          comps.find((c) => c.types.includes("locality"))?.long_name ||
+          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
+          comps.find((c) => c.types.includes("sublocality"))?.long_name ||
+          "";
+        const state =
+          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
+          "";
+        const postal =
+          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
+        const cityLabel =
+          city && state ? `${city}, ${state}` : city || state || "";
+        resolve({
+          latitude:
+            loc && Number.isFinite(loc.lat()) ? loc.lat() : null,
+          longitude:
+            loc && Number.isFinite(loc.lng()) ? loc.lng() : null,
+          cityLabel,
+          zip: String(postal || "").replace(/\D/g, "").slice(0, 5),
+        });
+      });
+    });
+  };
+
+  const runQuickSearch = async (text, options = {}) => {
+    const zipOnly = options.zipOnly === true;
     const trimmed = String(text || "").trim();
     if (!trimmed || chatSending) {
       if (!trimmed) {
@@ -455,33 +516,66 @@ export default function SearchBar() {
     const zipCode = zipMatch?.[1] || "";
     setIsQuickSearching(true);
     setChatSending(true);
-    setQuery("");
     try {
-      const resolveCoordsForSearch = async () => {
+      let resolvedCoords = null;
+      let locationForUi = zipOnly ? "" : trimmed;
+      let locationForSearch = zipOnly && zipCode ? zipCode : trimmed;
+      const zipForSearch = zipOnly && zipCode ? zipCode : zipCode || trimmed;
+
+      if (zipOnly && zipCode) {
+        const place = await resolvePlaceFromAddress(zipCode);
+        if (
+          place?.latitude != null &&
+          place?.longitude != null &&
+          !(Math.abs(place.latitude) < 0.01 && Math.abs(place.longitude) < 0.01)
+        ) {
+          resolvedCoords = {
+            latitude: place.latitude,
+            longitude: place.longitude,
+          };
+        }
+        // City field gets "Denver, CO"; ZIP field stays 80220 — never put ZIP in city.
+        locationForUi = place?.cityLabel || "";
+        // Discover uses city when known (better directory hits); ZIP stays authoritative.
+        locationForSearch = locationForUi || zipCode;
+        setQuery(locationForUi || zipCode);
+        setQueryCoords(
+          resolvedCoords
+            ? { lat: resolvedCoords.latitude, lng: resolvedCoords.longitude }
+            : null,
+        );
+      } else {
+        setQuery(trimmed);
         if (
           queryCoords &&
           Number.isFinite(Number(queryCoords.lat)) &&
           Number.isFinite(Number(queryCoords.lng))
         ) {
-          return { latitude: Number(queryCoords.lat), longitude: Number(queryCoords.lng) };
+          resolvedCoords = {
+            latitude: Number(queryCoords.lat),
+            longitude: Number(queryCoords.lng),
+          };
+        } else {
+          const place = await resolvePlaceFromAddress(trimmed);
+          if (
+            place?.latitude != null &&
+            place?.longitude != null &&
+            !(Math.abs(place.latitude) < 0.01 && Math.abs(place.longitude) < 0.01)
+          ) {
+            resolvedCoords = {
+              latitude: place.latitude,
+              longitude: place.longitude,
+            };
+          }
         }
-        if (!window.google?.maps?.Geocoder) return null;
-        const geocoder = locationGeocoderRef.current || new window.google.maps.Geocoder();
-        return new Promise((resolve) => {
-          geocoder.geocode({ address: trimmed }, (results, status) => {
-            if (status !== "OK" || !Array.isArray(results) || !results[0]?.geometry?.location) {
-              resolve(null);
-              return;
-            }
-            const loc = results[0].geometry.location;
-            resolve({ latitude: loc.lat(), longitude: loc.lng() });
-          });
-        });
-      };
-      const resolvedCoords = await resolveCoordsForSearch();
+      }
+
+      const displayLocation =
+        locationForUi || (zipOnly ? zipForSearch : locationForSearch);
+
       const payload = {
-        zip_code: zipCode || trimmed,
-        location: trimmed,
+        zip_code: zipForSearch,
+        location: locationForSearch,
         care_levels: resolvedCareLevels,
         max_distance_miles: DEFAULT_SEARCH_MAX_MILES,
         ...(resolvedCoords || {}),
@@ -491,19 +585,19 @@ export default function SearchBar() {
       navigate("/care-explorer", {
         state: {
           fromCarrie: true,
-          searchSource: "manual",
+          searchSource: zipOnly ? "documentZip" : "manual",
           carrieMatches: matches,
           carrieFilters: {
-            source: "quickSearch",
-            locationQuery: trimmed,
-            searchLocation: trimmed,
+            source: zipOnly ? "documentZip" : "quickSearch",
+            locationQuery: locationForUi,
+            searchLocation: locationForUi || locationForSearch,
             searchZipCode: zipCode || undefined,
             budgetMinMonthly: DEFAULT_BUDGET_MIN,
             budgetMaxMonthly: DEFAULT_BUDGET_MAX,
             maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
             careLevels: resolvedCareLevels,
             displayCriteria: {
-              location: trimmed,
+              location: displayLocation,
               budgetMinMonthly: DEFAULT_BUDGET_MIN,
               budgetMaxMonthly: DEFAULT_BUDGET_MAX,
               maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
@@ -515,22 +609,25 @@ export default function SearchBar() {
       const desc =
         err?.response?.data?.message || err?.message || "Search request failed.";
       toast.error("Search failed", { description: desc });
+      const zipOnlyZip = zipOnly
+        ? String(trimmed).match(/\b(\d{5})(?:-\d{4})?\b/)?.[1] || ""
+        : "";
       navigate("/care-explorer", {
         state: {
           fromCarrie: true,
-          searchSource: "manual",
+          searchSource: zipOnly ? "documentZip" : "manual",
           carrieMatches: [],
           carrieFilters: {
-            source: "quickSearch",
-            locationQuery: trimmed,
-            searchLocation: trimmed,
+            source: zipOnly ? "documentZip" : "quickSearch",
+            locationQuery: zipOnly ? "" : trimmed,
+            searchLocation: zipOnly ? zipOnlyZip || trimmed : trimmed,
             searchZipCode: zipCode || undefined,
             budgetMinMonthly: DEFAULT_BUDGET_MIN,
             budgetMaxMonthly: DEFAULT_BUDGET_MAX,
             maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
             careLevels: resolvedCareLevels,
             displayCriteria: {
-              location: trimmed,
+              location: zipOnly ? zipOnlyZip || trimmed : trimmed,
               budgetMinMonthly: DEFAULT_BUDGET_MIN,
               budgetMaxMonthly: DEFAULT_BUDGET_MAX,
               maxDistanceMiles: DEFAULT_SEARCH_MAX_MILES,
@@ -541,6 +638,48 @@ export default function SearchBar() {
     } finally {
       setChatSending(false);
       setIsQuickSearching(false);
+    }
+  };
+
+  const handleDocumentUpload = async (event) => {
+    const file = event?.target?.files?.[0];
+    if (event?.target) event.target.value = "";
+    if (!file || chatSending || isExtractingZip || isQuickSearching) return;
+
+    setIsExtractingZip(true);
+    const toastId = toast.loading("Reading ZIP code from document…");
+    try {
+      const formData = new FormData();
+      formData.append("documents", file);
+      const { data } = await postExtractSearchZip(formData);
+      const zip = String(data?.zip_code || "")
+        .replace(/\D/g, "")
+        .slice(0, 5);
+      toast.dismiss(toastId);
+      if (!data?.success || zip.length !== 5) {
+        toast.error("No ZIP found", {
+          description:
+            data?.message ||
+            "Could not find a 5-digit ZIP in that document. Enter one manually.",
+        });
+        setIsExtractingZip(false);
+        return;
+      }
+      setQuery(zip);
+      toast.success(`Found ZIP ${zip}`, {
+        description: "Searching communities near that ZIP…",
+      });
+      setIsExtractingZip(false);
+      await runQuickSearch(zip, { zipOnly: true });
+    } catch (err) {
+      toast.dismiss(toastId);
+      setIsExtractingZip(false);
+      toast.error("Document upload failed", {
+        description:
+          err?.response?.data?.message ||
+          err?.message ||
+          "Could not read that file.",
+      });
     }
   };
 
@@ -802,25 +941,70 @@ export default function SearchBar() {
         />
       </div>
 
+      <input
+        id={HOME_MEDICAL_DOC_INPUT_ID}
+        ref={docUploadRef}
+        type="file"
+        accept=".pdf,.doc,.docx,image/jpeg,image/png,image/webp,image/gif,application/pdf"
+        className="sr-only"
+        onChange={handleDocumentUpload}
+      />
+
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-[#64748b]">
           Within {DEFAULT_SEARCH_MAX_MILES} miles · ${DEFAULT_BUDGET_MIN.toLocaleString()}–$
           {DEFAULT_BUDGET_MAX.toLocaleString()}/mo
         </p>
-        <button
-          type="button"
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-          onClick={handleChatSubmit}
-          disabled={chatSending}
-        >
-          {chatSending ? (
-            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
-          ) : (
-            <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
-          )}
-          Search
-        </button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* Native <label> so mobile opens the file picker on first tap. */}
+                <label
+                  htmlFor={HOME_MEDICAL_DOC_INPUT_ID}
+                  className={`inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#00CFF4] bg-white px-4 py-3 text-sm font-semibold text-[#00A8C8] hover:bg-[#E0F7FA] sm:w-auto sm:px-5 ${
+                    chatSending || isExtractingZip || isQuickSearching
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }`}
+                >
+                  {isExtractingZip ? (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                  ) : (
+                    <FileUp className="h-4 w-4" strokeWidth={2.5} />
+                  )}
+                  {isExtractingZip ? "Reading doc…" : "Upload medical document"}
+                </label>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                collisionPadding={12}
+                className="z-[80] hidden max-w-[280px] border border-[#E2E8F0] bg-white px-3 py-2 text-left text-xs leading-relaxed text-[#334155] shadow-md sm:block"
+              >
+                {UPLOAD_MEDICAL_DOC_TIP}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <button
+            type="button"
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 sm:w-auto"
+            onClick={handleChatSubmit}
+            disabled={chatSending || isExtractingZip}
+          >
+            {chatSending && !isExtractingZip ? (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+            ) : (
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
+            )}
+            Search
+          </button>
+        </div>
       </div>
+
+      {/* Mobile: tip always visible (hover tooltip is desktop-only). */}
+      <p className="mt-3 text-xs leading-relaxed text-[#64748b] sm:hidden">
+        {UPLOAD_MEDICAL_DOC_TIP}
+      </p>
 
       <Sheet open={isChatOpen} onOpenChange={setIsChatOpen}>
         <SheetContent
@@ -1069,7 +1253,7 @@ export default function SearchBar() {
           animation: carrieThinkingProgress 1.8s ease-in-out infinite;
         }
       `}</style>
-      <LoadingOverlay open={isQuickSearching} />
+      <LoadingOverlay open={isQuickSearching || isExtractingZip} />
     </div>
   );
 }

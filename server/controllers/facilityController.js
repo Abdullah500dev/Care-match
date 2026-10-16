@@ -34,6 +34,7 @@ import { findOwnedFacilitiesForDiscover } from "../services/ownedFacilityDiscove
 import { extractPreferencesFromMedicalProfile } from "../services/medicalProfileRecommend.js";
 import {
   extractMedicalHistoryFieldsFromDocuments,
+  extractSearchZipFromDocuments,
   resolveCareDocumentAbsPath,
   mergeExtractText,
   mergeExtractLists,
@@ -151,8 +152,19 @@ const toOptionalNumber = (value) => {
 const normalizeFiveDigitZip = (value) => String(value || "").replace(/\D/g, "").slice(0, 5);
 
 const toFiniteNumber = (value) => {
+  // Number(null) === 0 — never treat missing coords as Null Island (0,0).
+  if (value == null || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+};
+
+/** True when lat/lng look like a real map point (not missing / Null Island). */
+const hasUsableLatLng = (lat, lng) => {
+  const latitude = toFiniteNumber(lat);
+  const longitude = toFiniteNumber(lng);
+  if (latitude == null || longitude == null) return false;
+  if (Math.abs(latitude) < 0.01 && Math.abs(longitude) < 0.01) return false;
+  return true;
 };
 
 const buildFullAddress = (address, city, state, zipCode) =>
@@ -530,21 +542,31 @@ const filterRowsByAnchorDistance = (
 
   if (maxMiles == null) return list;
 
-  if (!Number.isFinite(anchorLat) || !Number.isFinite(anchorLng)) {
-    return list.filter((row) =>
-      ownedRowMatchesLocationWithoutCoords(row, searchZip, locationText)
-    );
+  // No usable map anchor: keep rows. Upstream Caring/Silver already radius-filtered.
+  // (Do NOT fall back to ownedRowMatchesLocationWithoutCoords — it always rejects externals.)
+  if (!hasUsableLatLng(anchorLat, anchorLng)) {
+    return list;
   }
 
   const normalizedSearchZip = normalizeFiveDigitZip(searchZip);
+  const aLat = toFiniteNumber(anchorLat);
+  const aLng = toFiniteNumber(anchorLng);
 
   return list.filter((row) => {
     const lat = toFiniteNumber(row?.latitude ?? row?.external_data?.google_places?.latitude);
     const lng = toFiniteNumber(row?.longitude ?? row?.external_data?.google_places?.longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return ownedRowMatchesLocationWithoutCoords(row, normalizedSearchZip, locationText);
+      // ZIP / city text match for partners; for externals keep if ZIP prefix matches search.
+      if (ownedRowMatchesLocationWithoutCoords(row, normalizedSearchZip, locationText)) {
+        return true;
+      }
+      if (row?.is_external !== false && normalizedSearchZip.length === 5) {
+        const fz = normalizeFiveDigitZip(row?.zip_code || row?.external_data?.zip_code);
+        if (fz && fz.slice(0, 3) === normalizedSearchZip.slice(0, 3)) return true;
+      }
+      return false;
     }
-    const miles = distanceMilesBetweenPoints(anchorLat, anchorLng, lat, lng);
+    const miles = distanceMilesBetweenPoints(aLat, aLng, lat, lng);
     return Number.isFinite(miles) && miles <= maxMiles;
   });
 };
@@ -633,17 +655,30 @@ const fetchExternalZipSearchMatches = async (
   const silverContextRaw = resolveLocationContextFromSilverAssist(silverPayload, searchQuery);
   const providedLat = toFiniteNumber(seedLatitude);
   const providedLng = toFiniteNumber(seedLongitude);
+  const providedOk = hasUsableLatLng(providedLat, providedLng);
+  const silverOk = hasUsableLatLng(
+    silverContextRaw.latitude,
+    silverContextRaw.longitude,
+  );
   let silverContext = {
     ...silverContextRaw,
-    latitude: providedLat ?? silverContextRaw.latitude ?? null,
-    longitude: providedLng ?? silverContextRaw.longitude ?? null,
+    latitude: providedOk
+      ? providedLat
+      : silverOk
+        ? toFiniteNumber(silverContextRaw.latitude)
+        : null,
+    longitude: providedOk
+      ? providedLng
+      : silverOk
+        ? toFiniteNumber(silverContextRaw.longitude)
+        : null,
   };
-  if (silverContext.latitude == null || silverContext.longitude == null) {
+  if (!hasUsableLatLng(silverContext.latitude, silverContext.longitude)) {
     const geocoded = await geocodeQueryToLatLng(searchQuery, signal);
     silverContext = {
       ...silverContext,
-      latitude: silverContext.latitude ?? geocoded.latitude,
-      longitude: silverContext.longitude ?? geocoded.longitude,
+      latitude: geocoded.latitude,
+      longitude: geocoded.longitude,
     };
   }
   const silverRows = mapExternalPayloadToMatchRows(silverPayload, "SilverAssist", silverContext);
@@ -844,6 +879,15 @@ const fetchExternalZipSearchMatches = async (
     anchorLng,
     requestedDistanceMiles,
   });
+
+  // Stash resolved search center on the result array so the outer discover
+  // handler can reuse it when Google geocode was unavailable.
+  if (Array.isArray(merged) && hasUsableLatLng(anchorLat, anchorLng)) {
+    Object.defineProperty(merged, "_searchCenter", {
+      value: { latitude: anchorLat, longitude: anchorLng },
+      enumerable: false,
+    });
+  }
   return merged;
 };
 
@@ -2355,15 +2399,14 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
   const fetchController = new AbortController();
   const fetchSignal = fetchController.signal;
 
-  if (latitude == null || longitude == null) {
-    const geo = await geocodeQueryToLatLng(
+  if (!hasUsableLatLng(latitude, longitude)) {
+    const geoQuery =
+      normalizeFiveDigitZip(zipCode) ||
       [location, normalizeFiveDigitZip(zipCode)].filter(Boolean).join(", ") ||
-        normalizeFiveDigitZip(zipCode) ||
-        location,
-      fetchSignal
-    );
-    latitude = geo.latitude ?? latitude;
-    longitude = geo.longitude ?? longitude;
+      location;
+    const geo = await geocodeQueryToLatLng(geoQuery, fetchSignal);
+    latitude = geo.latitude;
+    longitude = geo.longitude;
   }
 
   let externalRows = [];
@@ -2397,6 +2440,17 @@ export const postDiscoverFacilities = catchAsyncError(async (req, res, next) => 
     }
   } finally {
     fetchController.abort();
+  }
+
+  // Prefer the anchor that upstream search actually used (Silver/Caring).
+  const fetchedCenter = externalRows?._searchCenter;
+  if (
+    !hasUsableLatLng(latitude, longitude) &&
+    fetchedCenter &&
+    hasUsableLatLng(fetchedCenter.latitude, fetchedCenter.longitude)
+  ) {
+    latitude = fetchedCenter.latitude;
+    longitude = fetchedCenter.longitude;
   }
 
   if (ownedRows.length > 0) {
@@ -2926,4 +2980,68 @@ export const postParseMedicalDocuments = catchAsyncError(async (req, res, next) 
     documents: Array.isArray(user.care_documents) ? user.care_documents : [],
     user,
   });
+});
+
+/**
+ * POST /api/facilities/extract-search-zip (public)
+ * Upload one medical PDF/image → extract ZIP only for homepage marketplace search.
+ * File is deleted after extraction (not saved to a user profile).
+ */
+export const postExtractSearchZip = catchAsyncError(async (req, res, next) => {
+  const uploaded = Array.isArray(req.files) ? req.files : req.file ? [req.file] : [];
+  if (!uploaded.length) {
+    return next(new ErrorHandler("Upload a PDF or image of a medical record.", 400));
+  }
+
+  const file = uploaded[0];
+  const documents = [
+    {
+      path: `/uploads/user-care/${file.filename}`,
+      originalName: file.originalname || file.filename,
+      mimeType: file.mimetype || "",
+      size: file.size || 0,
+    },
+  ];
+
+  const unlinkUploaded = () => {
+    for (const f of uploaded) {
+      try {
+        if (f?.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  };
+
+  try {
+    const result = await extractSearchZipFromDocuments(documents);
+    const zip = String(result?.zip_code || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+    unlinkUploaded();
+
+    if (zip.length !== 5) {
+      return res.status(200).json({
+        success: false,
+        zip_code: "",
+        message:
+          "Could not find a 5-digit ZIP code in that document. Try another page or enter a ZIP manually.",
+        documentsAnalyzed: result?.documentsAnalyzed || 0,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      zip_code: zip,
+      documentsAnalyzed: result?.documentsAnalyzed || 0,
+    });
+  } catch (err) {
+    unlinkUploaded();
+    return next(
+      new ErrorHandler(
+        err?.message || "Could not read that document",
+        err?.statusCode || 502,
+      ),
+    );
+  }
 });

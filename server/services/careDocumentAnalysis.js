@@ -796,3 +796,41 @@ export async function extractMedicalHistoryFieldsFromDocuments(docs = []) {
     documentsAnalyzed: prepared.analyzedCount || 1,
   };
 }
+
+/**
+ * Extract only a 5-digit US ZIP from uploaded medical docs (homepage quick search).
+ * Tries PDF text first, then full AI extract for images / scanned PDFs.
+ * @param {Array<{ path?: string, originalName?: string, mimeType?: string }>} docs
+ * @returns {Promise<{ zip_code: string, documentsAnalyzed: number }>}
+ */
+export async function extractSearchZipFromDocuments(docs = []) {
+  const list = (Array.isArray(docs) ? docs : [])
+    .filter((d) => d && d.path)
+    .slice(0, 1);
+
+  if (!list.length) {
+    return { zip_code: "", documentsAnalyzed: 0 };
+  }
+
+  const prepared = await prepareCareDocumentsForRecommend(list);
+  const textBlob = `${prepared.rawPdfText || ""}\n${prepared.textNotes || ""}`.trim();
+  if (textBlob) {
+    const fromText = extractSearchPrefsFromText(textBlob);
+    const zip = String(fromText.search_zip_code || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+    if (zip.length === 5) {
+      return { zip_code: zip, documentsAnalyzed: prepared.analyzedCount || 1 };
+    }
+  }
+
+  // Images / scanned PDFs: use full extract (ZIP lives in search_zip_code).
+  const fields = await extractMedicalHistoryFieldsFromDocuments(list);
+  const zip = String(fields?.search_zip_code || "")
+    .replace(/\D/g, "")
+    .slice(0, 5);
+  return {
+    zip_code: zip.length === 5 ? zip : "",
+    documentsAnalyzed: fields?.documentsAnalyzed || prepared.analyzedCount || 0,
+  };
+}

@@ -31,3 +31,11 @@ export function postRecommendFromProfile(profile) {
 export function postParseMedicalDocuments(formData) {
   return apiClient.post("/api/facilities/parse-medical-documents", formData);
 }
+
+/**
+ * Homepage: upload one medical doc/image → extract ZIP only (public).
+ * @param {FormData} formData
+ */
+export function postExtractSearchZip(formData) {
+  return apiClient.post("/api/facilities/extract-search-zip", formData);
+}

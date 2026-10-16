@@ -1274,13 +1274,12 @@ const CareExplorer = () => {
     carrieLocationQuery,
     carrieZipCode,
   );
+  // City field: never show a bare ZIP (that belongs in ZIP Code). Prefer city/state
+  // from intake, then infer from match addresses.
   const inferredCarrieLocationQuery =
-    buildEffectiveLocationQuery(
-      normalizedCarrieLocationQueryRaw || inferCityStateFromMatches(carrieMatches),
-      carrieZipCode,
-    ) ||
     normalizedCarrieLocationQueryRaw ||
-    inferCityStateFromMatches(carrieMatches);
+    inferCityStateFromMatches(carrieMatches) ||
+    "";
 
   const [view, setView] = useState("listing");
   const [layout, setLayout] = useState("single");
@@ -1635,11 +1634,10 @@ const CareExplorer = () => {
     const rawCarrieLoc =
       normalizeLocationFieldValue(carrieLocationQuery, carrieZipCode) ||
       inferCityStateFromMatches(carrieMatches);
-    // ZIP wins over conflicting city names (Everett + 80220 → "CO 80220", not WA).
-    const safeCarrieLoc = buildEffectiveLocationQuery(rawCarrieLoc, carrieZipCode);
+    // Keep city/state in Location; ZIP stays in zipCode only (never "80220" in city).
     const nextFilters = {
       ...initialFilters,
-      locationQuery: safeCarrieLoc || rawCarrieLoc || "",
+      locationQuery: rawCarrieLoc || "",
       zipCode: carrieZipCode,
       budgetMin: safeMin,
       budgetMax: safeMax,
@@ -2141,8 +2139,20 @@ const CareExplorer = () => {
           zipCode: activeFilters.zipCode,
           locationQuery: effectiveLocation || locationQuery,
         });
+        const searchZipDigits = String(activeFilters.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        const facZipDigits = String(facility.zipCode || "")
+          .replace(/\D/g, "")
+          .slice(0, 5);
+        const sameZipRegion =
+          searchZipDigits.length === 5 &&
+          facZipDigits.length === 5 &&
+          facZipDigits.slice(0, 3) === searchZipDigits.slice(0, 3);
         if (!locationCenterCoords) {
-          if (!partnerInArea) return false;
+          // While geocode loads: keep same-ZIP-region + partners. Carrie/document
+          // results are already distance-scoped on the server.
+          if (!fromCarrie && !partnerInArea && !sameZipRegion) return false;
         } else {
           const milesForGate = computeFacilityMiles(facility, locationCenterCoords);
           if (!Number.isFinite(milesForGate) || milesForGate > maxMilesNum) {
@@ -2176,9 +2186,9 @@ const CareExplorer = () => {
       if (budgetFilterActive) {
         const low = facility.priceMin ?? facility.priceMax;
         const high = facility.priceMax ?? facility.priceMin;
+        // Most directory rows have no public price — never hide them for that alone.
         if (low == null || high == null) {
-          if (facilityHasCallForPricingDisplay(facility)) return true;
-          return false;
+          return true;
         }
         const overlaps = low <= budgetMax && high >= budgetMin;
         if (!overlaps) return false;
@@ -2189,12 +2199,15 @@ const CareExplorer = () => {
           ...(facility.careLevels || []).map((x) => normMatchToken(x)),
           normMatchToken(facility.category),
         ].filter(Boolean);
-        const hasCare = [...selectedCare].some((c) => {
-          const cn = normMatchToken(c);
-          if (!cn) return false;
-          return levels.some((l) => l.includes(cn) || cn.includes(l));
-        });
-        if (!hasCare) return false;
+        // Directory rows often omit care-level labels; don't wipe Carrie/ZIP search results.
+        if (levels.length > 0) {
+          const hasCare = [...selectedCare].some((c) => {
+            const cn = normMatchToken(c);
+            if (!cn) return false;
+            return levels.some((l) => l.includes(cn) || cn.includes(l));
+          });
+          if (!hasCare) return false;
+        }
       }
 
       if (!facilityMeetsMustHaveAmenities(facility, selectedAmenities)) {
