@@ -95,10 +95,18 @@ export default function SearchBar() {
 
   useEffect(() => {
     const apiKey = getGoogleMapsApiKey();
-    if (!apiKey || !inputRef.current) return;
+    if (!apiKey) {
+      console.warn(
+        "[SearchBar] VITE_GOOGLE_MAPS_API_KEY is missing — location suggestions disabled.",
+      );
+      return;
+    }
     let cancelled = false;
+    let retryTimer = null;
+
     const attachAutocomplete = () => {
-      if (cancelled || !inputRef.current || !window.google?.maps?.places) return;
+      if (cancelled || !window.google?.maps?.places) return false;
+      if (!inputRef.current) return false;
       if (locationAutocompleteRef.current && window.google?.maps?.event) {
         window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
       }
@@ -171,17 +179,32 @@ export default function SearchBar() {
         }
         setQuery([label, zip].filter(Boolean).join(" ").trim());
       });
+      return true;
     };
 
     loadGoogleMapsScript(apiKey)
       .then(() => {
         if (cancelled) return;
-        attachAutocomplete();
+        if (attachAutocomplete()) return;
+        // Input may not be mounted yet — retry briefly.
+        let attempts = 0;
+        const tryAttach = () => {
+          if (cancelled) return;
+          if (attachAutocomplete()) return;
+          attempts += 1;
+          if (attempts < 20) {
+            retryTimer = window.setTimeout(tryAttach, 100);
+          }
+        };
+        retryTimer = window.setTimeout(tryAttach, 100);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[SearchBar] Google Maps failed to load:", err?.message || err);
+      });
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       if (locationAutocompleteRef.current && window.google?.maps?.event) {
         window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
       }
@@ -226,15 +249,16 @@ export default function SearchBar() {
       hidePacContainers();
       return;
     }
-    // Keep dropdown aligned with input while page scrolls.
-    pac.style.position = "absolute";
-    pac.style.top = `${Math.round(rect.bottom + window.scrollY + 2)}px`;
-    pac.style.left = `${Math.round(rect.left + window.scrollX)}px`;
+    // Keep dropdown above the hero card and aligned with the input.
+    pac.style.position = "fixed";
+    pac.style.top = `${Math.round(rect.bottom + 2)}px`;
+    pac.style.left = `${Math.round(rect.left)}px`;
     pac.style.width = `${Math.round(rect.width)}px`;
-    pac.style.zIndex = "1001";
+    pac.style.zIndex = "10050";
     pac.style.display = "block";
     pac.style.visibility = "visible";
     pac.style.pointerEvents = "auto";
+    pac.style.opacity = "1";
     pacContainers.forEach((node) => {
       if (node !== pac) {
         node.style.display = "none";
@@ -1149,9 +1173,13 @@ export default function SearchBar() {
         Verified communities · 100% free service · Expert guidance
       </p>
 
-      <style jsx global>{`
+      <style>{`
         .pac-container {
-          z-index: 2000 !important;
+          z-index: 10050 !important;
+          pointer-events: auto !important;
+        }
+        .pac-item {
+          cursor: pointer;
         }
 
         @keyframes gradientShift {

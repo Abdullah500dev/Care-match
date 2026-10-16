@@ -8,7 +8,7 @@ export default function Banner() {
   const videoRef = useRef(null);
 
   return (
-    <section className="relative w-full min-h-[560px] overflow-hidden sm:min-h-[600px] md:min-h-[640px] lg:min-h-[680px]">
+    <section className="relative w-full min-h-[560px] overflow-x-hidden overflow-y-visible sm:min-h-[600px] md:min-h-[640px] lg:min-h-[680px]">
       {/* Video background – muted, seamless loop via onEnded to avoid pause */}
       <video
         ref={videoRef}
@@ -50,7 +50,7 @@ export default function Banner() {
       `}</style>
       <div className="container relative z-10 mx-auto px-4 py-12 sm:px-6 sm:py-16 md:py-20 lg:px-8 lg:py-24 min-[1536px]:max-w-[1400px] min-[1536px]:px-12">
         <div className="grid items-start gap-8 lg:grid-cols-[1.9fr_1fr] lg:gap-10">
-          <div className="rounded-[28px] border border-white/60 bg-white/85 p-6 shadow-xl backdrop-blur-sm sm:p-8">
+          <div className="relative z-20 overflow-visible rounded-[28px] border border-white/60 bg-white/85 p-6 shadow-xl backdrop-blur-sm sm:p-8">
             <div className="flex items-center gap-3">
               <svg
                 viewBox="0 0 43 41"
