@@ -1286,7 +1286,24 @@ export default function SearchBar() {
           animation: carrieThinkingProgress 1.8s ease-in-out infinite;
         }
       `}</style>
-      <LoadingOverlay open={isQuickSearching || isExtractingZip} />
+      <LoadingOverlay
+        open={isQuickSearching || isExtractingZip}
+        title={isExtractingZip ? "Extracting ZIP..." : undefined}
+        subtitle={
+          isExtractingZip
+            ? "Reading ZIP code from your medical document"
+            : undefined
+        }
+        steps={
+          isExtractingZip
+            ? [
+                "Opening document...",
+                "Looking for ZIP code...",
+                "Preparing location field...",
+              ]
+            : undefined
+        }
+      />
     </div>
   );
 }
