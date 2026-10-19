@@ -3020,28 +3020,31 @@ export const postExtractSearchZip = catchAsyncError(async (req, res, next) => {
       .slice(0, 5);
     unlinkUploaded();
 
-    if (zip.length !== 5) {
-      return res.status(200).json({
-        success: false,
-        zip_code: "",
-        message:
-          "Could not find a 5-digit ZIP code in that document. Try another page or enter a ZIP manually.",
-        documentsAnalyzed: result?.documentsAnalyzed || 0,
-      });
-    }
-
+    // Always succeed once a file was received — ZIP is optional (blank docs OK).
     return res.status(200).json({
       success: true,
-      zip_code: zip,
+      uploaded: true,
+      zip_code: zip.length === 5 ? zip : "",
+      message:
+        zip.length === 5
+          ? undefined
+          : "Document uploaded. No ZIP found — enter a city or ZIP manually.",
       documentsAnalyzed: result?.documentsAnalyzed || 0,
     });
   } catch (err) {
     unlinkUploaded();
-    return next(
-      new ErrorHandler(
-        err?.message || "Could not read that document",
-        err?.statusCode || 502,
-      ),
+    // Soft success so the homepage never shows a hard error for blank/odd files.
+    console.warn(
+      "[extract-search-zip] soft-fail:",
+      err?.message || err,
     );
+    return res.status(200).json({
+      success: true,
+      uploaded: true,
+      zip_code: "",
+      message:
+        "Document uploaded. No ZIP found — enter a city or ZIP manually.",
+      documentsAnalyzed: 0,
+    });
   }
 });

@@ -812,7 +812,14 @@ export async function extractSearchZipFromDocuments(docs = []) {
     return { zip_code: "", documentsAnalyzed: 0 };
   }
 
-  const prepared = await prepareCareDocumentsForRecommend(list);
+  let prepared;
+  try {
+    prepared = await prepareCareDocumentsForRecommend(list);
+  } catch {
+    // Blank / unreadable file — still treat as uploaded with no ZIP.
+    return { zip_code: "", documentsAnalyzed: 0 };
+  }
+
   const textBlob = `${prepared.rawPdfText || ""}\n${prepared.textNotes || ""}`.trim();
   if (textBlob) {
     const fromText = extractSearchPrefsFromText(textBlob);
@@ -824,13 +831,29 @@ export async function extractSearchZipFromDocuments(docs = []) {
     }
   }
 
-  // Images / scanned PDFs: use full extract (ZIP lives in search_zip_code).
-  const fields = await extractMedicalHistoryFieldsFromDocuments(list);
-  const zip = String(fields?.search_zip_code || "")
-    .replace(/\D/g, "")
-    .slice(0, 5);
-  return {
-    zip_code: zip.length === 5 ? zip : "",
-    documentsAnalyzed: fields?.documentsAnalyzed || prepared.analyzedCount || 0,
-  };
+  // Nothing useful to analyze (blank PDF / empty text, no page images).
+  if (
+    !prepared.analyzedCount ||
+    (!textBlob && (!prepared.imageParts || prepared.imageParts.length === 0))
+  ) {
+    return { zip_code: "", documentsAnalyzed: prepared.analyzedCount || 0 };
+  }
+
+  // Text had no ZIP but we have images — try AI. Never throw for homepage upload.
+  try {
+    const fields = await extractMedicalHistoryFieldsFromDocuments(list);
+    const zip = String(fields?.search_zip_code || "")
+      .replace(/\D/g, "")
+      .slice(0, 5);
+    return {
+      zip_code: zip.length === 5 ? zip : "",
+      documentsAnalyzed: fields?.documentsAnalyzed || prepared.analyzedCount || 0,
+    };
+  } catch (err) {
+    console.warn(
+      "[care-docs] ZIP extract AI fallback failed:",
+      err?.message || err,
+    );
+    return { zip_code: "", documentsAnalyzed: prepared.analyzedCount || 0 };
+  }
 }

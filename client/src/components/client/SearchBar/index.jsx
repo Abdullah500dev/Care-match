@@ -672,7 +672,7 @@ export default function SearchBar() {
     if (!file || chatSending || isExtractingZip || isQuickSearching) return;
 
     setIsExtractingZip(true);
-    const toastId = toast.loading("Reading document…");
+    const toastId = toast.loading("Uploading medical document…");
     try {
       const formData = new FormData();
       formData.append("documents", file);
@@ -1011,7 +1011,7 @@ export default function SearchBar() {
                     <FileUp className="h-4 w-4" strokeWidth={2.5} />
                   )}
                   {isExtractingZip
-                    ? "Reading doc…"
+                    ? "Uploading…"
                     : docUploaded
                       ? "Document uploaded"
                       : "Upload medical document"}
@@ -1300,10 +1300,10 @@ export default function SearchBar() {
       `}</style>
       <LoadingOverlay
         open={isQuickSearching || isExtractingZip}
-        title={isExtractingZip ? "Extracting ZIP..." : undefined}
+        title={isExtractingZip ? "Uploading medical document" : undefined}
         subtitle={
           isExtractingZip
-            ? "Reading ZIP code from your medical document"
+            ? "Reading information from your medical document"
             : undefined
         }
         steps={
