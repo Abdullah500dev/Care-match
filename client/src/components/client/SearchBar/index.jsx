@@ -689,12 +689,17 @@ export default function SearchBar() {
         setIsExtractingZip(false);
         return;
       }
+      // Fill Location only — user can edit ZIP, then click Search manually.
       setQuery(zip);
-      toast.success(`Found ZIP ${zip}`, {
-        description: "Searching communities near that ZIP…",
-      });
+      setQueryCoords(null);
       setIsExtractingZip(false);
-      await runQuickSearch(zip, { zipOnly: true });
+      toast.success(`Found ZIP ${zip}`, {
+        description: "Added to Location. Edit if needed, then click Search.",
+      });
+      window.setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select?.();
+      }, 50);
     } catch (err) {
       toast.dismiss(toastId);
       setIsExtractingZip(false);
