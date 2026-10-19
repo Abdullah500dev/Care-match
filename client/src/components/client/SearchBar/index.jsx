@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, FileUp, Loader2, MessageCircle, Mic } from "lucide-react";
+import { ArrowRight, Check, FileUp, Loader2, MessageCircle, Mic } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -47,6 +47,7 @@ export default function SearchBar() {
   const [chatSending, setChatSending] = useState(false);
   const [isQuickSearching, setIsQuickSearching] = useState(false);
   const [isExtractingZip, setIsExtractingZip] = useState(false);
+  const [docUploaded, setDocUploaded] = useState(false);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -671,7 +672,7 @@ export default function SearchBar() {
     if (!file || chatSending || isExtractingZip || isQuickSearching) return;
 
     setIsExtractingZip(true);
-    const toastId = toast.loading("Reading ZIP code from document…");
+    const toastId = toast.loading("Reading document…");
     try {
       const formData = new FormData();
       formData.append("documents", file);
@@ -680,26 +681,27 @@ export default function SearchBar() {
         .replace(/\D/g, "")
         .slice(0, 5);
       toast.dismiss(toastId);
-      if (!data?.success || zip.length !== 5) {
-        toast.error("No ZIP found", {
-          description:
-            data?.message ||
-            "Could not find a 5-digit ZIP in that document. Enter one manually.",
+      setIsExtractingZip(false);
+      // Always mark uploaded once the file was accepted — ZIP is optional.
+      setDocUploaded(true);
+
+      if (zip.length === 5) {
+        // Fill Location — user can edit, then click Search.
+        setQuery(zip);
+        setQueryCoords(null);
+        toast.success(`Document uploaded · ZIP ${zip}`, {
+          description: "Added to Location. Edit if needed, then click Search.",
         });
-        setIsExtractingZip(false);
+        window.setTimeout(() => {
+          inputRef.current?.focus();
+          inputRef.current?.select?.();
+        }, 50);
         return;
       }
-      // Fill Location only — user can edit ZIP, then click Search manually.
-      setQuery(zip);
-      setQueryCoords(null);
-      setIsExtractingZip(false);
-      toast.success(`Found ZIP ${zip}`, {
-        description: "Added to Location. Edit if needed, then click Search.",
+
+      toast.success("Document uploaded", {
+        description: "No ZIP found in the file. Enter a city or ZIP, then click Search.",
       });
-      window.setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select?.();
-      }, 50);
     } catch (err) {
       toast.dismiss(toastId);
       setIsExtractingZip(false);
@@ -991,7 +993,11 @@ export default function SearchBar() {
                 {/* Native <label> so mobile opens the file picker on first tap. */}
                 <label
                   htmlFor={HOME_MEDICAL_DOC_INPUT_ID}
-                  className={`inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#00CFF4] bg-white px-4 py-3 text-sm font-semibold text-[#00A8C8] hover:bg-[#E0F7FA] sm:w-auto sm:px-5 ${
+                  className={`inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold sm:w-auto sm:px-5 ${
+                    docUploaded && !isExtractingZip
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      : "border-[#00CFF4] bg-white text-[#00A8C8] hover:bg-[#E0F7FA]"
+                  } ${
                     chatSending || isExtractingZip || isQuickSearching
                       ? "pointer-events-none opacity-50"
                       : ""
@@ -999,10 +1005,16 @@ export default function SearchBar() {
                 >
                   {isExtractingZip ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+                  ) : docUploaded ? (
+                    <Check className="h-4 w-4" strokeWidth={2.5} />
                   ) : (
                     <FileUp className="h-4 w-4" strokeWidth={2.5} />
                   )}
-                  {isExtractingZip ? "Reading doc…" : "Upload medical document"}
+                  {isExtractingZip
+                    ? "Reading doc…"
+                    : docUploaded
+                      ? "Document uploaded"
+                      : "Upload medical document"}
                 </label>
               </TooltipTrigger>
               <TooltipContent
