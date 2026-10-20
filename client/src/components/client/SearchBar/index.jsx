@@ -16,10 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
-import {
-  postDiscoverFacilities,
-  postExtractSearchZip,
-} from "@/services/matchService";
+import { postDiscoverFacilities } from "@/services/matchService";
 import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
 import LoadingOverlay from "@/components/client/LoadingOverlay";
 
@@ -46,7 +43,7 @@ export default function SearchBar() {
   const [chatComposer, setChatComposer] = useState("");
   const [chatSending, setChatSending] = useState(false);
   const [isQuickSearching, setIsQuickSearching] = useState(false);
-  const [isExtractingZip, setIsExtractingZip] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [docUploaded, setDocUploaded] = useState(false);
   const [thinkingMessageIndex, setThinkingMessageIndex] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
@@ -54,6 +51,7 @@ export default function SearchBar() {
   const [queryCoords, setQueryCoords] = useState(null);
   const inputRef = useRef(null);
   const docUploadRef = useRef(null);
+  const uploadedDocRef = useRef(null);
   const chatComposerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -669,48 +667,27 @@ export default function SearchBar() {
   const handleDocumentUpload = async (event) => {
     const file = event?.target?.files?.[0];
     if (event?.target) event.target.value = "";
-    if (!file || chatSending || isExtractingZip || isQuickSearching) return;
+    if (!file || chatSending || isUploadingDoc || isQuickSearching) return;
 
-    setIsExtractingZip(true);
+    // Homepage: upload only — no ZIP extract, no AI.
+    setIsUploadingDoc(true);
     const toastId = toast.loading("Uploading medical document…");
     try {
-      const formData = new FormData();
-      formData.append("documents", file);
-      const { data } = await postExtractSearchZip(formData);
-      const zip = String(data?.zip_code || "")
-        .replace(/\D/g, "")
-        .slice(0, 5);
-      toast.dismiss(toastId);
-      setIsExtractingZip(false);
-      // Always mark uploaded once the file was accepted — ZIP is optional.
+      // Short pause so the existing loader is visible.
+      await new Promise((resolve) => window.setTimeout(resolve, 700));
+      uploadedDocRef.current = file;
       setDocUploaded(true);
-
-      if (zip.length === 5) {
-        // Fill Location — user can edit, then click Search.
-        setQuery(zip);
-        setQueryCoords(null);
-        toast.success(`Document uploaded · ZIP ${zip}`, {
-          description: "Added to Location. Edit if needed, then click Search.",
-        });
-        window.setTimeout(() => {
-          inputRef.current?.focus();
-          inputRef.current?.select?.();
-        }, 50);
-        return;
-      }
-
-      toast.success("Document uploaded", {
-        description: "No ZIP found in the file. Enter a city or ZIP, then click Search.",
-      });
-    } catch (err) {
       toast.dismiss(toastId);
-      setIsExtractingZip(false);
-      toast.error("Document upload failed", {
-        description:
-          err?.response?.data?.message ||
-          err?.message ||
-          "Could not read that file.",
+      toast.success("Document uploaded", {
+        description: "Enter a city or ZIP, then click Search.",
       });
+    } catch {
+      toast.dismiss(toastId);
+      toast.error("Document upload failed", {
+        description: "Please try another file.",
+      });
+    } finally {
+      setIsUploadingDoc(false);
     }
   };
 
@@ -994,23 +971,23 @@ export default function SearchBar() {
                 <label
                   htmlFor={HOME_MEDICAL_DOC_INPUT_ID}
                   className={`inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold sm:w-auto sm:px-5 ${
-                    docUploaded && !isExtractingZip
+                    docUploaded && !isUploadingDoc
                       ? "border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                       : "border-[#00CFF4] bg-white text-[#00A8C8] hover:bg-[#E0F7FA]"
                   } ${
-                    chatSending || isExtractingZip || isQuickSearching
+                    chatSending || isUploadingDoc || isQuickSearching
                       ? "pointer-events-none opacity-50"
                       : ""
                   }`}
                 >
-                  {isExtractingZip ? (
+                  {isUploadingDoc ? (
                     <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
                   ) : docUploaded ? (
                     <Check className="h-4 w-4" strokeWidth={2.5} />
                   ) : (
                     <FileUp className="h-4 w-4" strokeWidth={2.5} />
                   )}
-                  {isExtractingZip
+                  {isUploadingDoc
                     ? "Uploading…"
                     : docUploaded
                       ? "Document uploaded"
@@ -1030,9 +1007,9 @@ export default function SearchBar() {
             type="button"
             className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#00CFF4] px-5 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 sm:w-auto"
             onClick={handleChatSubmit}
-            disabled={chatSending || isExtractingZip}
+            disabled={chatSending || isUploadingDoc}
           >
-            {chatSending && !isExtractingZip ? (
+            {chatSending && !isUploadingDoc ? (
               <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
             ) : (
               <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
@@ -1299,19 +1276,19 @@ export default function SearchBar() {
         }
       `}</style>
       <LoadingOverlay
-        open={isQuickSearching || isExtractingZip}
-        title={isExtractingZip ? "Uploading medical document" : undefined}
+        open={isQuickSearching || isUploadingDoc}
+        title={isUploadingDoc ? "Uploading medical document" : undefined}
         subtitle={
-          isExtractingZip
-            ? "Reading information from your medical document"
+          isUploadingDoc
+            ? "Saving your medical document"
             : undefined
         }
         steps={
-          isExtractingZip
+          isUploadingDoc
             ? [
                 "Opening document...",
-                "Looking for ZIP code...",
-                "Preparing location field...",
+                "Uploading file...",
+                "Confirming upload...",
               ]
             : undefined
         }
