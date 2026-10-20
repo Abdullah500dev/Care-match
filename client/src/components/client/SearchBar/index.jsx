@@ -678,9 +678,7 @@ export default function SearchBar() {
       uploadedDocRef.current = file;
       setDocUploaded(true);
       toast.dismiss(toastId);
-      toast.success("Document uploaded", {
-        description: "Enter a city or ZIP, then click Search.",
-      });
+      toast.success("Medical doc uploaded successfully");
     } catch {
       toast.dismiss(toastId);
       toast.error("Document upload failed", {
