@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Send } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import SEO from "../../../components/common/SEO";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { postContactForm } from "@/services/contactService";
 
 export default function Contact() {
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function Contact() {
     message: "",
   });
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const validateForm = (values) => {
     const nextErrors = {};
@@ -41,20 +43,43 @@ export default function Contact() {
     return nextErrors;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const nextErrors = validateForm(form);
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
-    toast.success("Message sent successfully.");
-    setForm({
-      fullName: "",
-      email: "",
-      phone: "",
-      subject: "",
-      message: "",
-    });
-    setErrors({});
+    if (Object.keys(nextErrors).length > 0 || isSubmitting) return;
+
+    setIsSubmitting(true);
+    const toastId = toast.loading("Sending message…");
+    try {
+      await postContactForm({
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        subject: form.subject.trim(),
+        message: form.message.trim(),
+      });
+      toast.dismiss(toastId);
+      toast.success("Message sent successfully.");
+      setForm({
+        fullName: "",
+        email: "",
+        phone: "",
+        subject: "",
+        message: "",
+      });
+      setErrors({});
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error("Could not send message", {
+        description:
+          err?.response?.data?.message ||
+          err?.message ||
+          "Please try again shortly.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -232,10 +257,15 @@ export default function Contact() {
                 {/* Send Message Button */}
                 <Button
                   type="submit"
-                  className="h-12 md:w-4/12 rounded-xl bg-[#0F172B] px-6 font-bold text-lg text-white "
+                  disabled={isSubmitting}
+                  className="h-12 md:w-4/12 rounded-xl bg-[#0F172B] px-6 font-bold text-lg text-white disabled:opacity-60"
                 >
-                  Send Message
-                  <Send className="ml-2 h-4 w-4" aria-hidden />
+                  {isSubmitting ? "Sending…" : "Send Message"}
+                  {isSubmitting ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Send className="ml-2 h-4 w-4" aria-hidden />
+                  )}
                 </Button>
 
                 {/* Privacy Notice */}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>New Contact Form Message</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #f4f6f8;
+        font-family: Arial, sans-serif;
+        color: #1f2937;
+      }
+      .wrap {
+        width: 100%;
+        padding: 28px 14px;
+      }
+      .card {
+        max-width: 600px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e5e7eb;
+      }
+      .header {
+        background: #132329;
+        color: #ffffff;
+        text-align: center;
+        padding: 20px;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      .content {
+        padding: 24px;
+        font-size: 14px;
+        line-height: 1.6;
+      }
+      .box {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 14px;
+        margin: 16px 0;
+      }
+      .label {
+        color: #6b7280;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 0 0 4px;
+      }
+      .value {
+        margin: 0 0 12px;
+        word-break: break-word;
+      }
+      .value:last-child {
+        margin-bottom: 0;
+      }
+      a {
+        color: #00b8d9;
+      }
+      .footer {
+        padding: 0 24px 24px;
+        font-size: 12px;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <div class="header">New Contact Form Message</div>
+        <div class="content">
+          <p>Someone submitted the Contact Us form on CareMatch AI.</p>
+          <div class="box">
+            <p class="label">Full name</p>
+            <p class="value"><%= fullName %></p>
+            <p class="label">Email</p>
+            <p class="value">
+              <a href="mailto:<%= email %>"><%= email %></a>
+            </p>
+            <% if (phone) { %>
+            <p class="label">Phone</p>
+            <p class="value"><%= phone %></p>
+            <% } %>
+            <p class="label">Subject</p>
+            <p class="value"><%= subject %></p>
+            <p class="label">Message</p>
+            <p class="value"><%= message %></p>
+          </div>
+        </div>
+        <div class="footer">
+          You can reply directly to this email to reach <%= fullName %>.
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

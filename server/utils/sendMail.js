@@ -57,7 +57,7 @@ const sendMail = async (options) => {
   const { smtpHost, smtpService, smtpPort, smtpSecure, user, pass } =
     resolveSmtpSettings();
 
-  const { email, subject, template, data } = options;
+  const { email, subject, template, data, replyTo } = options;
   if (!email) {
     throw new Error("Missing recipient email.");
   }
@@ -77,6 +77,11 @@ const sendMail = async (options) => {
     subject,
     html,
   };
+
+  const replyAddress = String(replyTo || "").trim();
+  if (replyAddress) {
+    mailOptions.replyTo = replyAddress;
+  }
 
   const attempts = [
     {

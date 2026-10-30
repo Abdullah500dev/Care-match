@@ -18,6 +18,7 @@ import matchRouter from "./routes/matchRouter.js";
 import emailRouter from "./routes/emailRouter.js";
 import messageRouter from "./routes/messageRouter.js";
 import snfPartnerRouter from "./routes/snfPartnerRouter.js";
+import contactRouter from "./routes/contactRouter.js";
 import ErrorHandler from "./utils/errorHandler.js";
 import seedDefaultAdmin from "./utils/seedDefaultAdmin.js";
 import { startApifySyncScheduler } from "./services/apifySyncScheduler.js";
@@ -51,9 +52,24 @@ database.once("open", async () => {
   }
 });
 
+const configuredClientOrigin = String(process.env.CLIENT_BASE_URL || "")
+  .trim()
+  .replace(/\/$/, "");
+const localDevOrigins = new Set(
+  [configuredClientOrigin, "http://localhost:5173", "http://127.0.0.1:5173"].filter(
+    Boolean,
+  ),
+);
 app.use(
   cors({
-    origin: process.env.CLIENT_BASE_URL,
+    origin: (origin, callback) => {
+      // Non-browser clients (curl/Postman) send no Origin.
+      if (!origin) return callback(null, true);
+      if (localDevOrigins.has(origin) || origin === configuredClientOrigin) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     optionsSuccessStatus: 200,
     credentials: true,
   })
@@ -91,6 +107,7 @@ app.use("/api/facilities", facilityRouter);
 app.use("/api/email", emailRouter);
 app.use("/api/messages", messageRouter);
 app.use("/api/snf-partners", snfPartnerRouter);
+app.use("/api/contact", contactRouter);
 
 // Serve client build if it exists, otherwise show API info
 const clientDistPath = path.join(__dirname, "../client/dist");
