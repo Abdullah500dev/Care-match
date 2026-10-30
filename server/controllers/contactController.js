@@ -3,9 +3,10 @@ import ErrorHandler from "../utils/errorHandler.js";
 import sendMail from "../utils/sendMail.js";
 
 const DEFAULT_ADMIN_EMAIL = "usman.anwar@myzing.io";
+const CONTACT_FORM_EXTRA_EMAILS = ["zelyons22@gmail.com"];
 
-const resolveAdminEmail = () =>
-  String(
+const resolveContactRecipients = () => {
+  const primary = String(
     process.env.CONTACT_ADMIN_EMAIL ||
       process.env.EXPLORE_ADMIN_EMAIL ||
       DEFAULT_ADMIN_EMAIL,
@@ -13,8 +14,23 @@ const resolveAdminEmail = () =>
     .trim()
     .toLowerCase();
 
+  const extraFromEnv = String(process.env.CONTACT_ADMIN_EMAILS || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  const recipients = [];
+  const seen = new Set();
+  for (const address of [primary, ...CONTACT_FORM_EXTRA_EMAILS, ...extraFromEnv]) {
+    if (!address || seen.has(address)) continue;
+    seen.add(address);
+    recipients.push(address);
+  }
+  return recipients;
+};
+
 /**
- * Public Contact Us form → email admin.
+ * Public Contact Us form → email admin recipients.
  * POST /api/contact
  */
 export const submitContactForm = catchAsyncError(async (req, res, next) => {
@@ -37,14 +53,13 @@ export const submitContactForm = catchAsyncError(async (req, res, next) => {
   if (!subject) return next(new ErrorHandler("Subject is required", 400));
   if (!message) return next(new ErrorHandler("Message is required", 400));
 
-  const adminEmail = resolveAdminEmail();
-  if (!adminEmail) {
+  const recipients = resolveContactRecipients();
+  if (!recipients.length) {
     return next(new ErrorHandler("Admin email is not configured", 500));
   }
 
   try {
-    await sendMail({
-      email: adminEmail,
+    const mailPayload = {
       subject: `Contact form: ${subject}`,
       template: "contact-form.ejs",
       replyTo: email,
@@ -55,7 +70,15 @@ export const submitContactForm = catchAsyncError(async (req, res, next) => {
         subject,
         message,
       },
-    });
+    };
+    await Promise.all(
+      recipients.map((recipient) =>
+        sendMail({
+          ...mailPayload,
+          email: recipient,
+        }),
+      ),
+    );
   } catch (error) {
     console.error("[contact] mail failed:", error?.message || error);
     return next(
