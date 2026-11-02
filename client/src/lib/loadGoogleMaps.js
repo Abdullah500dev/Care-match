@@ -39,7 +39,8 @@ export function loadGoogleMapsScript(apiKey) {
     s.id = SCRIPT_ID;
     s.async = true;
     s.defer = true;
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    // loading=async avoids Google's "loaded without loading=async" console warning.
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&loading=async`;
     s.onload = () => {
       if (window.google?.maps?.places) resolve();
       else reject(new Error("Places library not available"));

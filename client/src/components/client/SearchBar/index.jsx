@@ -18,6 +18,12 @@ import {
 import { sendChatMessages, transcribeAudioBlob } from "@/services/chatService";
 import { postDiscoverFacilities } from "@/services/matchService";
 import { getGoogleMapsApiKey, loadGoogleMapsScript } from "@/lib/loadGoogleMaps";
+import {
+  createAutocompleteSessionToken,
+  ensurePlacesLibrary,
+  fetchPlaceSuggestions,
+  resolvePlacePrediction,
+} from "@/lib/placeAutocompleteNew";
 import LoadingOverlay from "@/components/client/LoadingOverlay";
 
 const UPLOAD_MEDICAL_DOC_TIP =
@@ -49,6 +55,9 @@ export default function SearchBar() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [queryCoords, setQueryCoords] = useState(null);
+  const [placeSuggestions, setPlaceSuggestions] = useState([]);
+  const [showPlaceSuggestions, setShowPlaceSuggestions] = useState(false);
+  const [placeSuggestionsLoading, setPlaceSuggestionsLoading] = useState(false);
   const inputRef = useRef(null);
   const docUploadRef = useRef(null);
   const uploadedDocRef = useRef(null);
@@ -62,9 +71,11 @@ export default function SearchBar() {
   const transcribingToastIdRef = useRef(null);
   const isChatOpenRef = useRef(false);
   const chatMessagesRef = useRef(chatMessages);
-  const locationAutocompleteRef = useRef(null);
+  const placesSessionTokenRef = useRef(null);
+  const placesSuggestTimerRef = useRef(null);
+  const placesSuggestRequestIdRef = useRef(0);
+  const suppressPlacesSuggestRef = useRef(false);
   const locationGeocoderRef = useRef(null);
-  const activePacInputRef = useRef(null);
 
   useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -101,204 +112,99 @@ export default function SearchBar() {
       return;
     }
     let cancelled = false;
-    let retryTimer = null;
-
-    const attachAutocomplete = () => {
-      if (cancelled || !window.google?.maps?.places) return false;
-      if (!inputRef.current) return false;
-      if (locationAutocompleteRef.current && window.google?.maps?.event) {
-        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
-      }
-      locationAutocompleteRef.current = new window.google.maps.places.Autocomplete(
-        inputRef.current,
-        {
-          types: ["geocode"],
-          componentRestrictions: { country: "us" },
-          fields: ["address_components", "formatted_address", "geometry", "name"],
-        },
-      );
-      locationGeocoderRef.current = new window.google.maps.Geocoder();
-      locationAutocompleteRef.current.addListener("place_changed", () => {
-        const place = locationAutocompleteRef.current.getPlace();
-        if (!place || cancelled) return;
-        const comps = place.address_components || [];
-        const city =
-          comps.find((c) => c.types.includes("locality"))?.long_name ||
-          comps.find((c) => c.types.includes("postal_town"))?.long_name ||
-          comps.find((c) => c.types.includes("administrative_area_level_2"))?.long_name ||
-          "";
-        const state =
-          comps.find((c) => c.types.includes("administrative_area_level_1"))?.short_name ||
-          "";
-        let zip =
-          comps.find((c) => c.types.includes("postal_code"))?.long_name || "";
-        let label = "";
-        if (city && state) {
-          label = `${city}, ${state}`;
-        } else {
-          label = place.formatted_address || place.name || "";
-        }
-        const geocodeByLocation = (geoLocation, fallbackText = "") => {
-          const geocoder = locationGeocoderRef.current;
-          if (!geocoder || !geoLocation) return;
-          geocoder.geocode({ location: geoLocation }, (results, status) => {
-            if (status !== "OK" || !Array.isArray(results) || !results[0]) return;
-            const zipComp =
-              results[0].address_components?.find((c) => c.types.includes("postal_code"))?.long_name ||
-              "";
-            if (zipComp) {
-              zip = zipComp;
-              setQuery(`${fallbackText} ${zipComp}`.trim());
-            } else {
-              setQuery(fallbackText.trim());
-            }
-          });
-        };
-        if (!zip && place?.geometry?.location) {
-          try {
-            setQueryCoords({
-              lat: place.geometry.location.lat(),
-              lng: place.geometry.location.lng(),
-            });
-          } catch {
-            setQueryCoords(null);
-          }
-          geocodeByLocation(place.geometry.location, label);
-          return;
-        }
-        if (place?.geometry?.location) {
-          try {
-            setQueryCoords({
-              lat: place.geometry.location.lat(),
-              lng: place.geometry.location.lng(),
-            });
-          } catch {
-            setQueryCoords(null);
-          }
-        }
-        setQuery([label, zip].filter(Boolean).join(" ").trim());
-      });
-      return true;
-    };
-
-    loadGoogleMapsScript(apiKey)
+    ensurePlacesLibrary()
       .then(() => {
         if (cancelled) return;
-        if (attachAutocomplete()) return;
-        // Input may not be mounted yet — retry briefly.
-        let attempts = 0;
-        const tryAttach = () => {
-          if (cancelled) return;
-          if (attachAutocomplete()) return;
-          attempts += 1;
-          if (attempts < 20) {
-            retryTimer = window.setTimeout(tryAttach, 100);
-          }
-        };
-        retryTimer = window.setTimeout(tryAttach, 100);
+        return createAutocompleteSessionToken();
+      })
+      .then((token) => {
+        if (!cancelled && token) placesSessionTokenRef.current = token;
       })
       .catch((err) => {
-        console.warn("[SearchBar] Google Maps failed to load:", err?.message || err);
+        console.warn(
+          "[SearchBar] Places Autocomplete (New) failed to load:",
+          err?.message || err,
+        );
       });
-
     return () => {
       cancelled = true;
-      if (retryTimer) window.clearTimeout(retryTimer);
-      if (locationAutocompleteRef.current && window.google?.maps?.event) {
-        window.google.maps.event.clearInstanceListeners(locationAutocompleteRef.current);
+      if (placesSuggestTimerRef.current) {
+        window.clearTimeout(placesSuggestTimerRef.current);
       }
     };
   }, []);
 
-  const pickPacContainer = () => {
-    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
-    if (pacContainers.length === 0) return null;
-    const visible = pacContainers.filter(
-      (pac) => pac.style.display !== "none" && pac.offsetParent !== null,
-    );
-    if (visible.length === 1) return visible[0];
-    if (visible.length > 1 && inputRef.current) {
-      const inputRect = inputRef.current.getBoundingClientRect();
-      return visible.reduce((best, pac) => {
-        const distance = Math.abs(pac.getBoundingClientRect().top - inputRect.bottom);
-        const bestDistance = Math.abs(best.getBoundingClientRect().top - inputRect.bottom);
-        return distance < bestDistance ? pac : best;
-      }, visible[0]);
+  const clearPlaceSuggestions = () => {
+    setPlaceSuggestions([]);
+    setShowPlaceSuggestions(false);
+    setPlaceSuggestionsLoading(false);
+  };
+
+  const schedulePlaceSuggestions = (value) => {
+    if (suppressPlacesSuggestRef.current) return;
+    if (placesSuggestTimerRef.current) {
+      window.clearTimeout(placesSuggestTimerRef.current);
     }
-    return pacContainers[pacContainers.length - 1];
-  };
-
-  const hidePacContainers = () => {
-    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
-    pacContainers.forEach((node) => {
-      node.style.display = "none";
-      node.style.visibility = "hidden";
-      node.style.pointerEvents = "none";
-    });
-  };
-
-  const syncPacContainer = () => {
-    if (!inputRef.current) return;
-    const pacContainers = Array.from(document.querySelectorAll(".pac-container"));
-    const pac = pickPacContainer();
-    if (!pac) return;
-    const rect = inputRef.current.getBoundingClientRect();
-    const isInViewport = rect.bottom > 100 && rect.top < window.innerHeight;
-    if (!isInViewport) {
-      hidePacContainers();
+    const trimmed = String(value || "").trim();
+    if (trimmed.length < 2) {
+      clearPlaceSuggestions();
       return;
     }
-    // Keep dropdown above the hero card and aligned with the input.
-    pac.style.position = "fixed";
-    pac.style.top = `${Math.round(rect.bottom + 2)}px`;
-    pac.style.left = `${Math.round(rect.left)}px`;
-    pac.style.width = `${Math.round(rect.width)}px`;
-    pac.style.zIndex = "10050";
-    pac.style.display = "block";
-    pac.style.visibility = "visible";
-    pac.style.pointerEvents = "auto";
-    pac.style.opacity = "1";
-    pacContainers.forEach((node) => {
-      if (node !== pac) {
-        node.style.display = "none";
-        node.style.visibility = "hidden";
-        node.style.pointerEvents = "none";
+    if (!getGoogleMapsApiKey()) return;
+
+    setPlaceSuggestionsLoading(true);
+    setShowPlaceSuggestions(true);
+    const requestId = ++placesSuggestRequestIdRef.current;
+    placesSuggestTimerRef.current = window.setTimeout(async () => {
+      try {
+        if (!placesSessionTokenRef.current) {
+          placesSessionTokenRef.current = await createAutocompleteSessionToken();
+        }
+        const { suggestions, sessionToken } = await fetchPlaceSuggestions(trimmed, {
+          sessionToken: placesSessionTokenRef.current,
+        });
+        if (sessionToken) placesSessionTokenRef.current = sessionToken;
+        if (requestId !== placesSuggestRequestIdRef.current) return;
+        setPlaceSuggestions(suggestions);
+        setShowPlaceSuggestions(suggestions.length > 0);
+      } catch (err) {
+        if (requestId !== placesSuggestRequestIdRef.current) return;
+        console.warn(
+          "[SearchBar] Place suggestions failed:",
+          err?.message || err,
+        );
+        clearPlaceSuggestions();
+      } finally {
+        if (requestId === placesSuggestRequestIdRef.current) {
+          setPlaceSuggestionsLoading(false);
+        }
       }
-    });
+    }, 220);
   };
 
-  useEffect(() => {
-    const handleSync = () => {
-      if (document.activeElement !== inputRef.current) {
-        hidePacContainers();
-        return;
-      }
-      syncPacContainer();
-    };
-    window.addEventListener("scroll", handleSync, true);
-    window.addEventListener("resize", handleSync);
-    return () => {
-      window.removeEventListener("scroll", handleSync, true);
-      window.removeEventListener("resize", handleSync);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof MutationObserver === "undefined") return undefined;
-    let frame = null;
-    const observer = new MutationObserver(() => {
-      if (document.activeElement !== activePacInputRef.current) return;
-      if (frame) cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        syncPacContainer();
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, []);
+  const handlePlaceSuggestionSelect = async (suggestion) => {
+    if (!suggestion?.placePrediction) return;
+    suppressPlacesSuggestRef.current = true;
+    clearPlaceSuggestions();
+    try {
+      const resolved = await resolvePlacePrediction(suggestion.placePrediction);
+      setQuery(resolved.queryLabel || suggestion.label);
+      setQueryCoords(resolved.coords);
+      // End billing session after Place Details; mint a fresh token for next search.
+      placesSessionTokenRef.current = await createAutocompleteSessionToken();
+    } catch (err) {
+      console.warn(
+        "[SearchBar] Failed to resolve place suggestion:",
+        err?.message || err,
+      );
+      setQuery(suggestion.label);
+      setQueryCoords(null);
+    } finally {
+      window.setTimeout(() => {
+        suppressPlacesSuggestRef.current = false;
+      }, 300);
+    }
+  };
 
   useEffect(() => {
     if (!chatSending) {
@@ -750,20 +656,15 @@ export default function SearchBar() {
 
   const handleChange = (e) => {
     clearTypingAnimation();
-    setQuery(e.target.value);
+    const nextValue = e.target.value;
+    setQuery(nextValue);
     setQueryCoords(null);
-    syncPacContainer();
+    schedulePlaceSuggestions(nextValue);
   };
 
   const handleKeyDown = (e) => {
-    if (
-      e.key === "Shift" ||
-      e.key === "Control" ||
-      e.key === "Alt" ||
-      e.key === "Meta" ||
-      e.key === "Fn"
-    ) {
-      syncPacContainer();
+    if (e.key === "Escape") {
+      clearPlaceSuggestions();
     }
   };
 
@@ -923,7 +824,7 @@ export default function SearchBar() {
 
   return (
     <div className="w-full" id="search-bar">
-      <div className="rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 shadow-sm">
+      <div className="relative rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 shadow-sm">
         <label className="text-xs font-semibold uppercase tracking-wide text-[#64748b]">Location</label>
         <input
           ref={inputRef}
@@ -931,20 +832,50 @@ export default function SearchBar() {
           value={query}
           onChange={handleChange}
           onFocus={() => {
-            activePacInputRef.current = inputRef.current;
-            syncPacContainer();
+            if (query.trim().length >= 2) schedulePlaceSuggestions(query);
           }}
-          onBlur={hidePacContainers}
+          onBlur={() => {
+            // Delay so mousedown on a suggestion can fire first.
+            window.setTimeout(() => clearPlaceSuggestions(), 150);
+          }}
           onKeyDown={(e) => {
             handleKeyDown(e);
             if (e.key === "Enter") {
               e.preventDefault();
+              clearPlaceSuggestions();
               handleChatSubmit();
             }
           }}
           placeholder="City or ZIP code"
           className="mt-2 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 py-2.5 text-sm text-[#132329] placeholder:text-[#94a3b8] focus:outline-none focus:ring-2 focus:ring-[#00CFF4]/40"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showPlaceSuggestions}
+          aria-autocomplete="list"
         />
+        {showPlaceSuggestions && (
+          <ul
+            className="absolute left-4 right-4 top-full z-[10050] mt-1 max-h-60 overflow-auto rounded-xl border border-[#E2E8F0] bg-white py-1 shadow-lg"
+            role="listbox"
+          >
+            {placeSuggestionsLoading && placeSuggestions.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-[#64748b]">Searching…</li>
+            ) : (
+              placeSuggestions.map((suggestion) => (
+                <li key={suggestion.id} role="option">
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm text-[#132329] hover:bg-[#E0F7FA]"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handlePlaceSuggestionSelect(suggestion)}
+                  >
+                    {suggestion.label}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        )}
       </div>
 
       <input
