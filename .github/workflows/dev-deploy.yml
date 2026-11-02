@@ -29,6 +29,13 @@ jobs:
         yarn install
 
     - name: Install Client Dependencies and Build
+      env:
+        # Vite bakes VITE_* into the JS bundle at build time.
+        # client/.env* are gitignored, so CI must inject these explicitly.
+        VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        VITE_REACT_APP_API_BASE_URL: ${{ secrets.VITE_REACT_APP_API_BASE_URL }}
+        VITE_REACT_APP_PROJECT_NAME: ${{ secrets.VITE_REACT_APP_PROJECT_NAME }}
+        VITE_REACT_APP_PROJECT_TAGLINE: ${{ secrets.VITE_REACT_APP_PROJECT_TAGLINE }}
       run: |
         cd client
         yarn install
